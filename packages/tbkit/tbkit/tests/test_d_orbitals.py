@@ -113,3 +113,78 @@ def test_vectorised_blocks_agree():
     for k, v in enumerate(vectors):
         assert many[k] == pytest.approx(block(model, model.hopping, "A", SPD, "B", SPD, v),
                                         abs=1e-12)
+
+
+def test_skf_with_d_columns(tmp_path):
+    """A synthetic homonuclear .skf with d columns: the laws reproduce the table and a
+    bond along z gives its σ, π, δ values; the d on-site energy and occupation are read."""
+    from ase.units import Bohr, Hartree
+
+    from tbkit.skf import load_skf_set
+    from tbkit.tests.test_parameters import _write_skf
+
+    grid = 0.05
+    r = np.arange(1, 200) * grid
+    decay = np.exp(-r / 2.0)
+    columns = {"Hss0": -0.30 * decay, "Hsp0": 0.25 * decay, "Hpp0": 0.30 * decay,
+               "Hpp1": -0.10 * decay, "Hsd0": -0.12 * decay, "Hpd0": -0.15 * decay,
+               "Hpd1": 0.06 * decay, "Hdd0": -0.08 * decay, "Hdd1": 0.04 * decay,
+               "Hdd2": -0.01 * decay, "Sss0": 0.2 * decay, "Sdd0": 0.05 * decay}
+    onsite = (-0.20, -0.10, -0.30, 0.0, 0.3, 0.25, 0.28, 6.0, 0.0, 2.0)   # Ed Ep Es ... fd fp fs
+    _write_skf(tmp_path / "X-X.skf", grid, columns, onsite, repeat_zeros=False)
+    model = load_skf_set(tmp_path, {"X": SPD})
+    assert model.onsite["X"]["d"] == pytest.approx(-0.20 * Hartree)
+    assert model.valence["X"] == pytest.approx(8.0)
+    d = 40 * grid * Bohr
+    h = block(model, model.hopping, "X", SPD, "X", SPD, np.array([0.0, 0.0, d]))
+    i = {o: k for k, o in enumerate(SPD)}
+    k = 39
+    assert h[i["dz2"], i["dz2"]] == pytest.approx(columns["Hdd0"][k] * Hartree, rel=1e-6)
+    assert h[i["dzx"], i["dzx"]] == pytest.approx(columns["Hdd1"][k] * Hartree, rel=1e-6)
+    assert h[i["dxy"], i["dxy"]] == pytest.approx(columns["Hdd2"][k] * Hartree, rel=1e-6)
+    assert h[i["s"], i["dz2"]] == pytest.approx(columns["Hsd0"][k] * Hartree, rel=1e-6)
+    assert h[i["pz"], i["dz2"]] == pytest.approx(columns["Hpd0"][k] * Hartree, rel=1e-6)
+    assert h[i["px"], i["dzx"]] == pytest.approx(columns["Hpd1"][k] * Hartree, rel=1e-6)
+
+
+def _smooth_spd_model():
+    """A made-up spd model with smooth laws, overlap and a pair repulsion (element Ti)."""
+    from tbkit.params import Exponential, Tail
+    from tbkit.repulsive import PairRepulsive
+
+    def law(v0, beta=2.0):
+        return Tail(Exponential(v0, 2.5, beta, 4.0), 3.6, 4.0)
+
+    values = {"sss": -1.2, "sps": 1.5, "pps": 2.0, "ppp": -0.6, "sds": -0.8, "pds": -1.0,
+              "pdp": 0.5, "dds": -0.9, "ddp": 0.5, "ddd": -0.1}
+    hopping = {("Ti", "Ti", b): law(v) for b, v in values.items()}
+    overlap = {("Ti", "Ti", b): law(0.04 * np.sign(-v) * min(abs(v), 1.0), 2.5)
+               for b, v in values.items()}
+    return TBModel("prueba spd suave", orbitals={"Ti": SPD},
+                   onsite={"Ti": {"s": -3.0, "p": 1.0, "d": -4.0}}, hopping=hopping,
+                   overlap=overlap, valence={"Ti": 4.0}, hubbard_u={"Ti": 4.0},
+                   repulsive=PairRepulsive({("Ti", "Ti"): law(3.0, 4.0)}))
+
+
+def test_forces_with_d_orbitals_match_finite_differences():
+    from ase import Atoms
+
+    from tbkit.forces import energy_and_forces
+    from tbkit.hamiltonian import System
+    from tbkit.solver import solve
+
+    model = _smooth_spd_model()
+    atoms = Atoms("Ti4", positions=[[0, 0, 0], [2.4, 0.2, 0], [1.1, 2.1, 0.3],
+                                    [1.0, 0.8, 2.0]])
+
+    def energy(a, need=False):
+        return energy_and_forces(solve(System.build(a, model), kT=0.1), need_forces=need)
+
+    _, forces, _ = energy(atoms, True)
+    h = 1e-4
+    for atom, axis in ((0, 0), (1, 1), (2, 2), (3, 0)):
+        plus, minus = atoms.copy(), atoms.copy()
+        plus.positions[atom, axis] += h
+        minus.positions[atom, axis] -= h
+        fd = -(energy(plus)[0] - energy(minus)[0]) / (2 * h)
+        assert forces[atom, axis] == pytest.approx(fd, abs=2e-6)
