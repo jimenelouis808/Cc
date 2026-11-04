@@ -19,7 +19,7 @@ tbkit/
 ├── ewald.py          # periodic γ: Ewald for 1/r and 1/r³, short-range rest
 ├── hubbard.py        # mean-field Hubbard, magnetisation vs energy/field/doping
 ├── spin.py           # spin-polarised SCC (spin-DFTB): shell moments, W, fixed or free M, forces
-├── xps.py            # XPS core-level shifts by the equivalent core (Z+1, SCC), calibrated scale
+├── xps.py            # XPS shifts: core hole inside the SCC (or Z+1); C/N/O 1s, Se 3d; calibration
 ├── skf.py            # DFTB .skf reader (simple format)
 ├── fit.py            # least-squares fitting (with a before/after report), GPAW log reader
 ├── repulsive.py      # pair / embedded repulsion, .skf spline
@@ -54,7 +54,8 @@ tbkit/
 │                     #   spin_constants: W of each element from GPAW's atom (never fitted)
 │                     #   spin_validation: spin SCC vs spin GPAW (ribbons, flakes, H/graphene, O2, CH2); fit of λ
 │                     #   xtb_comparison: the sets vs GFN1/GFN2-xTB (tblite, optional) on the same GPAW data
-│                     #   xps_validation: Z+1 shifts vs GPAW ΔSCF (core-hole setups it generates); fit of λ
+│                     #   core_constants: core-valence J per element (GPAW atom, never fitted)
+│                     #   xps_validation: hole/Z+1 shifts vs GPAW ΔSCF (core-hole setups it makes)
 │                     #   pipeline: a recipe of one's own (structure + model + tasks), from «Nueva receta…»
 │                     #   study: any set of systems (0D-3D), changes embedded in their host: modes,
 │                     #     resonant Raman, IR, report, DFT request of the modes that matter
@@ -326,14 +327,16 @@ docs/                 # GUIA_USUARIO, METODOS, VALIDACION (generated: never edit
   with weight 1.0 (`--hessian-split`) lowers the Hessian error (1.50 → 1.16) and makes
   the held-out molecules worse (median 122 → 134 cm⁻¹). It is the minimal basis. Do not
   ship a frequency refit without a held-out improvement; keep `frequency_scale`.
-- XPS (`xps.py`): shifts are differences of Z+1 ionisation energies (site → Z+1, charge
-  +1, SCC), never absolute. GPAW's reference (`recipes/xps_validation`): the 1s1ch setup
-  already carries the +1, so no `charge=1` on top (that made a double ion, shifts of -6 to
-  -16 eV); isolated ion on a real-space grid with zero boundary (a charged plane-wave box
-  adds a box-dependent energy). Measured: C 1s with xu_chno correlates (r 0.96) and is
-  1.5× too large, `xps_scale` (λ 0.657, fitted on half the sites) gives 0.26 eV on the
-  other half; xu_chn C 1s (r 0.91) and N 1s (r 0.63, graphitic/pyrrolic inverted) get no
-  scale and must not be used to assign N species. A scale is shipped only at r ≥ 0.95.
+- XPS (`xps.py`): default method "hole": a +1 core hole inside the SCC (V_B = -γ^h_AB,
+  J = ∂ε_valence/∂n_core of the free atom, `recipes/core_constants`, never fitted); "z+1"
+  (equivalent core) stays as an option. Shifts only, never absolute. GPAW's reference
+  (`recipes/xps_validation`): the core-hole setup already carries the +1 (no `charge=1` on
+  top: a double ion, -6 to -16 eV) and the ion is isolated (FD, zero boundary; a charged
+  plane-wave box adds a box-dependent energy). Measured (hole, raw): Se 3d r 0.994 / 0.31 eV,
+  N 1s r 0.993 / 1.16 eV, O 1s r 0.95 / 0.37 eV, C 1s r 0.95 / 1.07 eV. A calibration
+  (initial-state and relaxation weights) is shipped only at r ≥ 0.95 and a held-out gain:
+  Se 3d and N 1s (N fitted on 4 sites only); C 1s narrowly misses (r 0.949) and is not.
+  Do not lower the threshold to ship one; add GPAW sites instead.
 - d orbitals (`slater_koster.py`): the full Slater-Koster table, s/p/d, with the reverse
   order by parity; mixed integrals (`sps`, `sds`, `pds`, `pdp`) are ordered by l. Any
   change to the table must keep the rotational-covariance test (every shell pair, real p

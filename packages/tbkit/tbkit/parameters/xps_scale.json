@@ -1,17 +1,40 @@
 {
- "name": "escala de los desplazamientos XPS por núcleo equivalente",
+ "name": "calibración de los desplazamientos XPS de tbkit frente a GPAW ΔSCF",
  "reference": "este trabajo: tbkit.recipes.xps_validation",
- "system": "tbkit.xps con los conjuntos listados",
- "validity": "una cifra por elemento y conjunto, ajustada a GPAW ΔSCF (PBE) en la mitad de los sitios de moléculas C/H/N/O y coronenos dopados con N, solo donde el modelo correlaciona con GPAW (r ≥ 0.95); N 1s no la tiene (r = 0,63, orden grafítico/pirrólico invertido): no usar el N 1s de tbkit para asignar especies de N",
+ "system": "tbkit.xps: método 'hole' (pesos del estado inicial y de la relajación) y 'z+1' (un factor), por conjunto y elemento",
+ "validity": "ajustada en la mitad de los sitios (moléculas C/H/N/O/Se y coronenos con N u O) y probada en la otra; solo se publica si la predicción calibrada correlaciona con GPAW (r ≥ 0.95) y mejora la mitad apartada",
  "units": {
-  "scale": "1"
+  "coefficients": "1"
  },
  "scales": {
-  "xu_chno": {
-   "C": {
-    "value": 0.657,
-    "unit": "1",
-    "source": "mínimos cuadrados por el origen, desplazamientos GPAW ΔSCF frente a Z+1 de xu_chno, 15 sitios (uno sí, uno no); prueba en los otros 14: MAE 1.03 → 0.26 eV (GPAW 26.7.0, tbkit.recipes.xps_validation)"
+  "hole": {
+   "xu_chno": {
+    "N": {
+     "initial": {
+      "value": 1.3643,
+      "unit": "1",
+      "source": "mínimos cuadrados frente a GPAW ΔSCF en 4 sitios (uno sí, uno no); prueba en los otros 3: MAE 0.86 → 0.33 eV (GPAW 26.7.0, tbkit.recipes.xps_validation)"
+     },
+     "relaxation": {
+      "value": 0.746,
+      "unit": "1",
+      "source": "mínimos cuadrados frente a GPAW ΔSCF en 4 sitios (uno sí, uno no); prueba en los otros 3: MAE 0.86 → 0.33 eV (GPAW 26.7.0, tbkit.recipes.xps_validation)"
+     }
+    }
+   },
+   "xu_chnose": {
+    "Se": {
+     "initial": {
+      "value": 1.2722,
+      "unit": "1",
+      "source": "mínimos cuadrados frente a GPAW ΔSCF en 6 sitios (uno sí, uno no); prueba en los otros 6: MAE 0.29 → 0.09 eV (GPAW 26.7.0, tbkit.recipes.xps_validation)"
+     },
+     "relaxation": {
+      "value": 1.525,
+      "unit": "1",
+      "source": "mínimos cuadrados frente a GPAW ΔSCF en 6 sitios (uno sí, uno no); prueba en los otros 6: MAE 0.29 → 0.09 eV (GPAW 26.7.0, tbkit.recipes.xps_validation)"
+     }
+    }
    }
   }
  }

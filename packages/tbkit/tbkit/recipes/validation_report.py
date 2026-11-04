@@ -227,22 +227,31 @@ def _xps() -> list[str]:
     if not path.exists():
         return []
     data = _load(path)
-    out = ["## XPS: desplazamientos de núcleo por núcleo equivalente frente a GPAW ΔSCF", "",
+    keys = (("xu_chno/hole", "xu_chno, hueco"), ("xu_chno/z+1", "xu_chno, Z+1"),
+            ("xu_chnose/hole", "xu_chnose, hueco"))
+    out = ["## XPS: desplazamientos de núcleo frente a GPAW ΔSCF", "",
            "Fuente: `validation/xps_tb_vs_gpaw.json` (receta `xps_validation`). "
            + data["description"], "",
-           "Celda: desplazamiento en eV (GPAW · tbkit xu_chno · tbkit xu_chn).", ""]
+           "Desplazamiento en eV, sin calibrar (GPAW · " + " · ".join(k[1] for k in keys) + ").",
+           ""]
     rows = []
     for r in data["rows"]:
+        cells = [_f(r["gpaw"])] + [_f(r[k]["total"]) if k in r and "total" in r[k] else "—"
+                                    for k, _ in keys]
         rows.append((r["system"], f"{r['element']} {r['site']} ({''.join(r['neighbours'])})",
-                     " · ".join(_f(r.get(k)) for k in ("gpaw", "xu_chno", "xu_chn"))))
-    out += _table(("sistema", "sitio (vecinos)", "GPAW · xu_chno · xu_chn"), rows)
-    out += ["", "Escala λ (desplazamiento GPAW ≈ λ · tbkit), ajustada en la mitad de los "
-                "sitios y probada en la otra; solo se publica con r ≥ 0,95:", ""]
-    rows = [(k, _f(v["scale"], 3), _f(v["pearson_r_all"], 2), _f(v["mae_test_raw_eV"]),
-             _f(v["mae_test_scaled_eV"]), "sí" if v.get("shipped") else "no")
-            for k, v in data["scale"].items()]
-    out += _table(("núcleo/conjunto", "λ", "r", "MAE prueba sin λ", "MAE prueba con λ",
-                   "publicada"), rows)
+                     " · ".join(cells)))
+    out += _table(("sistema", "sitio (vecinos)", "GPAW · " + " · ".join(k[1] for k in keys)),
+                  rows)
+    out += ["", "Calibración ajustada en la mitad de los sitios y probada en la otra (hueco: "
+                "pesos del estado inicial y de la relajación; Z+1: un factor); se publica solo "
+                "con r ≥ 0,95 de la predicción calibrada y mejora en la mitad apartada:", ""]
+    rows = [(k, v["sites"], _f(v["pearson_r_raw"], 3), _f(v["mae_raw_eV"]),
+             " / ".join(_f(c, 3) for c in v["coefficients"]),
+             _f(v["pearson_r_calibrated"], 3), _f(v["mae_test_raw_eV"]),
+             _f(v["mae_test_calibrated_eV"]), "sí" if v["shipped"] else "no")
+            for k, v in data["calibration"].items()]
+    out += _table(("nivel/conjunto/método", "sitios", "r", "MAE (eV)", "coeficientes",
+                   "r calibrada", "MAE prueba", "MAE prueba calibrada", "publicada"), rows)
     return out + [""]
 
 

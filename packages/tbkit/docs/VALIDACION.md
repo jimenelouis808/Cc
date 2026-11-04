@@ -283,59 +283,108 @@ segundos de reloj por energía + fuerzas de un flake triangular H-saturado (OMP_
 | 124 | 2,40 | 6,64 | 5,24 |
 | 202 | 10,71 | 40,83 | 35,17 |
 
-## XPS: desplazamientos de núcleo por núcleo equivalente frente a GPAW ΔSCF
+## XPS: desplazamientos de núcleo frente a GPAW ΔSCF
 
-Fuente: `validation/xps_tb_vs_gpaw.json` (receta `xps_validation`). Desplazamientos de energía de ligadura de núcleo (eV) frente a CH4 (C 1s) y NH3 (N 1s): tbkit con núcleo equivalente (Z+1, SCC) frente a GPAW ΔSCF (PBE, hueco 1s completo, ion aislado), misma geometría.
+Fuente: `validation/xps_tb_vs_gpaw.json` (receta `xps_validation`). Desplazamientos de energía de ligadura de núcleo (eV) frente a CH4 (C 1s), NH3 (N 1s), H2O (O 1s) y H2Se (Se 3d): tbkit (hueco de núcleo en el SCC, 'hole'; núcleo equivalente, 'z+1') frente a GPAW ΔSCF (PBE, hueco de núcleo completo, ion aislado), misma geometría.
 
-Celda: desplazamiento en eV (GPAW · tbkit xu_chno · tbkit xu_chn).
+Desplazamiento en eV, sin calibrar (GPAW · xu_chno, hueco · xu_chno, Z+1 · xu_chnose, hueco).
 
-| sistema | sitio (vecinos) | GPAW · xu_chno · xu_chn |
+| sistema | sitio (vecinos) | GPAW · xu_chno, hueco · xu_chno, Z+1 · xu_chnose, hueco |
 |---|---|---|
-| CH4 | C 0 (HHHH) | 0,00 · 0,00 · 0,00 |
-| C2H6 | C 0 (CHHH) | -0,09 · -1,08 · -3,12 |
-| C2H4 | C 0 (CHH) | -0,03 · -1,44 · -3,07 |
-| C2H2 | C 0 (CH) | 0,53 · -0,70 · -1,96 |
-| C6H6 | C 0 (CCH) | -0,65 · -1,30 · -4,98 |
-| CH3OH | C 0 (HHHO) | 1,47 · 2,62 · -0,03 |
-| H2CO | C 1 (HHO) | 3,57 · 4,95 · 5,84 |
-| HCOOH | C 1 (HOO) | 4,58 · 6,48 · 5,64 |
-| CO | C 1 (O) | 5,53 · 8,58 · 11,99 |
-| CO2 | C 0 (OO) | 6,30 · 8,56 · 11,99 |
-| HCN | C 0 (HN) | 2,71 · 3,90 · 6,92 |
-| HCN | N 1 (C) | 1,32 · -2,93 · — |
-| CH3CN | C 0 (CHHH) | 1,80 · 0,22 · -1,86 |
-| CH3CN | C 1 (CN) | 1,96 · 2,93 · 3,88 |
-| CH3CN | N 2 (C) | 0,15 · -3,41 · — |
-| NH3 | N 0 (HHH) | 0,00 · 0,00 · — |
-| C5H5N | N 0 (CC) | -0,93 · -3,28 · — |
-| C5H5N | C 1 (CCH) | 0,10 · -0,85 · -4,53 |
-| C5H5N | C 2 (CHN) | 0,39 · 1,33 · 2,11 |
-| C5H5N | C 4 (CCH) | -0,20 · -1,72 · -5,40 |
-| C4H4NH | N 1 (CCH) | 0,60 · -0,59 · — |
-| C4H4NH | C 2 (CHN) | -0,14 · 0,68 · 1,46 |
-| C4H4NH | C 4 (CCH) | -1,04 · -2,69 · -6,36 |
-| coronene | C 0 (CCC) | -1,07 · -1,31 · -6,97 |
-| coronene | C 6 (CCH) | -1,35 · -1,90 · -5,56 |
-| coronene | C 7 (CCC) | -1,09 · -1,56 · -7,23 |
-| coronene_N_graphitic | N 0 (CCC) | 0,40 · -1,31 · — |
-| coronene_N_graphitic | C 1 (CCN) | -0,34 · 1,12 · -0,07 |
-| coronene_N_graphitic | C 6 (CCH) | -1,43 · -2,18 · -5,86 |
-| coronene_N_graphitic | C 7 (CCN) | -0,34 · 0,75 · -0,46 |
-| coronene_N_pyridinic | N 6 (CC) | -2,07 · -4,34 · — |
-| coronene_N_pyridinic | C 0 (CCC) | -0,92 · -1,53 · -7,19 |
-| coronene_N_pyridinic | C 7 (CCN) | -0,39 · 0,44 · -0,75 |
-| coronene_N_pyridinic | C 8 (CCC) | -0,89 · -2,04 · -7,72 |
-| coronene_N_pyridinic | C 9 (CHN) | -0,50 · 0,36 · 1,16 |
-| coronene_N_pyridinic | C 14 (CCH) | -1,30 · -2,11 · -5,78 |
-| coronene_N_pyridinic | C 12 (CCH) | -1,18 · -1,75 · -5,41 |
+| CH4 | C 0 (HHHH) | 0,00 · 0,00 · 0,00 · — |
+| C2H6 | C 0 (CHHH) | -0,09 · -0,20 · -1,08 · — |
+| C2H4 | C 0 (CHH) | -0,03 · -0,59 · -1,44 · — |
+| C2H2 | C 0 (CH) | 0,53 · -0,52 · -0,70 · — |
+| C6H6 | C 0 (CCH) | -0,65 · -1,16 · -1,30 · — |
+| CH3OH | C 0 (HHHO) | 1,47 · 0,51 · 2,62 · — |
+| CH3OH | O 1 (CH) | -0,95 · -0,52 · — · — |
+| H2CO | O 0 (C) | -0,52 · -0,54 · — · — |
+| H2CO | C 1 (HHO) | 3,57 · 1,96 · 4,95 · — |
+| HCOOH | O 0 (CH) | 0,78 · 0,86 · — · — |
+| HCOOH | C 1 (HOO) | 4,58 · 2,09 · 6,48 · — |
+| HCOOH | O 2 (C) | -1,13 · -1,09 · — · — |
+| CO | O 0 (C) | 2,63 · 1,31 · — · — |
+| CO | C 1 (O) | 5,53 · 2,17 · 8,58 · — |
+| CO2 | C 0 (OO) | 6,30 · 3,72 · 8,56 · — |
+| CO2 | O 1 (C) | 1,28 · 0,99 · — · — |
+| HCN | C 0 (HN) | 2,71 · 1,64 · 3,90 · — |
+| HCN | N 1 (C) | 1,32 · -0,11 · -2,93 · — |
+| CH3CN | C 0 (CHHH) | 1,80 · 1,08 · 0,22 · — |
+| CH3CN | C 1 (CN) | 1,96 · 1,32 · 2,93 · — |
+| CH3CN | N 2 (C) | 0,15 · -0,64 · -3,41 · — |
+| NH3 | N 0 (HHH) | 0,00 · 0,00 · 0,00 · — |
+| C5H5N | N 0 (CC) | -0,93 · -1,62 · -3,28 · — |
+| C5H5N | C 1 (CCH) | 0,10 · -0,62 · -0,85 · — |
+| C5H5N | C 2 (CHN) | 0,39 · -0,67 · 1,33 · — |
+| C5H5N | C 4 (CCH) | -0,20 · -0,81 · -1,72 · — |
+| C4H4NH | N 1 (CCH) | 0,60 · -0,14 · -0,59 · — |
+| C4H4NH | C 2 (CHN) | -0,14 · -1,14 · 0,68 · — |
+| C4H4NH | C 4 (CCH) | -1,04 · -1,75 · -2,69 · — |
+| coronene | C 0 (CCC) | -1,07 · -1,81 · -1,31 · — |
+| coronene | C 6 (CCH) | -1,35 · -2,09 · -1,90 · — |
+| coronene | C 7 (CCC) | -1,09 · -1,85 · -1,56 · — |
+| coronene_N_graphitic | N 0 (CCC) | 0,40 · -0,83 · -1,31 · — |
+| coronene_N_graphitic | C 1 (CCN) | -0,34 · -1,34 · 1,12 · — |
+| coronene_N_graphitic | C 6 (CCH) | -1,43 · -2,30 · -2,18 · — |
+| coronene_N_graphitic | C 7 (CCN) | -0,34 · -1,47 · 0,75 · — |
+| coronene_N_pyridinic | N 6 (CC) | -2,07 · -3,12 · -4,34 · — |
+| coronene_N_pyridinic | C 0 (CCC) | -0,92 · -1,66 · -1,53 · — |
+| coronene_N_pyridinic | C 7 (CCN) | -0,39 · -1,73 · 0,44 · — |
+| coronene_N_pyridinic | C 8 (CCC) | -0,89 · -1,62 · -2,04 · — |
+| coronene_N_pyridinic | C 9 (CHN) | -0,50 · -1,75 · 0,36 · — |
+| coronene_N_pyridinic | C 14 (CCH) | -1,30 · -2,08 · -2,11 · — |
+| coronene_N_pyridinic | C 12 (CCH) | -1,18 · -1,94 · -1,75 · — |
+| H2O | O 0 (HH) | 0,00 · 0,00 · — · — |
+| CH3OCH3 | C 0 (HHHO) | 1,15 · 0,29 · 2,38 · — |
+| CH3OCH3 | O 1 (CC) | -1,30 · -0,87 · — · — |
+| CH3CHO | O 0 (C) | -1,56 · -1,05 · — · — |
+| CH3CHO | C 1 (CHO) | 2,92 · 1,59 · 3,45 · — |
+| CH3CHO | C 3 (CHHH) | 0,50 · 0,59 · -0,87 · — |
+| H2O2 | O 0 (HO) | 0,96 · 0,68 · — · — |
+| CH3COOH | C 0 (COO) | 3,94 · 1,75 · 5,18 · — |
+| CH3COOH | O 1 (C) | -1,78 · -1,49 · — · — |
+| CH3COOH | O 2 (CH) | 0,23 · 0,44 · — · — |
+| CH3COOH | C 4 (CHHH) | 0,47 · 0,51 · -0,95 · — |
+| CH3NO2 | C 0 (HHHN) | 1,82 · 0,98 · 2,45 · — |
+| CH3NO2 | N 1 (COO) | 6,55 · 4,36 · 5,65 · — |
+| CH3NO2 | O 5 (N) | -0,96 · -0,18 · — · — |
+| C4H4O | O 0 (CC) | 0,19 · -0,14 · — · — |
+| C4H4O | C 1 (CHO) | 0,73 · -0,54 · 1,06 · — |
+| C4H4O | C 3 (CCH) | -0,29 · -1,13 · -2,26 · — |
+| coronene_epoxide | O 36 (CC) | -2,57 · -2,65 · — · — |
+| coronene_epoxide | C 3 (CCCO) | 0,63 · -0,89 · -0,58 · — |
+| coronene_epoxide | C 4 (CCCO) | 0,75 · -0,89 · -0,58 · — |
+| coronene_epoxide | C 6 (CCH) | -1,28 · -2,01 · -1,82 · — |
+| coronene_diol | O 36 (CH) | -3,13 · -2,80 · — · — |
+| coronene_diol | O 38 (CH) | -2,17 · -2,71 · — · — |
+| coronene_diol | C 3 (CCCO) | 0,96 · -1,03 · 0,28 · — |
+| coronene_diol | C 6 (CCH) | -1,32 · -2,15 · -1,94 · — |
+| se:H2Se | Se 0 (HH) | 0,00 · — · — · 0,00 |
+| se:CH3SeH | Se 1 (CH) | -0,68 · — · — · -0,43 |
+| se:CH3SeCH3 | Se 1 (CC) | -1,19 · — · — · -0,74 |
+| se:CH3SeSeCH3 | Se 1 (C) | -1,12 · — · — · -0,56 |
+| se:CH3SeSeCH3 | Se 2 (C) | -1,12 · — · — · -0,56 |
+| se:selenophene | Se 3 (CC) | -0,46 · — · — · -0,32 |
+| se:CSe2 | Se 0 (C) | -0,50 · — · — · -0,16 |
+| se:OCSe | Se 2 (C) | 0,32 · — · — · 0,25 |
+| se:H2CSe | Se 1 (C) | -0,56 · — · — · -0,51 |
+| se:SeO2 | Se 1 (OO) | 3,43 · — · — · 2,79 |
+| se:DMSeO | Se 1 (CCO) | 0,94 · — · — · 0,90 |
+| se:CH3SeO2H | Se 1 (COO) | 1,87 · — · — · 1,50 |
+| se:CH3SeNH2 | Se 1 (CN) | -0,74 · — · — · -0,47 |
 
-Escala λ (desplazamiento GPAW ≈ λ · tbkit), ajustada en la mitad de los sitios y probada en la otra; solo se publica con r ≥ 0,95:
+Calibración ajustada en la mitad de los sitios y probada en la otra (hueco: pesos del estado inicial y de la relajación; Z+1: un factor); se publica solo con r ≥ 0,95 de la predicción calibrada y mejora en la mitad apartada:
 
-| núcleo/conjunto | λ | r | MAE prueba sin λ | MAE prueba con λ | publicada |
-|---|---|---|---|---|---|
-| C1s/xu_chno | 0,657 | 0,96 | 1,03 | 0,26 | sí |
-| C1s/xu_chn | 0,343 | 0,91 | 4,26 | 1,02 | no |
-| N1s/xu_chno | -0,063 | 0,63 | 2,34 | 0,99 | no |
+| nivel/conjunto/método | sitios | r | MAE (eV) | coeficientes | r calibrada | MAE prueba | MAE prueba calibrada | publicada |
+|---|---|---|---|---|---|---|---|---|
+| C/xu_chno/hole | 42 | 0,952 | 1,07 | 1,766 / 0,697 | 0,949 | 0,94 | 0,43 | no |
+| C/xu_chno/z+1 | 42 | 0,946 | 1,10 | 0,669 | 0,946 | 1,01 | 0,36 | no |
+| C/xu_chn/hole | 42 | 0,761 | 1,48 | 2,048 / 0,505 | 0,613 | 1,21 | 0,96 | no |
+| C/xu_chn/z+1 | 42 | 0,842 | 3,78 | 0,254 | 0,842 | 4,16 | 0,95 | no |
+| N/xu_chno/hole | 7 | 0,993 | 1,16 | 1,364 / 0,746 | 0,986 | 0,86 | 0,33 | sí |
+| N/xu_chno/z+1 | 7 | 0,942 | 2,32 | 0,674 | 0,942 | 2,34 | 1,43 | no |
+| O/xu_chno/hole | 16 | 0,950 | 0,37 | 1,313 / 1,213 | 0,951 | 0,32 | 0,43 | no |
+| Se/xu_chnose/hole | 12 | 0,994 | 0,31 | 1,272 / 1,525 | 0,997 | 0,29 | 0,09 | sí |
 
 ## Nanotubos prístinos con Xu
 
