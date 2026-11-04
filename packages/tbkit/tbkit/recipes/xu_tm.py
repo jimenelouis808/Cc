@@ -114,6 +114,9 @@ def main(argv=None) -> None:
     parser.add_argument("--band-prefit", nargs="*", default=[],
                         help="prefijos de parámetros que se ajustan antes solo a las bandas "
                              "(p. ej. 'onsite Mo' S-Mo Mo-Mo 'S-S largo')")
+    parser.add_argument("--joint-start", type=Path, default=None,
+                        help="JSON con los parámetros de inicio del ajuste conjunto (se salta "
+                             "el ajuste de niveles)")
     parser.add_argument("--crystals", type=Path, nargs="*", default=[],
                         help="carpetas de tm_crystals cuyas energías y fuerzas entran en el ajuste")
     parser.add_argument("--held-out-crystals", type=Path, nargs="*", default=[],
@@ -129,7 +132,7 @@ def main(argv=None) -> None:
                   fit=xu_family.fit_options(args), bands=args.bands,
                   held_out_bands=args.held_out_bands, band_weight=args.band_weight,
                   band_window=args.band_window, band_edge_weight=args.band_edge_weight,
-                  band_prefit=args.band_prefit,
+                  band_prefit=args.band_prefit, joint_start=args.joint_start,
                   crystals=args.crystals,
                   held_out_crystals=args.held_out_crystals)
 

@@ -1309,7 +1309,7 @@ def run(family: XuFamily, references: Sequence[Path], out: Path, verbose: bool =
         fit: dict | None = None, hessian_split: bool = False, bands: Sequence[Path] = (),
         held_out_bands: Sequence[Path] = (), band_weight: float = 1.0,
         band_window: float = 3.0, band_edge_weight: float = 1.0,
-        band_prefit: Sequence[str] = (), crystals: Sequence[Path] = (),
+        band_prefit: Sequence[str] = (), joint_start: Optional[Path] = None, crystals: Sequence[Path] = (),
         held_out_crystals: Sequence[Path] = ()) -> dict:
     """Fit ``family`` to the references (one or several files) and write the set.
 
@@ -1335,7 +1335,11 @@ def run(family: XuFamily, references: Sequence[Path], out: Path, verbose: bool =
     join forces and energies (on a k mesh); ``held_out_crystals`` are only reported.
 
     ``band_prefit``: parameter-name prefixes fitted to the bands alone (:func:`fit_bands_only`)
-    between the level fit and the joint fit, which then starts from there."""
+    between the level fit and the joint fit, which then starts from there.
+
+    ``joint_start``: a JSON file ``{"parameters": {name: value}, ...}`` whose values start
+    the joint fit (the level fit is skipped); for a start found by a separate, recorded
+    procedure."""
     fit = {**FIT_DEFAULTS, **(fit or {})}
     status = Path(out).with_suffix(".progreso.json")
     checkpoint = Path(checkpoint) if checkpoint else Path(out).with_suffix(".checkpoint.json")
@@ -1356,6 +1360,10 @@ def run(family: XuFamily, references: Sequence[Path], out: Path, verbose: bool =
     molecules = list(train)
     train += [s for s in crystal_refs if s.role == "train"]
     saved = _load_checkpoint(checkpoint, len(family.parameter_names()))
+    if saved is None and joint_start is not None:
+        given = json.loads(Path(joint_start).read_text(encoding="utf-8"))["parameters"]
+        saved = {"stage": "inicio dado " + Path(joint_start).name,
+                 "x": [float(given[n]) for n in family.parameter_names()]}
     if saved is not None and saved["stage"] != "levels_partial":
         start = np.array(saved["x"])
         stage1 = "retomado de " + checkpoint.name + f" ({saved['stage']})"
@@ -1437,6 +1445,9 @@ def run(family: XuFamily, references: Sequence[Path], out: Path, verbose: bool =
                                            for q in sorted(Path(p).glob("*.json"))}
                                   for p in held_out_crystals},
             "recipe": "tbkit.recipes.tm_crystals (GPAW PW 500 eV, PBE, Mo.6)"}
+    if joint_start is not None:
+        data["fit"]["joint_start"] = {"file": Path(joint_start).name,
+                                      "sha256": _sha256(joint_start)}
     if hessians:
         data["fit"]["hessians"] = Path(hessians).name
         data["fit"]["hessians_sha256"] = _sha256(hessians)
