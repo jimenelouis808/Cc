@@ -206,3 +206,19 @@ def test_spin_polarised_d_shell_hund_closed_form():
     flat = spin_polarised(system, W=w, charges=False, guess="none", kT=0.001)
     assert polarised.magnetization == pytest.approx(4.0, abs=1e-6)
     assert polarised.energy - flat.energy == pytest.approx(8 * w["Ti"]["dd"], abs=1e-6)
+
+
+def test_d_family_from_a_built_family_gets_the_d_integrals():
+    """xu_bsp --d-orbitals derives the pair integrals again: a family already built without
+    d keeps its list in the pair specs (a fit once ran with no d coupling at all)."""
+    import dataclasses
+
+    from tbkit.recipes.xu_bsp import FAMILIES
+
+    base = FAMILIES["Se"]
+    pairs = {k: {kk: vv for kk, vv in s.items() if kk != "bonds"} for k, s in base.pairs.items()}
+    with_d = dataclasses.replace(base, pairs=pairs, d_elements=("Se",))
+    names = with_d.parameter_names()
+    assert "onsite Se d" in names
+    assert any("sds(H,Se)" in n for n in names) and any("dds" in n for n in names)
+    assert len(names) > len(base.parameter_names()) + 10

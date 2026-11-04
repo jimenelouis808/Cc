@@ -162,7 +162,10 @@ def main(argv=None) -> None:
     args = parser.parse_args(argv)
     family = FAMILIES[args.element]
     if args.d_orbitals:
-        family = dataclasses.replace(family, d_elements=(args.element,),
+        # the pair specs carry the integral list derived without d: derive it again
+        pairs = {key: {k: v for k, v in spec.items() if k != "bonds"}
+                 for key, spec in family.pairs.items()}
+        family = dataclasses.replace(family, pairs=pairs, d_elements=(args.element,),
                                      name=family.name + ", con orbitales d")
     if args.angular_ligands:
         family = angular_variant(family, args.element, args.angular_ligands,
