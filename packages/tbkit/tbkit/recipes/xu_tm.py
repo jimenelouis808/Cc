@@ -15,7 +15,9 @@ molecules. The Hubbard U is the free atom's dε_d/dn_d (computed, not fitted).
 Molecules alone leave the solid unconstrained (the first fit made MoS₂ metallic), so the
 GPAW bands of :mod:`tbkit.recipes.tm_crystals` join the fit with ``--bands`` (MoS₂ relaxed
 and strained, Mo bcc), the way ``c_bandas`` was fitted for carbon; ``--held-out-bands``
-(MoCS) are reported only, the test. ``--onsite-window`` keeps each on-site energy within
+(MoCS) are reported only, the test. ``--crystals`` adds their energy and force points
+(relaxed, ±2 %, rattled) to forces and energies: bands alone left the crystal repulsion
+unconstrained (MoS₂ forces 1.1 eV/Å at the GPAW minimum). ``--onsite-window`` keeps each on-site energy within
 that many eV of the free atom's level.
 """
 
@@ -88,6 +90,10 @@ def main(argv=None) -> None:
                         help="peso de cada cristal en el ajuste conjunto")
     parser.add_argument("--band-window", type=float, default=3.0,
                         help="ventana de bandas alrededor del centro del gap o E_F, eV")
+    parser.add_argument("--crystals", type=Path, nargs="*", default=[],
+                        help="carpetas de tm_crystals cuyas energías y fuerzas entran en el ajuste")
+    parser.add_argument("--held-out-crystals", type=Path, nargs="*", default=[],
+                        help="carpetas de tm_crystals que solo se comparan (prueba)")
     parser.add_argument("--onsite-window", type=float, default=None,
                         help="las energías on-site quedan a ± tanto (eV) del nivel del átomo libre")
     xu_family.add_fit_arguments(parser)
@@ -98,7 +104,8 @@ def main(argv=None) -> None:
     xu_family.run(family, args.references, args.out, workers=args.workers,
                   fit=xu_family.fit_options(args), bands=args.bands,
                   held_out_bands=args.held_out_bands, band_weight=args.band_weight,
-                  band_window=args.band_window)
+                  band_window=args.band_window, crystals=args.crystals,
+                  held_out_crystals=args.held_out_crystals)
 
 
 if __name__ == "__main__":

@@ -624,11 +624,82 @@ def _evaluate_one(args):
     x, index = args
     ref = _WORKER["refs"][index]
     model = _WORKER["family"].build_model(x)
+    if is_crystal(ref):
+        energy, forces = crystal_energy_and_forces(model, ref.atoms)
+        return np.zeros(0), energy, forces
     result = self_consistent(System.build(ref.atoms, model), kT=0.01, tol=1e-10)
     if not result.converged:
         raise RuntimeError(f"{ref.label}: SCC sin converger")
     energy, forces, _ = energy_and_forces(result)
     return np.sort(result.solution.energies[0, 0]), energy, forces
+
+
+def is_crystal(ref: ReferenceStructure) -> bool:
+    return bool(np.any(ref.atoms.pbc))
+
+
+def crystal_mesh(atoms) -> tuple:
+    """The k mesh of :mod:`tbkit.recipes.tm_crystals`: 12 per periodic direction."""
+    return tuple(12 if p else 1 for p in atoms.pbc)
+
+
+def crystal_energy_and_forces(model: TBModel, atoms):
+    """SCC energy and forces of a periodic cell on its k mesh (Fermi-Dirac 0.05 eV, as
+    the GPAW crystals)."""
+    from ..kpoints import mesh
+    from ..scc import energy_and_forces
+
+    system = System.build(atoms, model)
+    k0, w0 = mesh(system, crystal_mesh(atoms))
+    result = self_consistent(system, kT=0.05, tol=1e-9, kpts=k0, weights=w0, max_iter=800)
+    if not result.converged:
+        raise RuntimeError("SCC sin converger en un cristal")
+    energy, forces, _ = energy_and_forces(result)
+    return energy, forces
+
+
+def load_crystal_points(folders, role: str = "train") -> list[ReferenceStructure]:
+    """Energy and force points of :mod:`tbkit.recipes.tm_crystals` (relaxed, strained,
+    rattled) as references without levels, one group per crystal: only energy
+    differences inside a crystal are compared, as for the molecules. Slabs (cell
+    longer than 10 Å along z) are periodic in the plane only."""
+    from ase import Atoms
+
+    out = []
+    for folder in folders:
+        folder = Path(folder)
+        for path in sorted(folder.glob("*.json")):
+            data = json.loads(path.read_text())
+            if "energy" not in data or "forces" not in data:
+                continue
+            cell = np.asarray(data["cell"])
+            atoms = Atoms(data["symbols"], positions=data["positions"], cell=cell,
+                          pbc=(True, True, cell[2, 2] <= 10))
+            out.append(ReferenceStructure(f"{folder.name}/{path.stem}", folder.name, atoms,
+                                          float(data["energy"]),
+                                          np.asarray(data["forces"], dtype=float),
+                                          np.zeros(0), 0, role))
+    return out
+
+
+def crystal_validation(model: TBModel, refs) -> dict:
+    """Per crystal: force RMS (TB − GPAW) and energies relative to the relaxed cell."""
+    out: dict = {}
+    for ref in refs:
+        energy, forces = crystal_energy_and_forces(model, ref.atoms)
+        entry = out.setdefault(ref.group, {"role": ref.role, "points": {}})
+        entry["points"][ref.label.split("/")[-1]] = {
+            "force_rms": float(np.sqrt(np.mean((forces - ref.forces) ** 2))),
+            "force_rms_gpaw": float(np.sqrt(np.mean(ref.forces ** 2))),
+            "energy_tb": float(energy), "energy_gpaw": ref.energy}
+    for entry in out.values():
+        points = entry["points"]
+        base = points.get("relaxed") or next(iter(points.values()))
+        e0, g0 = base["energy_tb"], base["energy_gpaw"]
+        for point in points.values():
+            point["delta_e_tb"] = point.pop("energy_tb") - e0
+            point["delta_e_gpaw"] = point.pop("energy_gpaw") - g0
+    return out
 
 
 @dataclass
@@ -781,6 +852,8 @@ class JointObjective:
             return np.full(self.size, 30.0)
         differences, weights = [], []
         for ref, (levels, _, _) in zip(self.refs, results, strict=True):
+            if is_crystal(ref):
+                continue
             indices, w = selection(ref)
             differences.append(levels[indices] - ref.levels[indices])
             weights.append(w)
@@ -1147,7 +1220,8 @@ def run(family: XuFamily, references: Sequence[Path], out: Path, verbose: bool =
         hessian_weight: float = 0.1, checkpoint: Optional[Path] = None,
         fit: dict | None = None, hessian_split: bool = False, bands: Sequence[Path] = (),
         held_out_bands: Sequence[Path] = (), band_weight: float = 1.0,
-        band_window: float = 3.0) -> dict:
+        band_window: float = 3.0, crystals: Sequence[Path] = (),
+        held_out_crystals: Sequence[Path] = ()) -> dict:
     """Fit ``family`` to the references (one or several files) and write the set.
 
     ``hessians``: a file of :mod:`tbkit.recipes.frequency_references`; its
@@ -1166,7 +1240,10 @@ def run(family: XuFamily, references: Sequence[Path], out: Path, verbose: bool =
 
     ``bands``: band files of :mod:`tbkit.recipes.tm_crystals` (GPAW, a k path) that join
     the joint fit, band by band within ``band_window`` eV of the gap centre (or E_F), each
-    crystal weighted ``band_weight`` as a whole; ``held_out_bands`` are only reported."""
+    crystal weighted ``band_weight`` as a whole; ``held_out_bands`` are only reported.
+
+    ``crystals``: folders of :mod:`tbkit.recipes.tm_crystals` whose energy and force points
+    join forces and energies (on a k mesh); ``held_out_crystals`` are only reported."""
     fit = {**FIT_DEFAULTS, **(fit or {})}
     status = Path(out).with_suffix(".progreso.json")
     checkpoint = Path(checkpoint) if checkpoint else Path(out).with_suffix(".checkpoint.json")
@@ -1181,7 +1258,11 @@ def run(family: XuFamily, references: Sequence[Path], out: Path, verbose: bool =
     for s in structures:
         if s.group in family.held_out:
             s.role = "test"
+    crystal_refs = load_crystal_points(crystals, "train") + \
+        load_crystal_points(held_out_crystals, "test")
     train = [s for s in structures if s.role == "train"]
+    molecules = list(train)
+    train += [s for s in crystal_refs if s.role == "train"]
     saved = _load_checkpoint(checkpoint, len(family.parameter_names()))
     if saved is not None and saved["stage"] != "levels_partial":
         start = np.array(saved["x"])
@@ -1189,11 +1270,11 @@ def run(family: XuFamily, references: Sequence[Path], out: Path, verbose: bool =
     else:
         if saved is not None:              # the level fit was interrupted: go on from there
             x0 = np.array(saved["x"])
-        result = fit_levels(family, train, x0, checkpoint, status=status)
+        result = fit_levels(family, molecules, x0, checkpoint, status=status)
         start, stage1 = result.x, str(result.message)
         _save_checkpoint(checkpoint, "levels", start, np.inf)
     electronic = family.build_model(start)
-    _, shift, rms = level_residuals(electronic, train, family.fixed_shift())
+    _, shift, rms = level_residuals(electronic, molecules, family.fixed_shift())
     if verbose:
         print(f"Niveles: {stage1}; desplazamiento {shift:.3f} eV", flush=True)
     weights = {k: v for k, v in fit.items() if k != "max_nfev"}
@@ -1219,6 +1300,15 @@ def run(family: XuFamily, references: Sequence[Path], out: Path, verbose: bool =
     if verbose:
         print(validation_table(validation))
     report["validation"] = validation
+    if crystal_refs:
+        report["crystals"] = crystal_validation(model, crystal_refs)
+        if verbose:
+            for name, entry in report["crystals"].items():
+                print(f"{name} ({entry['role']}):")
+                for label, pt in entry["points"].items():
+                    print(f"  {label:8s} F {pt['force_rms']:.3f} eV/Å (|F| GPAW "
+                          f"{pt['force_rms_gpaw']:.3f}), ΔE TB {pt['delta_e_tb']:7.3f} "
+                          f"GPAW {pt['delta_e_gpaw']:7.3f} eV")
     if bands or held_out_bands:
         report["bands"] = {"window_eV": band_window, "weight": band_weight,
                            "train": {t.name: band_report(model, t) for t in

@@ -257,3 +257,27 @@ def test_band_target_of_the_models_own_bands_has_zero_residual(tmp_path):
     r = xf.band_residuals(model, target)
     assert len(r) > 0
     assert np.abs(r).max() < 1e-6
+
+
+def test_crystal_points_load_as_periodic_references_without_levels(tmp_path):
+    """tm_crystals points become references with no levels, one group per crystal, a slab
+    periodic in the plane only; band files in the folder are skipped."""
+    import json
+
+    from tbkit.recipes import xu_family as xf
+    from tbkit.recipes.tm_crystals import start
+
+    atoms = start("MoS2")
+    folder = tmp_path / "MoS2"
+    folder.mkdir()
+    for label in ("relaxed", "x1.02"):
+        (folder / f"{label}.json").write_text(json.dumps(
+            {"symbols": atoms.get_chemical_symbols(), "positions": atoms.positions.tolist(),
+             "cell": np.asarray(atoms.cell).tolist(), "energy": -20.0,
+             "forces": np.zeros((3, 3)).tolist()}))
+    (folder / "bands.json").write_text(json.dumps({"bands": []}))
+    refs = xf.load_crystal_points([folder], "test")
+    assert sorted(r.label for r in refs) == ["MoS2/relaxed", "MoS2/x1.02"]
+    assert all(r.group == "MoS2" and r.role == "test" and r.n_occupied == 0 for r in refs)
+    assert list(refs[0].atoms.pbc) == [True, True, False]
+    assert xf.is_crystal(refs[0])
