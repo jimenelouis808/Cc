@@ -34,7 +34,7 @@ from ase.neighborlist import neighbor_list
 from scipy.optimize import least_squares
 
 from ..hamiltonian import System
-from ..params import GSP, TBModel, Tail, model_from_dict, model_to_dict, read_parameter_file
+from ..params import GSP, Onset, Sum, TBModel, Tail, model_from_dict, model_to_dict, read_parameter_file
 from ..references import ReferenceStructure, load_references
 from ..repulsive import PairRepulsive, SumRepulsive
 from ..scc import self_consistent
@@ -142,6 +142,12 @@ class XuFamily:
     #: Bound of each fitted on-site energy around its starting value (eV); None: free. A
     #: molecular fit once pushed Mo's empty 5p to 78 eV, which decoupled it.
     onsite_window: Optional[float] = None
+    #: Long-range hopping added to a pair of the base set (kept fixed below the onset):
+    #: ``{(a, b): {"r0": Å, "onset": (r0, r1), "tail": (r1, rm)}}``. The base's laws die
+    #: past their bond (S-S of xu_chnos: 0.02 eV at 3.15 Å), which leaves no S-S coupling
+    #: at the 3.1-3.2 Å of a TMD's chalcogen sheet; the added law switches on (``Onset``)
+    #: past the base's bonds, so a molecule's own bonds keep the base's exact laws.
+    long_range: dict = field(default_factory=dict)
 
     def d_set(self) -> tuple[str, ...]:
         """Every element with d, the base set's included."""
@@ -224,6 +230,10 @@ class XuFamily:
             for first, second, bond in spec["bonds"]:
                 names.append(f"{a}-{b} {bond}({first},{second}) v0")
             names.append(f"{a}-{b} n")
+        for (a, b) in self.long_range:
+            for first, second, bond in pair_bonds(a, b, self.d_set()):
+                names.append(f"{a}-{b} largo {bond}({first},{second}) v0")
+            names.append(f"{a}-{b} largo n")
         return names
 
     def initial_guess(self) -> np.ndarray:
@@ -232,6 +242,10 @@ class XuFamily:
         for spec in self.pairs.values():
             for _, _, bond in spec["bonds"]:
                 x.append(_ETA[bond] * 7.62 / spec["r0"] ** 2)
+            x.append(2.0)
+        for (a, b), spec in self.long_range.items():
+            for _, _, bond in pair_bonds(a, b, self.d_set()):
+                x.append(0.3 * _ETA[bond] * 7.62 / spec["r0"] ** 2)
             x.append(2.0)
         return np.array(x)
 
@@ -268,6 +282,15 @@ class XuFamily:
             for (first, second, bond), v0 in zip(spec["bonds"], values, strict=True):
                 hopping[(first, second, bond)] = self._law(v0, n, spec["r0"], spec.get("tail"))
             k += len(spec["bonds"]) + 1
+        for (a, b), spec in self.long_range.items():
+            bonds = pair_bonds(a, b, self.d_set())
+            n = x[k + len(bonds)]
+            r1, rm = spec["tail"]
+            for (first, second, bond), v0 in zip(bonds, x[k:k + len(bonds)], strict=True):
+                far = Onset(Tail(GSP(v0, spec["r0"], n, NC, rm, rm), r1, rm), *spec["onset"])
+                key = (first, second, bond)
+                hopping[key] = Sum((hopping[key], far)) if key in hopping else far
+            k += len(bonds) + 1
         if repulsive is None:
             repulsive = SumRepulsive(self.base_terms())
         elements = self.elements()
@@ -713,6 +736,7 @@ class BandTarget:
     n_occ: int
     mesh: tuple
     window: float = 3.0          # eV around the reference level
+    edge_weight: float = 1.0     # extra weight of the band-edge pair and the gaps
 
 
 def _reference_level(eps: np.ndarray, n_occ: int, fermi: float) -> float:
@@ -720,7 +744,8 @@ def _reference_level(eps: np.ndarray, n_occ: int, fermi: float) -> float:
     return 0.5 * (vbm + cbm) if cbm - vbm > 0.01 else fermi
 
 
-def load_band_targets(paths, window: float = 3.0) -> list[BandTarget]:
+def load_band_targets(paths, window: float = 3.0, edge_weight: float = 1.0
+                      ) -> list[BandTarget]:
     from ase import Atoms
 
     out = []
@@ -737,7 +762,7 @@ def load_band_targets(paths, window: float = 3.0) -> list[BandTarget]:
         eps = eps - _reference_level(eps, int(data["n_occ"]), float(data["fermi_eV"]))
         out.append(BandTarget(Path(path).parent.name + "/" + Path(path).stem, atoms,
                               np.asarray(data["kpts"]), eps, int(data["n_occ"]),
-                              (12, 12, 1) if slab else (12, 12, 12), window))
+                              (12, 12, 1) if slab else (12, 12, 12), window, edge_weight))
     return out
 
 
@@ -766,8 +791,18 @@ def band_residuals(model: TBModel, target: BandTarget) -> np.ndarray:
             inside = np.abs(target.bands[:, ia]) <= target.window
             if not inside.any():
                 break
-            out.append((eps[:, ib] - target.bands[:, ia])[inside])
+            out.append((eps[:, ib] - target.bands[:, ia])[inside]
+                       * (target.edge_weight if m == 0 else 1.0))
             m += 1
+    if target.edge_weight != 1.0 and target.bands[:, target.n_occ].min() > \
+            target.bands[:, target.n_occ - 1].max():
+        # an insulator: the direct gap at every k and the fundamental gap, which set where
+        # the band edges sit (direct at K in MoS2)
+        direct = (eps[:, n] - eps[:, n - 1]) - (target.bands[:, target.n_occ]
+                                                 - target.bands[:, target.n_occ - 1])
+        fundamental = (eps[:, n].min() - eps[:, n - 1].max()) - (
+            target.bands[:, target.n_occ].min() - target.bands[:, target.n_occ - 1].max())
+        out.append(target.edge_weight * np.append(direct, fundamental * np.sqrt(len(direct))))
     return np.concatenate(out) if out else np.zeros(0)
 
 
@@ -784,8 +819,13 @@ def band_report(model: TBModel, target: BandTarget) -> dict:
     n = int(round(system.electrons)) // 2
     gap_tb = float(eps[:, n].min() - eps[:, n - 1].max())
     gap_ref = float(target.bands[:, target.n_occ].min() - target.bands[:, target.n_occ - 1].max())
+    edges = {"vbm_k_tb": int(eps[:, n - 1].argmax()), "cbm_k_tb": int(eps[:, n].argmin()),
+             "vbm_k_gpaw": int(target.bands[:, target.n_occ - 1].argmax()),
+             "cbm_k_gpaw": int(target.bands[:, target.n_occ].argmin())}
     return {"rms_eV": float(np.sqrt(np.mean(r ** 2))) if len(r) else None,
-            "gap_tb_eV": gap_tb, "gap_gpaw_eV": gap_ref}
+            "gap_tb_eV": gap_tb, "gap_gpaw_eV": gap_ref,
+            "direct_tb": edges["vbm_k_tb"] == edges["cbm_k_tb"],
+            "direct_gpaw": edges["vbm_k_gpaw"] == edges["cbm_k_gpaw"], **edges}
 
 
 def _evaluate_band(args):
@@ -1227,7 +1267,7 @@ def run(family: XuFamily, references: Sequence[Path], out: Path, verbose: bool =
         hessian_weight: float = 0.1, checkpoint: Optional[Path] = None,
         fit: dict | None = None, hessian_split: bool = False, bands: Sequence[Path] = (),
         held_out_bands: Sequence[Path] = (), band_weight: float = 1.0,
-        band_window: float = 3.0, crystals: Sequence[Path] = (),
+        band_window: float = 3.0, band_edge_weight: float = 1.0, crystals: Sequence[Path] = (),
         held_out_crystals: Sequence[Path] = ()) -> dict:
     """Fit ``family`` to the references (one or several files) and write the set.
 
@@ -1289,7 +1329,8 @@ def run(family: XuFamily, references: Sequence[Path], out: Path, verbose: bool =
                                    max_nfev=fit["max_nfev"], verbose=verbose, status=status,
                                    hessians=targets, hessian_weight=hessian_weight,
                                    checkpoint=checkpoint,
-                                   band_targets=load_band_targets(bands, band_window),
+                                   band_targets=load_band_targets(bands, band_window,
+                                                                  band_edge_weight),
                                    band_weight=band_weight, **weights)
     x = joint.x
     shift = info["shift"]

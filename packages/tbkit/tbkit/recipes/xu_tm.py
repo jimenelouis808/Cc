@@ -49,6 +49,14 @@ R0 = {"Mo": {"H": 1.70, "C": 2.10, "N": 1.98, "O": 1.80, "S": 2.20, "Mo": 2.73}}
 MO_MO_TAIL = (3.90, 4.20)
 
 
+#: S-S long-range hopping (Å): xu_chnos's S-S law is 0.02 eV at 3.15 Å, so the S sheets of
+#: MoS₂ (S-S 3.12 Å across the layer, 3.18 Å in the plane) had no coupling; the TMD
+#: tight-binding models need it (Cappelluti et al., PRB 88, 075409, 2013). Switched on
+#: between 2.6 and 2.9 Å, past every S-S bond (2.05 Å) of the base, off at 4.0 Å, before
+#: the next S-S shell of MoS₂ (4.45 Å).
+LONG_RANGE = {("S", "S"): {"r0": 3.15, "onset": (2.6, 2.9), "tail": (3.7, 4.0)}}
+
+
 def _mo_pairs() -> dict:
     pairs = _pairs("Mo", R0["Mo"])
     pairs[("Mo", "Mo")]["tail"] = MO_MO_TAIL
@@ -67,6 +75,7 @@ FAMILIES = {
         hubbard_u=HUBBARD_U,
         onsite_dipole={},
         d_elements=("Mo",),
+        long_range=LONG_RANGE,
         validity_notes=("Mo ajustado en moléculas de capa cerrada (Mo(VI) d0 con oxo, hidroxo, "
                         "metilo, amido, tiolato, sulfuro e hidruro; Mo(CO)6; Mo2) y, con "
                         "--crystals/--bands, en MoS2 2H y Mo bcc (MoCS Janus apartado como "
@@ -98,6 +107,9 @@ def main(argv=None) -> None:
                         help="peso de cada cristal en el ajuste conjunto")
     parser.add_argument("--band-window", type=float, default=3.0,
                         help="ventana de bandas alrededor del centro del gap o E_F, eV")
+    parser.add_argument("--band-edge-weight", type=float, default=1.0,
+                        help="peso extra de las dos bandas del borde y de los gaps (directo en "
+                             "cada k y fundamental) en aislantes")
     parser.add_argument("--crystals", type=Path, nargs="*", default=[],
                         help="carpetas de tm_crystals cuyas energías y fuerzas entran en el ajuste")
     parser.add_argument("--held-out-crystals", type=Path, nargs="*", default=[],
@@ -112,7 +124,8 @@ def main(argv=None) -> None:
     xu_family.run(family, args.references, args.out, workers=args.workers,
                   fit=xu_family.fit_options(args), bands=args.bands,
                   held_out_bands=args.held_out_bands, band_weight=args.band_weight,
-                  band_window=args.band_window, crystals=args.crystals,
+                  band_window=args.band_window, band_edge_weight=args.band_edge_weight,
+                  crystals=args.crystals,
                   held_out_crystals=args.held_out_crystals)
 
 

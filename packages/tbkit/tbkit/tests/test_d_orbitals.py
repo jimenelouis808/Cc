@@ -281,3 +281,39 @@ def test_crystal_points_load_as_periodic_references_without_levels(tmp_path):
     assert all(r.group == "MoS2" and r.role == "test" and r.n_occupied == 0 for r in refs)
     assert list(refs[0].atoms.pbc) == [True, True, False]
     assert xf.is_crystal(refs[0])
+
+
+def test_long_range_pair_keeps_the_base_law_below_its_onset_and_forces_are_exact():
+    """xu_tm's S-S long-range law: identical to xu_chnos's S-S below 2.6 Å (molecular S-S
+    bonds untouched), coupled at the 3.15 Å of MoS₂, and its forces equal finite
+    differences of the energy across the onset and the tail."""
+    from ase import Atoms
+
+    from tbkit.forces import energy_and_forces
+    from tbkit.hamiltonian import System
+    from tbkit.params import load_parameters
+    from tbkit.recipes.xu_tm import FAMILIES
+    from tbkit.solver import solve
+
+    family = FAMILIES["Mo"]
+    model = family.build_model(family.initial_guess())
+    base = load_parameters("xu_chnos")
+    r = np.linspace(1.8, 2.6, 9)
+    for bond in ("sss", "sps", "pps", "ppp"):
+        assert np.allclose(model.hopping[("S", "S", bond)](r), base.hopping[("S", "S", bond)](r))
+    assert abs(model.hopping[("S", "S", "pps")](3.15)) > 0.1
+    assert abs(base.hopping[("S", "S", "pps")](3.15)) < 0.05
+    atoms = Atoms("S4", positions=[[0, 0, 0], [2.75, 0.2, 0], [1.1, 3.2, 0.3],
+                                   [1.0, 0.8, 3.8]])
+
+    def energy(a, need=False):
+        return energy_and_forces(solve(System.build(a, model), kT=0.1), need_forces=need)
+
+    _, forces, _ = energy(atoms, True)
+    h = 1e-4
+    for atom, axis in ((0, 0), (1, 1), (2, 2), (3, 0)):
+        plus, minus = atoms.copy(), atoms.copy()
+        plus.positions[atom, axis] += h
+        minus.positions[atom, axis] -= h
+        fd = -(energy(plus)[0] - energy(minus)[0]) / (2 * h)
+        assert forces[atom, axis] == pytest.approx(fd, abs=2e-5)
