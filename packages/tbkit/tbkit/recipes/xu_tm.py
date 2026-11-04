@@ -30,7 +30,24 @@ from .xu_bsp import _pairs
 from .xu_family import XuFamily
 
 #: Typical Mo bond lengths in the GPAW references (Å): the centre of each distance law.
-R0 = {"Mo": {"H": 1.70, "C": 2.10, "N": 1.98, "O": 1.80, "S": 2.20, "Mo": 1.94}}
+#: Mo-Mo is centred on the metallic bond (bcc nearest neighbours, 2.73 Å), not on the Mo2
+#: quintuple bond (1.94 Å): the GSP law decays past rc = 2.18 r0/1.536, and from the dimer
+#: that is 2.75 Å, which left no Mo-Mo hopping at the 3.18 Å of MoS₂.
+R0 = {"Mo": {"H": 1.70, "C": 2.10, "N": 1.98, "O": 1.80, "S": 2.20, "Mo": 2.73}}
+#: Mo-Mo hopping tail (Å). Xu's tail scaled from the dimer's 1.94 Å ended at 3.09-3.28 Å,
+#: right on the Mo-Mo distance of MoS₂ (a = 3.18 Å) and the second neighbours of bcc Mo
+#: (3.16 Å): the d-d hopping that sets the MoS₂ gap switched off between -2 % and +2 %
+#: strain (the first band fit: gap 1.49 eV at 0.98 a, metallic at 1.02 a). The tail starts
+#: past both and ends before the third bcc shell (4.47 Å).
+MO_MO_TAIL = (3.90, 4.20)
+
+
+def _mo_pairs() -> dict:
+    pairs = _pairs("Mo", R0["Mo"])
+    pairs[("Mo", "Mo")]["tail"] = MO_MO_TAIL
+    return pairs
+
+
 #: dε_d/dn_d of the free atom, GPAW aeatom PBE, 6-electron Mo (eV)
 HUBBARD_U = {"Mo": 7.886}
 
@@ -39,7 +56,7 @@ FAMILIES = {
         name="C/H/N/O/S/Mo: xu_chnos + Mo (s, p, d) ajustado a GPAW",
         recipe="tbkit.recipes.xu_tm",
         heteroatoms=("Mo",),
-        pairs=_pairs("Mo", R0["Mo"]),
+        pairs=_mo_pairs(),
         hubbard_u=HUBBARD_U,
         onsite_dipole={},
         d_elements=("Mo",),
