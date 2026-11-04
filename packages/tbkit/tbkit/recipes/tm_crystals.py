@@ -158,7 +158,7 @@ def write_bands(name: str, atoms: Atoms, out: Path) -> None:
     n_occ = int(round(sum({"Mo": 6, "S": 6, "C": 4}[s]
                           for s in atoms.get_chemical_symbols()) / 2))
     calc = atoms.calc.fixed_density(kpts=bp.kpts, symmetry="off", txt=None,
-                                    nbands=n_occ + 8, convergence={"bands": n_occ + 6})
+                                    nbands=n_occ + 14, convergence={"bands": n_occ + 6})
     eps = np.array([calc.get_eigenvalues(kpt=i) for i in range(len(bp.kpts))])
     _write(out, {"system": name, "code": "gpaw_pw", "fermi_eV": fermi, "n_occ": n_occ,
                  "kpts": bp.kpts.tolist(), "bands": eps[:, :n_occ + 6].tolist(),
