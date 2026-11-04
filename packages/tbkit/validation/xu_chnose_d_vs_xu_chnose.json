@@ -1,0 +1,104 @@
+{
+ "description": "xu_chnose con orbitales d en Se (xu_bsp Se --d-orbitals --hessian-split) frente a xu_chnose; deriva al relajar desde la geometría GPAW (Å) medida aparte.",
+ "training": {
+  "force_rms": {
+   "xu_chnose_d": 0.3415135529430503,
+   "xu_chnose": 0.37462490547498123
+  },
+  "energy_rms": {
+   "xu_chnose_d": 0.08673396303615762,
+   "xu_chnose": 0.1129146068376898
+  },
+  "level_rms_train": {
+   "xu_chnose_d": 0.5435426491403773,
+   "xu_chnose": 0.6125816175616088
+  },
+  "hessian_rms": {
+   "xu_chnose_d": 1.0557683600399221,
+   "xu_chnose": 0.8660558781168999
+  }
+ },
+ "frequencies_fit_half": {
+  "H2Se": {
+   "xu_chnose_d": 54.1,
+   "xu_chnose": 66.0
+  },
+  "CH3SeCH3": {
+   "xu_chnose_d": 84.3,
+   "xu_chnose": 81.2
+  },
+  "selenophene": {
+   "xu_chnose_d": 89.0,
+   "xu_chnose": 85.8
+  },
+  "OCSe": {
+   "xu_chnose_d": 147.5,
+   "xu_chnose": 119.0
+  },
+  "SeO2": {
+   "xu_chnose_d": 69.7,
+   "xu_chnose": 100.2
+  },
+  "CH3SeO2H": {
+   "xu_chnose_d": 63.4,
+   "xu_chnose": 76.5
+  }
+ },
+ "frequencies_held_out": {
+  "CH3SeH": {
+   "xu_chnose_d": 124.0,
+   "xu_chnose": 123.6
+  },
+  "CH3SeSeCH3": {
+   "xu_chnose_d": 74.2,
+   "xu_chnose": 74.0
+  },
+  "CSe2": {
+   "xu_chnose_d": 95.3,
+   "xu_chnose": 64.3
+  },
+  "H2CSe": {
+   "xu_chnose_d": 138.2,
+   "xu_chnose": 121.4
+  },
+  "DMSeO": {
+   "xu_chnose_d": 59.8,
+   "xu_chnose": 66.9
+  },
+  "CH3SeNH2": {
+   "xu_chnose_d": 124.8,
+   "xu_chnose": 112.1
+  }
+ },
+ "relax_max_drift_A": {
+  "CH3SeO2H": [
+   0.763,
+   0.87
+  ],
+  "DMSeO": [
+   0.046,
+   0.207
+  ],
+  "SeO2": [
+   0.026,
+   0.132
+  ],
+  "H2Se": [
+   0.056,
+   0.065
+  ],
+  "CH3SeCH3": [
+   0.047,
+   0.075
+  ],
+  "coronene_SeH": [
+   0.28,
+   0.264
+  ],
+  "order": [
+   "xu_chnose_d",
+   "xu_chnose"
+  ]
+ },
+ "conclusion": "CON ORBITALES d EN Se (polarización, energía d ajustada 23,7 eV sobre el cero de Xu): frente a xu_chnose mejora el Se hipervalente (relajando desde GPAW, deriva máxima DMSeO 0,21 → 0,05 Å, SeO2 0,13 → 0,03 Å; error O-Se de CH3SeO2H 0,081 → 0,008 Å; gaps de SeO2 y DMSeO a 0,06-0,2 eV de GPAW, antes 1,1) y fuerzas/energías/niveles de entrenamiento (0,375 → 0,342 eV/Å; 0,113 → 0,087 eV; 0,61 → 0,54 eV); empeora las frecuencias de las moléculas apartadas (mediana 93 → 110 cm⁻¹; CSe2 64 → 95); el giro del OH de los ácidos selenínicos sigue (deriva 0,87 → 0,76 Å). Validación: validation/xu_chnose_d_vs_xu_chnose.json"
+}

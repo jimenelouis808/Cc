@@ -120,6 +120,11 @@ FAMILIES = {
 }
 
 
+#: What the d variant measured against the plain set (validation/xu_chnose_d_vs_xu_chnose.json),
+#: appended to its validity on a refit.
+D_NOTES = {"Se": " " + 'CON ORBITALES d EN Se (polarización, energía d ajustada 23,7 eV sobre el cero de Xu): frente a xu_chnose mejora el Se hipervalente (relajando desde GPAW, deriva máxima DMSeO 0,21 → 0,05 Å, SeO2 0,13 → 0,03 Å; error O-Se de CH3SeO2H 0,081 → 0,008 Å; gaps de SeO2 y DMSeO a 0,06-0,2 eV de GPAW, antes 1,1) y fuerzas/energías/niveles de entrenamiento (0,375 → 0,342 eV/Å; 0,113 → 0,087 eV; 0,61 → 0,54 eV); empeora las frecuencias de las moléculas apartadas (mediana 93 → 110 cm⁻¹; CSe2 64 → 95); el giro del OH de los ácidos selenínicos sigue (deriva 0,87 → 0,76 Å). Validación: validation/xu_chnose_d_vs_xu_chnose.json'}
+
+
 def angular_variant(family: XuFamily, element: str, ligands, powers: int = 3) -> XuFamily:
     """``family`` plus angle stiffness at ``element`` between ``ligands`` only.
 
@@ -166,7 +171,9 @@ def main(argv=None) -> None:
         pairs = {key: {k: v for k, v in spec.items() if k != "bonds"}
                  for key, spec in family.pairs.items()}
         family = dataclasses.replace(family, pairs=pairs, d_elements=(args.element,),
-                                     name=family.name + ", con orbitales d")
+                                     name=family.name + ", con orbitales d",
+                                     validity_notes=family.validity_notes + D_NOTES.get(
+                                         args.element, ""))
     if args.angular_ligands:
         family = angular_variant(family, args.element, args.angular_ligands,
                                  args.angular_powers)
