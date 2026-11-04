@@ -1,0 +1,113 @@
+EP (+piridina) — C5H5N: N aromático ya dentro de un anillo
+medido a +0.4853 V (continuo, del archivo)
+
+EP (+piridina): 43 frecuencias, 0.01–1e+05 Hz, |Z| 58.8–2.09e+04 Ω
+
+Kramers-Kronig (49 elementos RC): NO CONSISTENTE
+  residuo RMS 1.65 %, máximo 5.25 %, rachas de signo 0.41× lo esperado por azar
+  los datos NO satisfacen Kramers-Kronig. La causa habitual es que la celda cambió MIENTRAS medías: un barrido de impedancia lento a un potencial donde algo se corroe, se disuelve o se intercala tarda minutos, y la muestra del final no es la del principio. Ajustar un circuito a esto da parámetros sin significado, y el χ² no lo delata porque un circuito flexible ajusta bien datos que han derivado. Repite midiendo de alta a baja frecuencia y otra vez al revés: si las dos no coinciden, ahí está
+
+FORMA DEL ESPECTRO (sin circuito)
+──────────────────────────────────────────────
+  R en serie        58.81 Ω
+    el espectro no cruza el eje real; se usa Z′ a la frecuencia más alta medida (1e+05 Hz), que es una COTA SUPERIOR de R_u. Un electrodo puramente capacitivo no cruza nunca —ahí esta cota es buena— pero si Z″ es POSITIVO arriba, lo que hay es inductancia de los cables y entonces sobra resistencia: mide más alto o réstala
+  Ápice del arco    no hay: −Z″ sube monótona hasta el final del barrido
+  Codo (-45°)       712 Hz   (τ = 0.001404 s)
+  Fase a f mínima   -22.1°
+  Tramo a 45°       0.67 décadas
+  ⚠ −Z″ no tiene ningún máximo local: sube hasta la frecuencia más baja medida. No hay semicírculo cerrado en estos datos, así que de ellos NO sale ninguna resistencia de transferencia de carga — la que devuelva un ajuste sale del modelo, no de la medida
+
+Resistencia en serie: 58.81 Ω  (el espectro no cruza el eje real; se usa Z′ a la frecuencia más alta medida (1e+05 Hz), que es una COTA SUPERIOR de R_u. Un electrodo puramente capacitivo no cruza nunca —ahí esta cota es buena— pero si Z″ es POSITIVO arriba, lo que hay es inductancia de los cables y entonces sobra resistencia: mide más alto o réstala)
+Resistencia de transferencia de carga: 1.103e+04 Ω
+Capacitancia entregable C′(0.01001 Hz): 0.2869 mF  (de los datos, sin circuito)
+Capacitancia del ARCO interfacial (Hsu-Mansfeld): 0.01276 mF  — es del arco, no lo que almacena el electrodo
+Frecuencia de codo (fase = -45°): 712 Hz (τ = 0.001404 s)
+
+Circuitos que la forma del espectro pide:
+  randles_cpe = R0-(R1|Q1)
+    la forma no decide: no hay arco cerrado ni cola capacitiva dentro del barrido. Esto es un punto de partida, no una recomendación
+
+COMPARACIÓN DE CIRCUITOS
+──────────────────────────────────────────────
+
+  circuito                    χ²        libres  determinados      BIC
+  R0-(R1|Q1)                    1.844       4            4     -312.6
+
+  El BIC penaliza parámetros, y hace falta porque un circuito con más
+  elementos ajusta SIEMPRE al menos igual de bien: que baje el χ² al
+  añadir uno no prueba nada por sí solo.
+  Pero el BIC tampoco decide solo. La columna que decide es «determinados»:
+  un parámetro que vuelve con una incertidumbre por encima del 50 %
+  no es una medida, y un circuito que gana por BIC con la mitad de sus
+  parámetros indeterminados ha ajustado la forma sin medir nada.
+
+  Mejor por BIC: R0-(R1|Q1)
+
+  Y nada de esto dice si el circuito es el APROPIADO para el material.
+  Ninguna regla estructural puede: un CPE donde va un condensador sigue
+  ajustando, y entonces su Q no son faradios.
+
+Circuito: R0-(R1|Q1)
+  convergido: `ftol` termination condition is satisfied.
+  χ² = 1.844   residuo medio 17.831 %
+
+  R0.R       =      53.5477 Ω  (± 5.3 %)
+  R1.R       =      11030.9 Ω  (± 5.4 %)
+  Q1.Q       =  2.10758e-05 S·sⁿ  (± 9.5 %)
+  Q1.n       =     0.744173   (± 2.1 %)
+
+  ⚠ Q1: Q = 2.108e-05 S·sⁿ NO son faradios. Para dar una capacitancia hace falta convertir con la resistencia en paralelo (echem.eis.cpe_to_capacitance) y citar siempre la n al lado
+  ⚠ el residuo medio es 17.8 %. El circuito no describe estos datos: mira el diagrama de Nyquist y compara la forma, no el número
+
+⚠ −Z″ no tiene ningún máximo local: sube hasta la frecuencia más baja medida. No hay semicírculo cerrado en estos datos, así que de ellos NO sale ninguna resistencia de transferencia de carga — la que devuelva un ajuste sale del modelo, no de la medida
+⚠ el espectro no pasa Kramers-Kronig. Los parámetros del circuito que salgan abajo NO son fiables, por muy bien que ajuste
+⚠ la R de transferencia de carga (1.103e+04 Ω) sale del circuito y no de los datos: −Z″ no cierra ningún arco dentro del barrido, así que su constante de tiempo está fuera de lo medido. La capacitancia efectiva convertida con ella hereda esa dependencia
+⚠ Q1: Q = 2.108e-05 S·sⁿ NO son faradios. Para dar una capacitancia hace falta convertir con la resistencia en paralelo (echem.eis.cpe_to_capacitance) y citar siempre la n al lado
+⚠ el residuo medio es 17.8 %. El circuito no describe estos datos: mira el diagrama de Nyquist y compara la forma, no el número
+
+DRT: 1 procesos — τ = 0.0671 s (1.79e+04 Ω); R_s = 60.4 Ω, residuo 4.67 %
+DISTRIBUCIÓN DE CONSTANTES DE TIEMPO
+──────────────────────────────────────────────
+  R óhmica          60.41 Ω
+  regularización λ  20.15
+  residuo           4.67 %
+  τ medidas         1.59e-06 – 15.9 s
+
+   τ (s)        R (Ω)     C = τ/R      % de R_p   proceso probable
+      0.0671   1.79e+04    3.75e-06     100.0   transferencia de carga lenta, o difusión dentro del poro
+
+  Cómo confirmarlo —ninguna de estas asignaciones sale
+  de un solo espectro:
+   τ = 0.0671 s: cambia la temperatura y saca la energía de activación; y mira el Bode: una difusión en poro trae su recta de 45°
+  ⚠ la inversión es mal condicionada: la regularización no es un detalle de implementación sino una elección sobre cuánta estructura creerse. Aquí λ = 20.2
+  ⚠ hay peso apreciable en el extremo lento: falta frecuencia baja, y la difusión suele estar ahí
+  ⚠ la fase pasa 0.7 décadas cerca de −45°, que es un elemento DISTRIBUIDO —un poro, un Warburg, un Gerischer— y no tiene constante de tiempo propia. Los 1 pico(s) de arriba son esa distribución troceada en arcos: no los cuentes como procesos ni los traduzcas a ZARC en esa región
+
+COMPARACIÓN DE CIRCUITOS
+──────────────────────────────────────────────
+
+  circuito                    χ²        libres  determinados      BIC
+  R0-(R1|Q1)-(R2|Q2)           0.1403       7            7     -520.8
+  R0-(R1|Q1)-Q2                0.5036       6            6     -415.3
+  R0-(R1|Q1)-T1                0.7304       7            5     -378.9
+  L0-R0-(R1|Q1)-T1             0.7101       8            5     -376.9
+  R0-Za1                        1.844       4            4     -312.6
+  R0-(R1|Q1)                    1.844       4            4     -312.6
+  R0-(R1-Wo1|Q1)                7.096       6            2     -187.8
+  R0-Q1                         8.639       3            3     -184.3
+  R0-T1                         8.469       4            4     -181.5
+
+  El BIC penaliza parámetros, y hace falta porque un circuito con más
+  elementos ajusta SIEMPRE al menos igual de bien: que baje el χ² al
+  añadir uno no prueba nada por sí solo.
+  Pero el BIC tampoco decide solo. La columna que decide es «determinados»:
+  un parámetro que vuelve con una incertidumbre por encima del 50 %
+  no es una medida, y un circuito que gana por BIC con la mitad de sus
+  parámetros indeterminados ha ajustado la forma sin medir nada.
+
+  Mejor por BIC: R0-(R1|Q1)-(R2|Q2)
+  ⚠ R0-Q1: no tiene ninguna rama en PARALELO ni ningún elemento que sea un arco por sí mismo, así que no puede producir un semicírculo: una cadena de R, C, L y Q en serie sólo da rectas. Si el Nyquist tiene un arco, este circuito no es el que lo hace
+
+  Y nada de esto dice si el circuito es el APROPIADO para el material.
+  Ninguna regla estructural puede: un CPE donde va un condensador sigue
+  ajustando, y entonces su Q no son faradios.

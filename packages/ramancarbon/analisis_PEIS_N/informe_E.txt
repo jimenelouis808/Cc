@@ -1,0 +1,144 @@
+E (etanol) — sin nitrógeno; el control
+medido a +0.4489 V (continuo, del archivo)
+
+E (etanol): 43 frecuencias, 0.01–1e+05 Hz, |Z| 68.1–1.59e+04 Ω
+
+Kramers-Kronig (49 elementos RC): consistente
+  residuo RMS 0.25 %, máximo 1.12 %, rachas de signo 0.71× lo esperado por azar
+  los datos son compatibles con un sistema lineal, causal y estable; cualquier circuito equivalente que ajustes tiene sentido
+
+FORMA DEL ESPECTRO (sin circuito)
+──────────────────────────────────────────────
+  R en serie        68.12 Ω
+    cruce con el eje real interpolado entre 6.813e+04 y 4.642e+04 Hz
+  Ápice del arco    no hay: −Z″ sube monótona hasta el final del barrido
+  Codo (-45°)       10.86 Hz   (τ = 0.09206 s)
+  Fase a f mínima   -55.6°   (cola capacitiva)
+  Tramo a 45°       1.83 décadas
+  ⚠ Z″ es POSITIVO en 2 punto(s) del extremo alto: eso es inductancia del cableado, no de la muestra. Un circuito sin una L en serie tiene que absorberla en R0, y entonces R0 no es la resistencia de la disolución
+  ⚠ −Z″ no tiene ningún máximo local: sube hasta la frecuencia más baja medida. No hay semicírculo cerrado en estos datos, así que de ellos NO sale ninguna resistencia de transferencia de carga — la que devuelva un ajuste sale del modelo, no de la medida
+  ⚠ a 0.01001 Hz la fase es -56° y un condensador está en −90°: el barrido no ha llegado al régimen capacitivo, así que la C′ de ese extremo es una cota INFERIOR de lo que almacena el electrodo. Baja más la frecuencia
+
+Resistencia en serie: 68.12 Ω  (cruce con el eje real interpolado entre 6.813e+04 y 4.642e+04 Hz)
+Resistencia de transferencia de carga: 86.38 Ω
+Resistencia iónica del poro: 1.486e-05 Ω  (desplaza la vertical de baja frecuencia en R_ion/3 = 4.954e-06 Ω)
+Capacitancia entregable C′(0.01001 Hz): 0.8269 mF  (de los datos, sin circuito)
+Capacitancia del elemento que almacena (CPE en serie a 0.01001 Hz): 1.012 mF
+  C′(0.01001 Hz): 0.8269 mF medida, 0.903 mF del ajuste (+9.2 %); el elemento T1 solo vale 1.012 mF
+Capacitancia del ARCO interfacial (Hsu-Mansfeld): 0.351 mF  — es del arco, no lo que almacena el electrodo
+Frecuencia de codo (fase = -45°): 10.86 Hz (τ = 0.09206 s)
+
+Circuitos que la forma del espectro pide:
+  poroso = R0-T1
+    la cola es capacitiva (-56° a 0.01 Hz) y antes de ella hay 1.8 décadas cerca de −45°: eso es una línea de transmisión de poro, y su Ri es la resistencia iónica que limita la potencia
+  poroso_con_transferencia = R0-(R1|Q1)-T1
+    lo mismo más una reacción de superficie. Pruébalo: si su R1 vuelve determinada, el arco está aunque no se cierre dentro del barrido
+  supercondensador_completo = L0-R0-(R1|Q1)-T1
+    las tres regiones a la vez: cables, interfase y poro, que es lo que enseña este espectro
+  con_inductancia = L0-R0-(R1|Q1)
+    con Z″ positivo arriba, la inductancia del montaje tiene que estar EN el circuito o se la come R0
+
+COMPARACIÓN DE CIRCUITOS
+──────────────────────────────────────────────
+
+  circuito                    χ²        libres  determinados      BIC
+  R0-(R1|Q1)-T1               0.05513       7            6     -601.1
+  R0-T1                        0.1593       4            2     -523.2
+  L0-R0-(R1|Q1)                0.1561       5            3     -520.6
+  L0-R0-(R1|Q1)-T1             0.1431       8            4     -514.6
+
+  El BIC penaliza parámetros, y hace falta porque un circuito con más
+  elementos ajusta SIEMPRE al menos igual de bien: que baje el χ² al
+  añadir uno no prueba nada por sí solo.
+  Pero el BIC tampoco decide solo. La columna que decide es «determinados»:
+  un parámetro que vuelve con una incertidumbre por encima del 50 %
+  no es una medida, y un circuito que gana por BIC con la mitad de sus
+  parámetros indeterminados ha ajustado la forma sin medir nada.
+
+  Mejor por BIC: R0-(R1|Q1)-T1
+  ⚠ pero 1 de sus 7 parámetros libres no están determinados. Mira si un circuito más simple de la lista los tiene todos.
+
+  Y nada de esto dice si el circuito es el APROPIADO para el material.
+  Ninguna regla estructural puede: un CPE donde va un condensador sigue
+  ajustando, y entonces su Q no son faradios.
+
+Circuito: R0-(R1|Q1)-T1
+  convergido: `gtol` termination condition is satisfied.
+  χ² = 0.05513   residuo medio 2.379 %
+
+  R0.R       =      67.5686 Ω  (± 28.4 %)
+  R1.R       =       86.384 Ω  (± 18.4 %)
+  Q1.Q       =  0.000351018 S·sⁿ  (± 21.9 %)
+  Q1.n       =            1   (± 6.3 %)
+  T1.Ri      =  1.48617e-05 Ω  (± 386670134.0 %)
+  T1.Q       =  0.000457888 S·sⁿ  (± 1.1 %)
+  T1.n       =     0.713497   (± 0.8 %)
+
+  ⚠ Q1.n ha quedado pegado a su límite superior (1). Eso NO es un valor ajustado: el optimizador quería seguir y no podía. Casi siempre significa que el circuito no es el adecuado para estos datos — por ejemplo un Randles simple contra un espectro con cola capacitiva, donde la única forma que tiene el modelo de subir a baja frecuencia es mandar la resistencia a infinito
+  ⚠ Q1: n = 1.000, prácticamente 1. Un CPE con n = 1 es un condensador: usa C y tendrás un parámetro menos y una incertidumbre menor
+  ⚠ Q1: Q = 0.000351 S·sⁿ NO son faradios. Para dar una capacitancia hace falta convertir con la resistencia en paralelo (echem.eis.cpe_to_capacitance) y citar siempre la n al lado
+  ⚠ T1.Ri tiene una incertidumbre del 386670134 %: ese elemento no está determinado por los datos. O sobra en el circuito, o su constante de tiempo cae fuera del rango de frecuencias que mediste
+  ⚠ a alta frecuencia el espectro entra en la mitad inductiva del plano (−Z″ negativo). Casi siempre son los cables, no la muestra: añade una L en serie al circuito o recorta esas frecuencias
+
+⚠ Z″ es POSITIVO en 2 punto(s) del extremo alto: eso es inductancia del cableado, no de la muestra. Un circuito sin una L en serie tiene que absorberla en R0, y entonces R0 no es la resistencia de la disolución
+⚠ −Z″ no tiene ningún máximo local: sube hasta la frecuencia más baja medida. No hay semicírculo cerrado en estos datos, así que de ellos NO sale ninguna resistencia de transferencia de carga — la que devuelva un ajuste sale del modelo, no de la medida
+⚠ a 0.01001 Hz la fase es -56° y un condensador está en −90°: el barrido no ha llegado al régimen capacitivo, así que la C′ de ese extremo es una cota INFERIOR de lo que almacena el electrodo. Baja más la frecuencia
+⚠ el circuito elegido (R0-(R1|Q1)-T1) gana por BIC con 1 de sus 7 parámetros sin determinar. Mira la tabla de comparación: un circuito más simple puede tenerlos todos
+⚠ la capacitancia del elemento T1 (1.012 mF) y C′ a la misma frecuencia (0.8269 mF) difieren un +22 %, y a 0.01001 Hz la fase es -56°. Las dos son la misma magnitud solo cuando la respuesta ya es capacitiva: C′ lleva dentro la parte REAL de toda la cadena, así que mientras la fase no se acerque a −90° sale más baja. La que el dispositivo entrega es C′
+⚠ la R de transferencia de carga (86.38 Ω) sale del circuito y no de los datos: −Z″ no cierra ningún arco dentro del barrido, así que su constante de tiempo está fuera de lo medido. La capacitancia efectiva convertida con ella hereda esa dependencia
+⚠ Q1.n ha quedado pegado a su límite superior (1). Eso NO es un valor ajustado: el optimizador quería seguir y no podía. Casi siempre significa que el circuito no es el adecuado para estos datos — por ejemplo un Randles simple contra un espectro con cola capacitiva, donde la única forma que tiene el modelo de subir a baja frecuencia es mandar la resistencia a infinito
+⚠ Q1: n = 1.000, prácticamente 1. Un CPE con n = 1 es un condensador: usa C y tendrás un parámetro menos y una incertidumbre menor
+⚠ Q1: Q = 0.000351 S·sⁿ NO son faradios. Para dar una capacitancia hace falta convertir con la resistencia en paralelo (echem.eis.cpe_to_capacitance) y citar siempre la n al lado
+⚠ T1.Ri tiene una incertidumbre del 386670134 %: ese elemento no está determinado por los datos. O sobra en el circuito, o su constante de tiempo cae fuera del rango de frecuencias que mediste
+⚠ a alta frecuencia el espectro entra en la mitad inductiva del plano (−Z″ negativo). Casi siempre son los cables, no la muestra: añade una L en serie al circuito o recorta esas frecuencias
+
+DRT: 3 procesos — τ = 0.276 s (557 Ω), τ = 1.43 s (867 Ω), τ = 7.45 s (4.61e+03 Ω); R_s = 68.1 Ω, residuo 0.51 %
+DISTRIBUCIÓN DE CONSTANTES DE TIEMPO
+──────────────────────────────────────────────
+  R óhmica          68.1 Ω
+  regularización λ  0.00135
+  residuo           0.51 %
+  τ medidas         1.59e-06 – 15.9 s
+
+   τ (s)        R (Ω)     C = τ/R      % de R_p   proceso probable
+       0.276        557    0.000495       9.2   transferencia de carga lenta, o difusión dentro del poro
+        1.43        867     0.00165      14.4   difusión en estado sólido o intercalación
+        7.45   4.61e+03     0.00162      76.4   difusión en estado sólido o intercalación
+
+  Cómo confirmarlo —ninguna de estas asignaciones sale
+  de un solo espectro:
+   τ = 0.276 s: cambia la temperatura y saca la energía de activación; y mira el Bode: una difusión en poro trae su recta de 45°
+   τ = 1.43 s: cambia el estado de carga: un proceso de intercalación cambia su resistencia con él, una difusión en el electrolito no
+   τ = 7.45 s: cambia el estado de carga: un proceso de intercalación cambia su resistencia con él, una difusión en el electrolito no
+  ⚠ la inversión es mal condicionada: la regularización no es un detalle de implementación sino una elección sobre cuánta estructura creerse. Aquí λ = 0.00135
+  ⚠ hay peso apreciable en el extremo lento: falta frecuencia baja, y la difusión suele estar ahí
+  ⚠ la fase pasa 1.8 décadas cerca de −45°, que es un elemento DISTRIBUIDO —un poro, un Warburg, un Gerischer— y no tiene constante de tiempo propia. Los 3 pico(s) de arriba son esa distribución troceada en arcos: no los cuentes como procesos ni los traduzcas a ZARC en esa región
+
+COMPARACIÓN DE CIRCUITOS
+──────────────────────────────────────────────
+
+  circuito                    χ²        libres  determinados      BIC
+  R0-(R1|Q1)-(R2|Q2)         0.002486       7            7     -867.7
+  R0-(R1|Q1)-Q2               0.05513       6            6     -605.6
+  R0-(R1|Q1)-T1               0.05513       7            6     -601.1
+  R0-(R1-Wo1|Q1)                0.134       6            4     -529.2
+  R0-Q1                        0.1593       3            3     -527.7
+  R0-Za1                       0.1561       4            2     -525.0
+  R0-(R1|Q1)                   0.1561       4            3     -525.0
+  R0-T1                        0.1593       4            2     -523.2
+  L0-R0-(R1|Q1)-T1             0.1431       8            4     -514.6
+
+  El BIC penaliza parámetros, y hace falta porque un circuito con más
+  elementos ajusta SIEMPRE al menos igual de bien: que baje el χ² al
+  añadir uno no prueba nada por sí solo.
+  Pero el BIC tampoco decide solo. La columna que decide es «determinados»:
+  un parámetro que vuelve con una incertidumbre por encima del 50 %
+  no es una medida, y un circuito que gana por BIC con la mitad de sus
+  parámetros indeterminados ha ajustado la forma sin medir nada.
+
+  Mejor por BIC: R0-(R1|Q1)-(R2|Q2)
+  ⚠ R0-Q1: no tiene ninguna rama en PARALELO ni ningún elemento que sea un arco por sí mismo, así que no puede producir un semicírculo: una cadena de R, C, L y Q en serie sólo da rectas. Si el Nyquist tiene un arco, este circuito no es el que lo hace
+
+  Y nada de esto dice si el circuito es el APROPIADO para el material.
+  Ninguna regla estructural puede: un CPE donde va un condensador sigue
+  ajustando, y entonces su Q no son faradios.
