@@ -833,6 +833,47 @@ def _evaluate_band(args):
     return band_residuals(_WORKER["family"].build_model(x), target)
 
 
+def fit_bands_only(family: XuFamily, x0, targets, prefixes, workers: int = 4,
+                   max_nfev: int = 60, status: Path | None = None):
+    """Least squares of the parameters whose names start with one of ``prefixes`` on the
+    band targets alone (the rest fixed at ``x0``): the start of the joint fit when the
+    molecules' minimum is far from the crystal's (MoS₂: the joint fit from the levels
+    alone never reached the direct gap at K; from this start it did)."""
+    from concurrent.futures import ProcessPoolExecutor
+
+    from ..progress import Progress
+
+    names = family.parameter_names()
+    free = [i for i, n in enumerate(names) if any(n.startswith(p) for p in prefixes)]
+    if not free or not targets:
+        return np.asarray(x0, dtype=float), None
+    lower, upper = family.bounds()
+    x0 = np.clip(np.asarray(x0, dtype=float), lower + 1e-9, upper - 1e-9)
+    bar = Progress(None, "preajuste de bandas (evaluaciones)", status=status)
+    size = [None]
+    with ProcessPoolExecutor(workers, initializer=_init_worker, initargs=(family, [])) as pool:
+        def residuals(p):
+            x = x0.copy()
+            x[free] = p
+            try:
+                out = np.concatenate([r / np.sqrt(max(len(r), 1)) for r in pool.map(
+                    _evaluate_band, [(x, t) for t in targets])])
+            except (RuntimeError, np.linalg.LinAlgError, ValueError):
+                if size[0] is None:
+                    raise
+                return np.full(size[0], 30.0)
+            size[0] = len(out)
+            bar.step()
+            return out
+
+        result = least_squares(residuals, x0[free], bounds=(lower[free], upper[free]),
+                               x_scale="jac", diff_step=1e-3, max_nfev=max_nfev)
+    bar.close()
+    x = x0.copy()
+    x[free] = result.x
+    return x, result
+
+
 class JointObjective:
     """Residuals of levels, forces and energies, with the repulsion solved exactly.
 
@@ -1267,7 +1308,8 @@ def run(family: XuFamily, references: Sequence[Path], out: Path, verbose: bool =
         hessian_weight: float = 0.1, checkpoint: Optional[Path] = None,
         fit: dict | None = None, hessian_split: bool = False, bands: Sequence[Path] = (),
         held_out_bands: Sequence[Path] = (), band_weight: float = 1.0,
-        band_window: float = 3.0, band_edge_weight: float = 1.0, crystals: Sequence[Path] = (),
+        band_window: float = 3.0, band_edge_weight: float = 1.0,
+        band_prefit: Sequence[str] = (), crystals: Sequence[Path] = (),
         held_out_crystals: Sequence[Path] = ()) -> dict:
     """Fit ``family`` to the references (one or several files) and write the set.
 
@@ -1290,7 +1332,10 @@ def run(family: XuFamily, references: Sequence[Path], out: Path, verbose: bool =
     crystal weighted ``band_weight`` as a whole; ``held_out_bands`` are only reported.
 
     ``crystals``: folders of :mod:`tbkit.recipes.tm_crystals` whose energy and force points
-    join forces and energies (on a k mesh); ``held_out_crystals`` are only reported."""
+    join forces and energies (on a k mesh); ``held_out_crystals`` are only reported.
+
+    ``band_prefit``: parameter-name prefixes fitted to the bands alone (:func:`fit_bands_only`)
+    between the level fit and the joint fit, which then starts from there."""
     fit = {**FIT_DEFAULTS, **(fit or {})}
     status = Path(out).with_suffix(".progreso.json")
     checkpoint = Path(checkpoint) if checkpoint else Path(out).with_suffix(".checkpoint.json")
@@ -1319,6 +1364,11 @@ def run(family: XuFamily, references: Sequence[Path], out: Path, verbose: bool =
             x0 = np.array(saved["x"])
         result = fit_levels(family, molecules, x0, checkpoint, status=status)
         start, stage1 = result.x, str(result.message)
+        if band_prefit and bands:
+            start, prefit = fit_bands_only(
+                family, start, load_band_targets(bands, band_window, band_edge_weight),
+                band_prefit, workers=workers, status=status)
+            stage1 += f"; preajuste de bandas: {prefit.message if prefit else 'nada'}"
         _save_checkpoint(checkpoint, "levels", start, np.inf)
     electronic = family.build_model(start)
     _, shift, rms = level_residuals(electronic, molecules, family.fixed_shift())
