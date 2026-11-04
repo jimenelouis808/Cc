@@ -117,3 +117,37 @@ commit del plan y se borra al terminarlo (la documentación final la reemplaza).
 - Arreglo: paso 4 del plan adelantado: términos angulares generales centrados en
   el heteroátomo (extender AcuteAngleTerm a X-centrado, ajustado con datos), sin
   tocar xu_chno. Luego reajustar B, P, Se (S si lo necesita).
+
+## Orbitales d: Mo, Fe, Se (noviembre 2026)
+
+Hecho: tabla de Slater-Koster s/p/d con prueba de covarianza rotacional, fuerzas con d,
+`.skf` con d, SCC con espín sobre la capa d, constantes de espín de 12 metales,
+`XuFamily.d_elements` (ajuste con d). En curso: Se con d (`xu_bsp Se --d-orbitals`,
+mitad de las hessianas apartada) y referencias GPAW de moléculas de Mo
+(`recipes/tm_references.py`).
+
+Sistemas objetivo, cada uno con referencias GPAW periódicas además de las moleculares:
+
+- **MoCS tipo Janus** (monocapa hexagonal, C arriba, S abajo): conjunto Mo sobre
+  `xu_chnos` (C y S ya están); referencias de la monocapa (estirada y distorsionada) y
+  de MoS₂ 2H para comparar. Bandas frente a GPAW PW.
+- **FeSe tetragonal** (tipo PbO, el superconductor) y **FeSe hexagonal** (tipo NiAs):
+  conjunto Fe sobre el Se con d. El Fe necesita referencias con espín y ajuste con el
+  SCC con espín; en PBE el FeSe tetragonal tiene órdenes magnéticos (rayas, damero) cerca
+  del no magnético que el experimento ve: comparar los órdenes, no solo uno.
+- Fe en carbono: sitios Fe-N4 en grafeno, átomos sobre grafeno, cúmulos (con espín).
+
+## Pendiente: comprobación topológica de MoCS Janus
+
+El usuario encontró, por la estructura de bandas, un comportamiento de aislante
+topológico en MoCS Janus; hay comprobaciones por hacer. Lo que hace falta en tbkit:
+
+1. Acoplamiento espín-órbita en el TB: término on-site λ L·S en p y d (base con espín
+   explícito, H 2N×2N complejo); λ de cada elemento del átomo de GPAW (desdoblamiento
+   p1/2-p3/2, d3/2-d5/2), no ajustado. Prueba: desdoblamientos del átomo libre exactos.
+2. Invariante Z2: cargas de Wannier (bucles de Wilson / centros de Wannier híbridos) sobre
+   media zona de Brillouin; con simetría de inversión no sirve el criterio de paridades
+   (Janus no la tiene). Pruebas: modelo de Kane-Mele (Z2 = 1) y su fase trivial.
+3. Bordes: bandas de una cinta (zigzag/armchair) y los estados de borde helicoidales.
+4. Contrastar con GPAW con espín-órbita (no colineal) en la monocapa: gap y orden de
+   bandas en Γ/K; el invariante de GPAW (Wannier, si es viable) como referencia.
