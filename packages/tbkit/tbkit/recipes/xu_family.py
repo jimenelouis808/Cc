@@ -139,6 +139,9 @@ class XuFamily:
     #: a polarisation shell. Their on-site d energy is fitted and their pairs get the sd, pd
     #: and dd integrals.
     d_elements: tuple[str, ...] = ()
+    #: Bound of each fitted on-site energy around its starting value (eV); None: free. A
+    #: molecular fit once pushed Mo's empty 5p to 78 eV, which decoupled it.
+    onsite_window: Optional[float] = None
 
     def d_set(self) -> tuple[str, ...]:
         """Every element with d, the base set's included."""
@@ -236,9 +239,12 @@ class XuFamily:
         names = self.parameter_names()
         lower = np.full(len(names), -np.inf)
         upper = np.full(len(names), np.inf)
+        guess = self.initial_guess()
         for i, name in enumerate(names):
             if name.endswith(" n"):
                 lower[i], upper[i] = 0.5, 6.0
+            elif name.startswith("onsite ") and self.onsite_window is not None:
+                lower[i], upper[i] = guess[i] - self.onsite_window, guess[i] + self.onsite_window
         return lower, upper
 
     @staticmethod
@@ -625,6 +631,97 @@ def _evaluate_one(args):
     return np.sort(result.solution.energies[0, 0]), energy, forces
 
 
+@dataclass
+class BandTarget:
+    """GPAW bands of a crystal on a k path (``recipes/tm_crystals``), as a fit target."""
+
+    name: str
+    atoms: object
+    kpts: np.ndarray
+    bands: np.ndarray            # aligned to the reference level (mid-gap or E_F), eV
+    n_occ: int
+    mesh: tuple
+    window: float = 3.0          # eV around the reference level
+
+
+def _reference_level(eps: np.ndarray, n_occ: int, fermi: float) -> float:
+    vbm, cbm = eps[:, n_occ - 1].max(), eps[:, n_occ].min()
+    return 0.5 * (vbm + cbm) if cbm - vbm > 0.01 else fermi
+
+
+def load_band_targets(paths, window: float = 3.0) -> list[BandTarget]:
+    from ase import Atoms
+
+    out = []
+    for path in paths:
+        data = json.loads(Path(path).read_text())
+        if "cell" not in data:           # older files: the geometry is the relaxed one
+            relaxed = json.loads((Path(path).parent / "relaxed.json").read_text())
+            data = {**data, **{k: relaxed[k] for k in ("cell", "positions", "symbols")}}
+        cell = np.asarray(data["cell"])
+        slab = cell[2, 2] > 10
+        atoms = Atoms(data["symbols"], positions=data["positions"], cell=cell,
+                      pbc=(True, True, not slab))
+        eps = np.asarray(data["bands"], dtype=float)
+        eps = eps - _reference_level(eps, int(data["n_occ"]), float(data["fermi_eV"]))
+        out.append(BandTarget(Path(path).parent.name + "/" + Path(path).stem, atoms,
+                              np.asarray(data["kpts"]), eps, int(data["n_occ"]),
+                              (12, 12, 1) if slab else (12, 12, 12), window))
+    return out
+
+
+def band_residuals(model: TBModel, target: BandTarget) -> np.ndarray:
+    """TB − GPAW, band by band from the HOMO down and the LUMO up, where the GPAW band is
+    within ``target.window`` of the reference level; each side relative to its own level."""
+    from ..kpoints import mesh
+    from ..scc import _solve_shifted_k
+
+    system = System.build(target.atoms, model)
+    k0, w0 = mesh(system, target.mesh)
+    result = self_consistent(system, kT=0.05, tol=1e-7, kpts=k0, weights=w0, max_iter=800)
+    if not result.converged:
+        raise RuntimeError(f"SCC sin converger en {target.name}")
+    eps = _solve_shifted_k(system, result.shift, 0.0, 0.05, target.kpts, None).energies[0]
+    n = int(round(system.electrons)) // 2
+    eps = eps - _reference_level(eps, n, float(result.solution.fermi))
+    out = []
+    for side in (-1, 1):
+        m = 0
+        while True:
+            ia = target.n_occ - 1 - m if side < 0 else target.n_occ + m
+            ib = n - 1 - m if side < 0 else n + m
+            if min(ia, ib) < 0 or ia >= target.bands.shape[1] or ib >= eps.shape[1]:
+                break
+            inside = np.abs(target.bands[:, ia]) <= target.window
+            if not inside.any():
+                break
+            out.append((eps[:, ib] - target.bands[:, ia])[inside])
+            m += 1
+    return np.concatenate(out) if out else np.zeros(0)
+
+
+def band_report(model: TBModel, target: BandTarget) -> dict:
+    """RMS of :func:`band_residuals` and the gaps on the path (TB and GPAW), eV."""
+    from ..kpoints import mesh
+    from ..scc import _solve_shifted_k
+
+    r = band_residuals(model, target)
+    system = System.build(target.atoms, model)
+    k0, w0 = mesh(system, target.mesh)
+    result = self_consistent(system, kT=0.05, tol=1e-7, kpts=k0, weights=w0, max_iter=800)
+    eps = _solve_shifted_k(system, result.shift, 0.0, 0.05, target.kpts, None).energies[0]
+    n = int(round(system.electrons)) // 2
+    gap_tb = float(eps[:, n].min() - eps[:, n - 1].max())
+    gap_ref = float(target.bands[:, target.n_occ].min() - target.bands[:, target.n_occ - 1].max())
+    return {"rms_eV": float(np.sqrt(np.mean(r ** 2))) if len(r) else None,
+            "gap_tb_eV": gap_tb, "gap_gpaw_eV": gap_ref}
+
+
+def _evaluate_band(args):
+    x, target = args
+    return band_residuals(_WORKER["family"].build_model(x), target)
+
+
 class JointObjective:
     """Residuals of levels, forces and energies, with the repulsion solved exactly.
 
@@ -637,7 +734,7 @@ class JointObjective:
 
     def __init__(self, family: XuFamily, refs, level_weight=1.0, force_weight=1.0,
                  energy_weight=3.0, ridge=1e-6, workers=4, hessians=(), hessian_weight=0.1,
-                 checkpoint: Optional[Path] = None):
+                 checkpoint: Optional[Path] = None, band_targets=(), band_weight=1.0):
         from concurrent.futures import ProcessPoolExecutor
 
         self.family = family
@@ -654,6 +751,8 @@ class JointObjective:
         self.hessians = list(hessians)
         self.wh = hessian_weight
         self.h_design = [basis_hessians(family, t.atoms) for t in self.hessians]
+        self.band_targets = list(band_targets)
+        self.wb = band_weight
         self.pool = ProcessPoolExecutor(workers, initializer=_init_worker,
                                         initargs=(family, refs, self.hessians))
         self.size = None
@@ -666,9 +765,11 @@ class JointObjective:
         x = np.asarray(x)
         hessians = [self.pool.submit(_evaluate_hessian, (x, i))
                     for i in range(len(self.hessians))]          # the slow ones first
+        bands = [self.pool.submit(_evaluate_band, (x, t)) for t in self.band_targets]
         results = list(self.pool.map(_evaluate_one, [(x, i) for i in range(len(self.refs))],
                                      chunksize=4))
         self._h_electronic = [h.result() for h in hessians]
+        self._bands = [b.result() for b in bands]
         return results
 
     def residuals(self, x, full: bool = False):
@@ -691,7 +792,14 @@ class JointObjective:
                                  self._h_electronic, self.wh)
         c, r_force, r_energy = solved[:3]
         r_hessian = solved[3] if self.hessians else np.zeros(0)
-        out = np.concatenate([self.wl * w * (d - shift), r_force, r_energy, r_hessian])
+        r_band, band_rms = np.zeros(0), {}
+        if self.band_targets:
+            raw = self._bands
+            band_rms = {t.name: float(np.sqrt(np.mean(r ** 2))) if len(r) else None
+                        for t, r in zip(self.band_targets, raw, strict=True)}
+            # each crystal weighs the same whatever its number of bands and k points
+            r_band = np.concatenate([r / np.sqrt(max(len(r), 1)) for r in raw]) * self.wb * 10
+        out = np.concatenate([self.wl * w * (d - shift), r_force, r_energy, r_hessian, r_band])
         self.size = len(out)
         cost = float(out @ out)
         if cost < self.best:
@@ -705,8 +813,13 @@ class JointObjective:
                          "force_rms": float(np.sqrt(np.mean((r_force / self.wf) ** 2))),
                          "energy_rms": float(np.sqrt(np.mean((r_energy / self.we) ** 2))),
                          "hessian_rms": float(np.sqrt(np.mean((r_hessian / self.wh) ** 2)))
-                         if self.hessians else None}
+                         if self.hessians else None, "band_rms": band_rms or None}
         return out
+
+
+def _band_note(info) -> str:
+    bands = info.get("band_rms") or {}
+    return "".join(f", bandas {k} {v:.2f} eV" for k, v in bands.items() if v is not None)
 
 
 def fit_joint(family: XuFamily, refs, x0, workers: int = 4, max_nfev: int = 400,
@@ -724,6 +837,7 @@ def fit_joint(family: XuFamily, refs, x0, workers: int = 4, max_nfev: int = 400,
         if verbose:
             extra = f", hessiana {info0['hessian_rms']:.2f} eV/Å²" \
                 if info0.get("hessian_rms") is not None else ""
+            extra += _band_note(info0)
             print(f"conjunto, inicio: niveles {info0['level_rms']:.3f} eV, fuerzas "
                   f"{info0['force_rms']:.3f} eV/Å, energías {info0['energy_rms']:.3f} eV"
                   f"{extra}", flush=True)
@@ -736,6 +850,7 @@ def fit_joint(family: XuFamily, refs, x0, workers: int = 4, max_nfev: int = 400,
     if verbose:
         extra = f", hessiana {info['hessian_rms']:.2f} eV/Å²" \
             if info.get("hessian_rms") is not None else ""
+        extra += _band_note(info)
         print(f"conjunto, final ({result.message}): niveles {info['level_rms']:.3f} eV, "
               f"fuerzas {info['force_rms']:.3f} eV/Å, energías {info['energy_rms']:.3f} eV"
               f"{extra}", flush=True)
@@ -1030,7 +1145,9 @@ def fit_options(args) -> dict:
 def run(family: XuFamily, references: Sequence[Path], out: Path, verbose: bool = True,
         workers: int = 4, x0: Optional[np.ndarray] = None, hessians: Optional[Path] = None,
         hessian_weight: float = 0.1, checkpoint: Optional[Path] = None,
-        fit: dict | None = None, hessian_split: bool = False) -> dict:
+        fit: dict | None = None, hessian_split: bool = False, bands: Sequence[Path] = (),
+        held_out_bands: Sequence[Path] = (), band_weight: float = 1.0,
+        band_window: float = 3.0) -> dict:
     """Fit ``family`` to the references (one or several files) and write the set.
 
     ``hessians``: a file of :mod:`tbkit.recipes.frequency_references`; its
@@ -1045,7 +1162,11 @@ def run(family: XuFamily, references: Sequence[Path], out: Path, verbose: bool =
     ``fit``: weights, ridge and ``max_nfev`` of the joint fit (``FIT_DEFAULTS``).
 
     ``hessian_split``: fit the curvature to every other molecule of the Hessian file only
-    and report the frequencies of the rest as held out (``frequencies_held_out``)."""
+    and report the frequencies of the rest as held out (``frequencies_held_out``).
+
+    ``bands``: band files of :mod:`tbkit.recipes.tm_crystals` (GPAW, a k path) that join
+    the joint fit, band by band within ``band_window`` eV of the gap centre (or E_F), each
+    crystal weighted ``band_weight`` as a whole; ``held_out_bands`` are only reported."""
     fit = {**FIT_DEFAULTS, **(fit or {})}
     status = Path(out).with_suffix(".progreso.json")
     checkpoint = Path(checkpoint) if checkpoint else Path(out).with_suffix(".checkpoint.json")
@@ -1079,7 +1200,9 @@ def run(family: XuFamily, references: Sequence[Path], out: Path, verbose: bool =
     joint, info, info0 = fit_joint(family, train, start, workers=workers,
                                    max_nfev=fit["max_nfev"], verbose=verbose, status=status,
                                    hessians=targets, hessian_weight=hessian_weight,
-                                   checkpoint=checkpoint, **weights)
+                                   checkpoint=checkpoint,
+                                   band_targets=load_band_targets(bands, band_window),
+                                   band_weight=band_weight, **weights)
     x = joint.x
     shift = info["shift"]
     model = family.build_model(x, family.repulsion_from_coefficients(info["coefficients"]))
@@ -1096,6 +1219,14 @@ def run(family: XuFamily, references: Sequence[Path], out: Path, verbose: bool =
     if verbose:
         print(validation_table(validation))
     report["validation"] = validation
+    if bands or held_out_bands:
+        report["bands"] = {"window_eV": band_window, "weight": band_weight,
+                           "train": {t.name: band_report(model, t) for t in
+                                     load_band_targets(bands, band_window)},
+                           "held_out": {t.name: band_report(model, t) for t in
+                                        load_band_targets(held_out_bands, band_window)}}
+        if verbose:
+            print("bandas:", json.dumps(report["bands"], ensure_ascii=False))
     if targets:
         report["frequencies"] = frequency_validation(model, targets)
         report["hessian_weight"] = hessian_weight

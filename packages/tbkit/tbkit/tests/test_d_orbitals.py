@@ -222,3 +222,38 @@ def test_d_family_from_a_built_family_gets_the_d_integrals():
     assert "onsite Se d" in names
     assert any("sds(H,Se)" in n for n in names) and any("dds" in n for n in names)
     assert len(names) > len(base.parameter_names()) + 10
+
+
+def test_band_target_of_the_models_own_bands_has_zero_residual(tmp_path):
+    """A band file made from the TB bands themselves (on a k path, the format of
+    ``recipes/tm_crystals``) is matched exactly by :func:`band_residuals`."""
+    import json
+
+    from tbkit.kpoints import mesh
+    from tbkit.recipes import xu_family as xf
+    from tbkit.recipes.tm_crystals import start
+    from tbkit.recipes.xu_tm import FAMILIES
+    from tbkit.scc import _solve_shifted_k, self_consistent
+    from tbkit.hamiltonian import System
+
+    family = FAMILIES["Mo"]
+    model = family.build_model(family.initial_guess())
+    atoms = start("MoS2")
+    atoms.pbc = (True, True, False)
+    kpts = atoms.cell.bandpath("GMKG", npoints=20, pbc=(True, True, False)).kpts
+    system = System.build(atoms, model)
+    k0, w0 = mesh(system, (12, 12, 1))
+    result = self_consistent(system, kT=0.05, tol=1e-7, kpts=k0, weights=w0, max_iter=800)
+    eps = _solve_shifted_k(system, result.shift, 0.0, 0.05, kpts, None).energies[0]
+    n = int(round(system.electrons)) // 2
+    path = tmp_path / "MoS2" / "bands.json"
+    path.parent.mkdir()
+    path.write_text(json.dumps({"fermi_eV": float(result.solution.fermi), "n_occ": n,
+                                "kpts": kpts.tolist(), "bands": eps.tolist(),
+                                "cell": np.asarray(atoms.cell).tolist(),
+                                "positions": atoms.positions.tolist(),
+                                "symbols": atoms.get_chemical_symbols()}))
+    target = xf.load_band_targets([path], window=3.0)[0]
+    r = xf.band_residuals(model, target)
+    assert len(r) > 0
+    assert np.abs(r).max() < 1e-6

@@ -12,13 +12,17 @@ Slater-Koster integrals of every pair with it (sd, pd and dd included) and the p
 repulsions are fitted to GPAW (PBE, LCAO dzp, the 6-electron Mo setup) on closed-shell
 molecules. The Hubbard U is the free atom's dε_d/dn_d (computed, not fitted).
 
-Crystals (MoS₂ 2H, the MoCS Janus monolayer) are validation of the molecular fit, like the
-crystals of the other sets; their GPAW references are a separate stage.
+Molecules alone leave the solid unconstrained (the first fit made MoS₂ metallic), so the
+GPAW bands of :mod:`tbkit.recipes.tm_crystals` join the fit with ``--bands`` (MoS₂ relaxed
+and strained, Mo bcc), the way ``c_bandas`` was fitted for carbon; ``--held-out-bands``
+(MoCS) are reported only, the test. ``--onsite-window`` keeps each on-site energy within
+that many eV of the free atom's level.
 """
 
 from __future__ import annotations
 
 import argparse
+import dataclasses
 from pathlib import Path
 
 from . import xu_family
@@ -59,10 +63,25 @@ def main(argv=None) -> None:
                         help="archivo de parámetros que se escribe (nunca sobre uno incluido)")
     parser.add_argument("--workers", type=int, default=4,
                         help="procesos en paralelo para evaluar las referencias")
+    parser.add_argument("--bands", type=Path, nargs="*", default=[],
+                        help="bandas GPAW de cristales (tm_crystals) que entran en el ajuste")
+    parser.add_argument("--held-out-bands", type=Path, nargs="*", default=[],
+                        help="bandas GPAW que solo se comparan (prueba)")
+    parser.add_argument("--band-weight", type=float, default=1.0,
+                        help="peso de cada cristal en el ajuste conjunto")
+    parser.add_argument("--band-window", type=float, default=3.0,
+                        help="ventana de bandas alrededor del centro del gap o E_F, eV")
+    parser.add_argument("--onsite-window", type=float, default=None,
+                        help="las energías on-site quedan a ± tanto (eV) del nivel del átomo libre")
     xu_family.add_fit_arguments(parser)
     args = parser.parse_args(argv)
-    xu_family.run(FAMILIES[args.element], args.references, args.out, workers=args.workers,
-                  fit=xu_family.fit_options(args))
+    family = FAMILIES[args.element]
+    if args.onsite_window is not None:
+        family = dataclasses.replace(family, onsite_window=args.onsite_window)
+    xu_family.run(family, args.references, args.out, workers=args.workers,
+                  fit=xu_family.fit_options(args), bands=args.bands,
+                  held_out_bands=args.held_out_bands, band_weight=args.band_weight,
+                  band_window=args.band_window)
 
 
 if __name__ == "__main__":
