@@ -78,6 +78,10 @@ def complex_of(metal: str, ligands: list[str], polyhedron: np.ndarray, seed: int
     return atoms
 
 
+#: PAW setup of each metal: Mo with 6 valence electrons (GPAW's "Mo.6"; the default one adds
+#: the 4s4p semicore, 14 electrons, whose levels the TB valence cannot match)
+SETUPS = {"Mo": "6"}
+
 #: name -> (ligands, polyhedron); per element: (training, test)
 MOLECULES = {
     "Mo": ({"MoO3": (["O", "O", "O"], _TETRA), "MoO2(OH)2": (["O", "O", "OH", "OH"], _TETRA),
@@ -126,6 +130,8 @@ def main(argv=None) -> None:
     from tbkit.references import GPAW_DEFAULTS, gpaw_settings_record
 
     settings = dict(GPAW_DEFAULTS)
+    if args.element in SETUPS:
+        settings["setups"] = {args.element: SETUPS[args.element]}
     train, test = MOLECULES[args.element]
     jobs = [(n, "train", k, settings) for k, n in enumerate(train)]
     jobs += [(n, "test", 50 + k, settings) for k, n in enumerate(test)]

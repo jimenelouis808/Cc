@@ -122,13 +122,17 @@ def gpaw_calculator(settings: dict, n_bands: int, txt=None):
     """
     from gpaw import GPAW
 
+    extra = {"setups": settings["setups"]} if settings.get("setups") else {}
     return GPAW(mode=settings["mode"], basis=settings["basis"], xc=settings["xc"],
                 h=settings["h"], convergence=settings["convergence"], nbands=n_bands,
-                txt=txt, spinpol=False, symmetry="off")
+                txt=txt, spinpol=False, symmetry="off", **extra)
 
 
 def _n_bands(atoms: Atoms, settings: dict) -> int:
-    valence = {"H": 1, "C": 4, "N": 5, "O": 6, "B": 3, "P": 5, "S": 6, "Se": 6}
+    # valence electrons of the PAW setups used (Mo: the 6-electron "Mo.6" setup, without the
+    # 4s4p semicore, so the occupied levels match the TB valence; Fe: 3d6 4s2)
+    valence = {"H": 1, "C": 4, "N": 5, "O": 6, "B": 3, "P": 5, "S": 6, "Se": 6, "Mo": 6,
+               "Fe": 8}
     electrons = sum(valence[s] for s in atoms.get_chemical_symbols())
     return electrons // 2 + int(settings["extra_bands"])
 
