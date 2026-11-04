@@ -13,18 +13,16 @@
     "carga_mg_cm2": 12.85971940182514,
     "carga_nota": "de diez a cien veces la carga habitual sobre un carbón vítreo. Una película gruesa tiene una resistencia iónica en profundidad que el barrido no atraviesa a 0.01 Hz, y eso explica por sí solo que ninguna muestra llegue al régimen capacitivo",
     "potenciales_continuos_v": {
-      "E (etanol)": 0.44890295488889825,
-      "EA (+acetonitrilo)": 0.3104578526907189,
-      "EB (+bencilamina) −0.19 V": -0.4043114559594975,
-      "EB (+bencilamina) +0.54 V": 0.3249288679555405,
-      "EP (+piridina)": 0.48527943810751273
+      "E": 0.44890295488889825,
+      "EA": 0.3104578526907189,
+      "EB": 0.3249288679555405,
+      "EP": 0.48527943810751273
     },
     "potenciales_rhe_v": {
-      "E (etanol)": 0.6636509548888982,
-      "EA (+acetonitrilo)": 0.5252058526907188,
-      "EB (+bencilamina) −0.19 V": -0.18956345595949753,
-      "EB (+bencilamina) +0.54 V": 0.5396768679555405,
-      "EP (+piridina)": 0.7000274381075127
+      "E": 0.6636509548888982,
+      "EA": 0.5252058526907188,
+      "EB": 0.5396768679555405,
+      "EP": 0.7000274381075127
     },
     "potenciales_rhe_como": "E(Electrodo reversible de hidrógeno a pH 0.3) = E(Ag/AgCl (KCl saturado)) +0.2147 V",
     "potenciales_nota": "los cuatro espectros se midieron a potenciales distintos —0 V frente al OCP de cada muestra— así que una diferencia en la resistencia de transferencia de carga puede ser el punto de polarización y no la química",
@@ -33,8 +31,8 @@
   },
   "muestras": [
     {
-      "muestra": "E (etanol)",
-      "precursor": "sin nitrógeno; el control",
+      "muestra": "E",
+      "precursor": "etanol solo: sin nitrógeno, el control",
       "archivo": "",
       "potencial_continuo_v": 0.44890295488889825,
       "potencial_rhe_v": 0.6636509548888982,
@@ -260,6 +258,32 @@
           "la capacitancia en serie (−1/ωZ″ = 1.21 mF) y la real (C′ = 0.827 mF) difieren un 47 %: la parte real de la impedancia no es despreciable a esa frecuencia y las dos fórmulas dejan de ser la misma. C′ es la que se puede entregar"
         ]
       },
+      "deriva": {
+        "automatico": {
+          "circuito": "R0-(R1|Q1)-T1",
+          "residuo_pct": 2.3793106914677877,
+          "share": 0.6622627040453081,
+          "correlacion": 0.4283523718567902,
+          "limitado_por_deriva": false,
+          "mensaje": "el residuo del ajuste no coincide con el de Kramers-Kronig, así que es del MODELO: aquí sí tiene sentido probar otro circuito"
+        },
+        "comun": {
+          "circuito": "R0-(R1|Q1)-(R2|Q2)",
+          "residuo_pct": 0.7063984364968732,
+          "share": 0.5100493357400935,
+          "correlacion": -0.021418272150030077,
+          "limitado_por_deriva": false,
+          "mensaje": "el residuo del ajuste no coincide con el de Kramers-Kronig, así que es del MODELO: aquí sí tiene sentido probar otro circuito"
+        },
+        "tres_arcos": {
+          "circuito": "R0-(R1|Q1)-(R2|Q2)-(R3|Q3)",
+          "residuo_pct": 0.6563071120037894,
+          "share": 0.4756346207002971,
+          "correlacion": -0.0033922424628464063,
+          "limitado_por_deriva": false,
+          "mensaje": "el residuo del ajuste no coincide con el de Kramers-Kronig, así que es del MODELO: aquí sí tiene sentido probar otro circuito"
+        }
+      },
       "r_ion_ohm": 1.4861691849745967e-05,
       "r_ct_ohm": 86.38400707258884,
       "drt": {
@@ -305,8 +329,8 @@
       ]
     },
     {
-      "muestra": "EA (+acetonitrilo)",
-      "precursor": "CH3CN: nitrilo, N sp, relación C/N baja",
+      "muestra": "EA",
+      "precursor": "acetonitrilo, CH3CN: nitrilo, N sp, relación C/N baja",
       "archivo": "",
       "potencial_continuo_v": 0.3104578526907189,
       "potencial_rhe_v": 0.5252058526907188,
@@ -519,6 +543,32 @@
           "el máximo de C″ cae en un extremo del intervalo medido, así que no está dentro de los datos: la constante de tiempo τ₀ no la determina esta medida. Amplía el barrido de frecuencias hacia las bajas"
         ]
       },
+      "deriva": {
+        "automatico": {
+          "circuito": "R0-T1",
+          "residuo_pct": 3.1811739832035766,
+          "share": 0.5045705206213719,
+          "correlacion": 0.08639176789563022,
+          "limitado_por_deriva": false,
+          "mensaje": "el residuo del ajuste no coincide con el de Kramers-Kronig, así que es del MODELO: aquí sí tiene sentido probar otro circuito"
+        },
+        "comun": {
+          "circuito": "R0-(R1|Q1)-(R2|Q2)",
+          "residuo_pct": 0.5411844213914423,
+          "share": 0.6501814525952351,
+          "correlacion": 0.46194572118670196,
+          "limitado_por_deriva": false,
+          "mensaje": "el residuo del ajuste no coincide con el de Kramers-Kronig, así que es del MODELO: aquí sí tiene sentido probar otro circuito"
+        },
+        "tres_arcos": {
+          "circuito": "R0-(R1|Q1)-(R2|Q2)-(R3|Q3)",
+          "residuo_pct": 0.25148704645033504,
+          "share": 0.596621705597968,
+          "correlacion": 0.30921755379366866,
+          "limitado_por_deriva": false,
+          "mensaje": "el residuo del ajuste no coincide con el de Kramers-Kronig, así que es del MODELO: aquí sí tiene sentido probar otro circuito"
+        }
+      },
       "r_ion_ohm": 21.909283184983284,
       "r_ct_ohm": null,
       "drt": {
@@ -555,254 +605,8 @@
       ]
     },
     {
-      "muestra": "EB (+bencilamina) −0.19 V",
-      "precursor": "PhCH2NH2: amina primaria sp3 sobre un anillo. MEDIDA POR DEBAJO DEL EQUILIBRIO DEL HIDRÓGENO",
-      "archivo": "",
-      "potencial_continuo_v": -0.4043114559594975,
-      "potencial_rhe_v": -0.18956345595949753,
-      "n_frecuencias": 43,
-      "f_hz": [
-        100003.7109375,
-        0.010009169578552246
-      ],
-      "forma": {
-        "r_serie_ohm": 85.0071029663086,
-        "r_serie_como": "el espectro no cruza el eje real; se usa Z′ a la frecuencia más alta medida (1e+05 Hz), que es una COTA SUPERIOR de R_u. Un electrodo puramente capacitivo no cruza nunca —ahí esta cota es buena— pero si Z″ es POSITIVO arriba, lo que hay es inductancia de los cables y entonces sobra resistencia: mide más alto o réstala",
-        "inductivo_arriba": false,
-        "apice_arco_hz": 0.03159220516681671,
-        "codo_hz": 46.88281868238413,
-        "codo_como": "la fase cruza -45° entre 68.1 y 46.44 Hz (interpolado en log f)",
-        "fase_f_min_grados": -20.121900229740987,
-        "cola_capacitiva": false,
-        "decadas_45": 1.0,
-        "notas": []
-      },
-      "candidatos": [
-        {
-          "nombre": "randles_cpe",
-          "circuito": "R0-(R1|Q1)",
-          "porque": "un arco achatado con ápice en 0.0316 Hz y sin cola capacitiva"
-        },
-        {
-          "nombre": "zarc",
-          "circuito": "R0-Za1",
-          "porque": "el mismo circuito en (R, τ, γ), donde la capacitancia efectiva es τ/R exacta"
-        },
-        {
-          "nombre": "randles_warburg",
-          "circuito": "R0-(R1-W1|Q1)",
-          "porque": "con 1.0 décadas cerca de −45° después del arco, hay transporte además de transferencia"
-        }
-      ],
-      "ranking": [
-        {
-          "circuito": "R0-(R1|Q1)-Q2",
-          "nombre": "supercondensador",
-          "chi2": 0.4129957305500096,
-          "residuo_pct": 6.319387835283573,
-          "libres": 6,
-          "determinados": 5,
-          "bic": -432.39913374070335
-        },
-        {
-          "circuito": "R0-(R1|Q1)-(R2|Q2)",
-          "nombre": "dos_semicirculos",
-          "chi2": 0.3995592737215009,
-          "residuo_pct": 5.786353513622578,
-          "libres": 7,
-          "determinados": 5,
-          "bic": -430.7892477353647
-        },
-        {
-          "circuito": "R0-(R1|Q1)-T1",
-          "nombre": "poroso_con_transferencia",
-          "chi2": 0.41299573046533655,
-          "residuo_pct": 6.31938826450608,
-          "libres": 7,
-          "determinados": 5,
-          "bic": -427.94478646208177
-        },
-        {
-          "circuito": "L0-R0-(R1|Q1)-T1",
-          "nombre": "supercondensador_completo",
-          "chi2": 0.41243308992639016,
-          "residuo_pct": 6.287095016941377,
-          "libres": 8,
-          "determinados": 5,
-          "bic": -423.60768027165824
-        },
-        {
-          "circuito": "R0-(R1|Q1)",
-          "nombre": "randles_cpe",
-          "chi2": 0.5878587224134113,
-          "residuo_pct": 9.749242774763667,
-          "libres": 4,
-          "determinados": 4,
-          "bic": -410.94558029708054
-        },
-        {
-          "circuito": "R0-Za1",
-          "nombre": "zarc",
-          "chi2": 0.5878587224134116,
-          "residuo_pct": 9.749242826201938,
-          "libres": 4,
-          "determinados": 4,
-          "bic": -410.9455802970805
-        },
-        {
-          "circuito": "R0-(R1-Wo1|Q1)",
-          "nombre": "randles_wo",
-          "chi2": 1.3007013215976888,
-          "residuo_pct": 16.196189448005928,
-          "libres": 6,
-          "determinados": 4,
-          "bic": -333.73807434507654
-        },
-        {
-          "circuito": "R0-Q1",
-          "nombre": "edlc_cpe",
-          "chi2": 2.763558614889279,
-          "residuo_pct": 16.602926733435858,
-          "libres": 3,
-          "determinados": 3,
-          "bic": -282.2901741785351
-        },
-        {
-          "circuito": "R0-T1",
-          "nombre": "poroso",
-          "chi2": 9.3783471423269,
-          "residuo_pct": 41.06147328970466,
-          "libres": 4,
-          "determinados": 2,
-          "bic": -172.7537741407303
-        }
-      ],
-      "elegido": "R0-(R1|Q1)",
-      "comun": "R0-(R1|Q1)-(R2|Q2)",
-      "kk": {
-        "pasa": false,
-        "residuo_rms_pct": 6.573454684390982,
-        "rachas": 0.24142233312538988
-      },
-      "capacitancia": {
-        "c_prima_mf": 0.0844314390144073,
-        "c_prima_f_hz": 0.010009169578552246,
-        "c_serie_mf": 0.7134118045977387,
-        "fase_grados": -20.121900229740987,
-        "tau0_s": null,
-        "f0_hz": null,
-        "mf_cm2": 1.1944605219115398,
-        "f_g": 0.09288387130297833,
-        "f_g_elemento": null,
-        "elemento_mf": null,
-        "elemento_metodo": null,
-        "elemento_pasos": [],
-        "arco_mf": 0.0892971267667656,
-        "arco_metodo": "Hsu-Mansfeld",
-        "arco_pasos": [
-          "C = (T · R^(1−P))^(1/P) = T^(1/P) · R^((1−P)/P)",
-          "T^(1/P) = 5.86336e-05^(1/0.7881) = 4.26714e-06",
-          "R^((1−P)/P) = 81511.1^(0.2689) = 20.9267",
-          "C = 4.26714e-06 × 20.9267 = 8.92971e-05 F"
-        ],
-        "arcos_del_comun": [
-          {
-            "arco": 1,
-            "r_ohm": 133.54552884035635,
-            "hm_mf": 0.044770729325811956,
-            "brug_mf": 0.024504812102783734,
-            "tau_s": 0.005978930724384009,
-            "f_apice_hz": 26.619298738955134,
-            "pasos_hm": [
-              "C = (T · R^(1−P))^(1/P) = T^(1/P) · R^((1−P)/P)",
-              "T^(1/P) = 0.000327884^(1/0.6111) = 1.98663e-06",
-              "R^((1−P)/P) = 133.546^(0.6365) = 22.5361",
-              "C = 1.98663e-06 × 22.5361 = 4.47707e-05 F"
-            ],
-            "pasos_brug": [
-              "C = T^(1/P) · (1/R_s + 1/R_ct)^((P−1)/P)",
-              "1/R_s + 1/R_ct = 1/84.6408 + 1/133.546 = 0.0193027 S",
-              "  (equivale a R_s ∥ R_ct = 51.8062 Ω)",
-              "T^(1/P) = 0.000327884^(1/0.6111) = 1.98663e-06",
-              "(R_s ∥ R_ct)^((1−P)/P) = 51.8062^(0.6365) = 12.3349",
-              "C = 2.45048e-05 F"
-            ]
-          },
-          {
-            "arco": 2,
-            "r_ohm": 72590.77590480623,
-            "hm_mf": 0.0731519249606671,
-            "brug_mf": 0.019961053868464182,
-            "tau_s": 5.310154991824986,
-            "f_apice_hz": 0.029971807477731868,
-            "pasos_hm": [
-              "C = (T · R^(1−P))^(1/P) = T^(1/P) · R^((1−P)/P)",
-              "T^(1/P) = 5.58855e-05^(1/0.8387) = 8.50534e-06",
-              "R^((1−P)/P) = 72590.8^(0.1923) = 8.6007",
-              "C = 8.50534e-06 × 8.6007 = 7.31519e-05 F"
-            ],
-            "pasos_brug": [
-              "C = T^(1/P) · (1/R_s + 1/R_ct)^((P−1)/P)",
-              "1/R_s + 1/R_ct = 1/84.6408 + 1/72590.8 = 0.0118284 S",
-              "  (equivale a R_s ∥ R_ct = 84.5422 Ω)",
-              "T^(1/P) = 5.58855e-05^(1/0.8387) = 8.50534e-06",
-              "(R_s ∥ R_ct)^((1−P)/P) = 84.5422^(0.1923) = 2.34688",
-              "C = 1.99611e-05 F"
-            ]
-          }
-        ],
-        "arco_brug_mf": 0.024504812102783734,
-        "arco_brug_metodo": "Brug (faradaico)",
-        "arco_brug_pasos": [
-          "C = T^(1/P) · (1/R_s + 1/R_ct)^((P−1)/P)",
-          "1/R_s + 1/R_ct = 1/84.6408 + 1/133.546 = 0.0193027 S",
-          "  (equivale a R_s ∥ R_ct = 51.8062 Ω)",
-          "T^(1/P) = 0.000327884^(1/0.6111) = 1.98663e-06",
-          "(R_s ∥ R_ct)^((1−P)/P) = 51.8062^(0.6365) = 12.3349",
-          "C = 2.45048e-05 F"
-        ],
-        "comprobacion": "",
-        "avisos": [
-          "el máximo de C″ cae en un extremo del intervalo medido, así que no está dentro de los datos: la constante de tiempo τ₀ no la determina esta medida. Amplía el barrido de frecuencias hacia las bajas",
-          "a la frecuencia más baja medida (0.01 Hz) el ángulo de fase es -20°, y un condensador está en −90°. La medida no ha llegado al régimen capacitivo, así que esta capacitancia es un límite INFERIOR: baja más la frecuencia",
-          "la capacitancia en serie (−1/ωZ″ = 0.713 mF) y la real (C′ = 0.0844 mF) difieren un 745 %: la parte real de la impedancia no es despreciable a esa frecuencia y las dos fórmulas dejan de ser la misma. C′ es la que se puede entregar"
-        ]
-      },
-      "r_ion_ohm": null,
-      "r_ct_ohm": 81511.14965877007,
-      "drt": {
-        "lambda": 4.9619476030028976e-06,
-        "residuo_pct": 9.967411791090827,
-        "ohmica_ohm": 92.35588802330145,
-        "picos": [
-          {
-            "tau_s": 1.4323671141861858,
-            "r_ohm": 20452.39797071254,
-            "c_f": 7.003418944992706e-05
-          },
-          {
-            "tau_s": 5.883891617466695,
-            "r_ohm": 46307.178375147756,
-            "c_f": 0.0001270621926000241
-          }
-        ],
-        "avisos": [
-          "la inversión es mal condicionada: la regularización no es un detalle de implementación sino una elección sobre cuánta estructura creerse. Aquí λ = 4.96e-06",
-          "el residuo es del 10.0 %: la distribución no reproduce el espectro, así que sobra regularización o los datos no son los de un sistema lineal invariante",
-          "hay peso apreciable en el extremo lento: falta frecuencia baja, y la difusión suele estar ahí",
-          "la fase pasa 1.0 décadas cerca de −45°, que es un elemento DISTRIBUIDO —un poro, un Warburg, un Gerischer— y no tiene constante de tiempo propia. Los 2 pico(s) de arriba son esa distribución troceada en arcos: no los cuentes como procesos ni los traduzcas a ZARC en esa región"
-        ]
-      },
-      "dibujo": "  R0-(R1|Q1)-(R2|Q2)\n\n  ─[ R0 ]─┬─[ R1 ]─┬┬─[ R2 ]─┬\n          ┴─[/Q1/]─┴┴─[/Q2/]─┴\n\n  ────────────────────────────────────────────\n  Q1, Q2     CPE\n  R0, R1, R2 resistencia\n  ────────────────────────────────────────────\n  R0.R              84.6408 Ω\n  R1.R              133.546 Ω\n  Q1.Q          0.000327884 S·sⁿ\n  Q1.n             0.611075 \n  R2.R              72590.8 Ω\n  Q2.Q          5.58855e-05 S·sⁿ\n  Q2.n             0.838746 ",
-      "avisos": [
-        "el espectro no pasa Kramers-Kronig. Los parámetros del circuito que salgan abajo NO son fiables, por muy bien que ajuste",
-        "Q1: Q = 5.863e-05 S·sⁿ NO son faradios. Para dar una capacitancia hace falta convertir con la resistencia en paralelo (echem.eis.cpe_to_capacitance) y citar siempre la n al lado",
-        "el residuo medio es 9.7 %. El circuito no describe estos datos: mira el diagrama de Nyquist y compara la forma, no el número"
-      ]
-    },
-    {
-      "muestra": "EB (+bencilamina) +0.54 V",
-      "precursor": "PhCH2NH2: amina primaria sp3 sobre un anillo. La MISMA muestra, en la ventana de las otras tres",
+      "muestra": "EB",
+      "precursor": "bencilamina, PhCH2NH2: amina primaria sp3 sobre un anillo",
       "archivo": "",
       "potencial_continuo_v": 0.3249288679555405,
       "potencial_rhe_v": 0.5396768679555405,
@@ -1006,6 +810,32 @@
           "la capacitancia en serie (−1/ωZ″ = 0.375 mF) y la real (C′ = 0.2 mF) difieren un 87 %: la parte real de la impedancia no es despreciable a esa frecuencia y las dos fórmulas dejan de ser la misma. C′ es la que se puede entregar"
         ]
       },
+      "deriva": {
+        "automatico": {
+          "circuito": "R0-(R1|Q1)",
+          "residuo_pct": 3.0499310010259366,
+          "share": 0.5689460144448527,
+          "correlacion": 0.16638627796925773,
+          "limitado_por_deriva": false,
+          "mensaje": "el residuo del ajuste no coincide con el de Kramers-Kronig, así que es del MODELO: aquí sí tiene sentido probar otro circuito"
+        },
+        "comun": {
+          "circuito": "R0-(R1|Q1)-(R2|Q2)",
+          "residuo_pct": 1.8254457947831613,
+          "share": 0.7674288962740299,
+          "correlacion": 0.765837941484254,
+          "limitado_por_deriva": true,
+          "mensaje": "el ajuste falla DONDE los datos no son consistentes consigo mismos, así que lo que queda no es un elemento que falte: es la deriva de la celda. Añadir elementos baja el residuo siguiendo la deriva más de cerca, que es peor que dejarlo. Lo que lo arregla es volver a medir, no cambiar el circuito"
+        },
+        "tres_arcos": {
+          "circuito": "R0-(R1|Q1)-(R2|Q2)-(R3|Q3)",
+          "residuo_pct": 1.3332589632193035,
+          "share": 0.7828781337094579,
+          "correlacion": 0.7155855851543732,
+          "limitado_por_deriva": true,
+          "mensaje": "el ajuste falla DONDE los datos no son consistentes consigo mismos, así que lo que queda no es un elemento que falte: es la deriva de la celda. Añadir elementos baja el residuo siguiendo la deriva más de cerca, que es peor que dejarlo. Lo que lo arregla es volver a medir, no cambiar el circuito"
+        }
+      },
       "r_ion_ohm": null,
       "r_ct_ohm": 159771.588932592,
       "drt": {
@@ -1034,8 +864,8 @@
       ]
     },
     {
-      "muestra": "EP (+piridina)",
-      "precursor": "C5H5N: N aromático ya dentro de un anillo",
+      "muestra": "EP",
+      "precursor": "piridina, C5H5N: N aromático ya dentro de un anillo",
       "archivo": "",
       "potencial_continuo_v": 0.48527943810751273,
       "potencial_rhe_v": 0.7000274381075127,
@@ -1239,6 +1069,32 @@
           "la capacitancia en serie (−1/ωZ″ = 2.02 mF) y la real (C′ = 0.287 mF) difieren un 605 %: la parte real de la impedancia no es despreciable a esa frecuencia y las dos fórmulas dejan de ser la misma. C′ es la que se puede entregar"
         ]
       },
+      "deriva": {
+        "automatico": {
+          "circuito": "R0-(R1|Q1)",
+          "residuo_pct": 17.831248092885254,
+          "share": 0.6794404413111556,
+          "correlacion": 0.8380068590428996,
+          "limitado_por_deriva": true,
+          "mensaje": "el ajuste falla DONDE los datos no son consistentes consigo mismos, así que lo que queda no es un elemento que falte: es la deriva de la celda. Añadir elementos baja el residuo siguiendo la deriva más de cerca, que es peor que dejarlo. Lo que lo arregla es volver a medir, no cambiar el circuito"
+        },
+        "comun": {
+          "circuito": "R0-(R1|Q1)-(R2|Q2)",
+          "residuo_pct": 5.110496630515982,
+          "share": 0.6389719377378026,
+          "correlacion": 0.6237542374269275,
+          "limitado_por_deriva": true,
+          "mensaje": "el ajuste falla DONDE los datos no son consistentes consigo mismos, así que lo que queda no es un elemento que falte: es la deriva de la celda. Añadir elementos baja el residuo siguiendo la deriva más de cerca, que es peor que dejarlo. Lo que lo arregla es volver a medir, no cambiar el circuito"
+        },
+        "tres_arcos": {
+          "circuito": "R0-(R1|Q1)-(R2|Q2)-(R3|Q3)",
+          "residuo_pct": 2.4992383143576293,
+          "share": 0.767594229166644,
+          "correlacion": 0.7932149793445277,
+          "limitado_por_deriva": true,
+          "mensaje": "el ajuste falla DONDE los datos no son consistentes consigo mismos, así que lo que queda no es un elemento que falte: es la deriva de la celda. Añadir elementos baja el residuo siguiendo la deriva más de cerca, que es peor que dejarlo. Lo que lo arregla es volver a medir, no cambiar el circuito"
+        }
+      },
       "r_ion_ohm": null,
       "r_ct_ohm": 11030.86226638206,
       "drt": {
@@ -1262,6 +1118,7 @@
       "avisos": [
         "−Z″ no tiene ningún máximo local: sube hasta la frecuencia más baja medida. No hay semicírculo cerrado en estos datos, así que de ellos NO sale ninguna resistencia de transferencia de carga — la que devuelva un ajuste sale del modelo, no de la medida",
         "el espectro no pasa Kramers-Kronig. Los parámetros del circuito que salgan abajo NO son fiables, por muy bien que ajuste",
+        "el 68 % del residuo del ajuste cae en la mitad de frecuencias donde el residuo de Kramers-Kronig es peor (correlación +0.84): lo que queda NO es un elemento que falte, es la deriva de la celda. Otro circuito bajará el residuo siguiéndola más de cerca. Lo que lo arregla es volver a medir",
         "la R de transferencia de carga (1.103e+04 Ω) sale del circuito y no de los datos: −Z″ no cierra ningún arco dentro del barrido, así que su constante de tiempo está fuera de lo medido. La capacitancia efectiva convertida con ella hereda esa dependencia",
         "Q1: Q = 2.108e-05 S·sⁿ NO son faradios. Para dar una capacitancia hace falta convertir con la resistencia en paralelo (echem.eis.cpe_to_capacitance) y citar siempre la n al lado",
         "el residuo medio es 17.8 %. El circuito no describe estos datos: mira el diagrama de Nyquist y compara la forma, no el número"
@@ -1281,7 +1138,7 @@
       "residuo_pct"
     ],
     [
-      "E (etanol)",
+      "E",
       "68.12",
       "1.486e-05",
       "10.86",
@@ -1292,7 +1149,7 @@
       "2.379"
     ],
     [
-      "EA (+acetonitrilo)",
+      "EA",
       "47.1",
       "21.91",
       "41",
@@ -1303,18 +1160,7 @@
       "3.181"
     ],
     [
-      "EB (+bencilamina) −0.19 V",
-      "85.01",
-      "—",
-      "46.88",
-      "-20.1",
-      "0.08443",
-      "—",
-      "R0-(R1|Q1)",
-      "9.749"
-    ],
-    [
-      "EB (+bencilamina) +0.54 V",
+      "EB",
       "85.22",
       "—",
       "25.16",
@@ -1325,7 +1171,7 @@
       "3.050"
     ],
     [
-      "EP (+piridina)",
+      "EP",
       "58.81",
       "—",
       "712",

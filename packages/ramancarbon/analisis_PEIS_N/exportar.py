@@ -23,13 +23,14 @@ electrolito no entra en ninguna impedancia medida, pero sí en el pH, y
 del pH sale la conversión a RHE — que aquí resulta ser la diferencia
 entre medir una doble capa y medir una reacción.
 
-**EB está DOS veces, a dos potenciales, y esa pareja es el control
-interno de todo el análisis.** El primer espectro se midió a −0.19 V vs
-RHE, por debajo del equilibrio del hidrógeno, y no pasa Kramers-Kronig;
-el segundo, a +0.54 V, en la misma ventana que las otras tres, lo pasa.
-Misma muestra, misma celda (R_s 85.01 y 85.22 ohm), seis veces menos
-corriente y el doble de capacitancia. Eso convierte «EB no pasa KK» de
-una sospecha sobre la muestra en una medida sobre el potencial.
+**El EB que entra aquí es el medido a +0.54 V vs RHE**, dentro de la
+ventana de las otras tres. El primero, a −0.19 V —por debajo del
+equilibrio del hidrógeno, con 0.225 mA/cm2 de HER corriendo durante los
+once minutos del barrido— no pasa Kramers-Kronig y se ha retirado del
+análisis. Las dos medidas, misma muestra y misma celda (R_s 85.01 y
+85.22 ohm), convirtieron «EB no pasa KK» de una sospecha sobre la
+muestra en una medida sobre el potencial; hecho eso, el espectro bueno
+es el que se compara.
 
 Lo que sigue siendo una suposición, y se dice en cada tabla:
 
@@ -64,7 +65,8 @@ from ramancarbon.echem.capacitance import complex_capacitance
 from ramancarbon.echem.eis import (AUTO_CIRCUIT, analyse_eis, brug_capacitance,
                                    compare_circuits, draw_circuit, drt,
                                    fit_circuit, hsu_mansfeld_capacitance,
-                                   read_shape, recommend_circuits)
+                                   read_shape, recommend_circuits,
+                                   residual_against_kk)
 from ramancarbon.gui.echem_state import EchemSession
 
 OUT = Path("/home/user/Cc/packages/ramancarbon/analisis_PEIS_N")
@@ -92,32 +94,16 @@ MASS_MG = 0.909
 #: es la variable de este experimento, así que es la leyenda — salvo en
 #: EB, que va DOS veces porque es la misma muestra a dos potenciales, y
 #: esa pareja es el control interno de todo el análisis.
-LABELS = ("E (etanol)", "EA (+acetonitrilo)", "EB (+bencilamina) −0.19 V",
-          "EB (+bencilamina) +0.54 V", "EP (+piridina)")
+LABELS = ("E", "EA", "EB", "EP")
 
 #: Qué aporta cada precursor, para el informe. El entorno del nitrógeno
 #: en el precursor NO es el que acaba en el carbón —la pirólisis lo
 #: rehace— pero es lo único que distingue a estas cuatro síntesis.
 PRECURSORS = {
-    "E (etanol)": "sin nitrógeno; el control",
-    "EA (+acetonitrilo)": "CH3CN: nitrilo, N sp, relación C/N baja",
-    "EB (+bencilamina) −0.19 V":
-        "PhCH2NH2: amina primaria sp3 sobre un anillo. MEDIDA POR DEBAJO "
-        "DEL EQUILIBRIO DEL HIDRÓGENO",
-    "EB (+bencilamina) +0.54 V":
-        "PhCH2NH2: amina primaria sp3 sobre un anillo. La MISMA muestra, "
-        "en la ventana de las otras tres",
-    "EP (+piridina)": "C5H5N: N aromático ya dentro de un anillo",
-}
-
-#: El nombre de archivo de cada muestra. No sale de la etiqueta porque
-#: las dos de EB empiezan igual y se pisarían los CSV.
-SLUGS = {
-    "E (etanol)": "E",
-    "EA (+acetonitrilo)": "EA",
-    "EB (+bencilamina) −0.19 V": "EB_cat",
-    "EB (+bencilamina) +0.54 V": "EB_an",
-    "EP (+piridina)": "EP",
+    "E": "etanol solo: sin nitrógeno, el control",
+    "EA": "acetonitrilo, CH3CN: nitrilo, N sp, relación C/N baja",
+    "EB": "bencilamina, PhCH2NH2: amina primaria sp3 sobre un anillo",
+    "EP": "piridina, C5H5N: N aromático ya dentro de un anillo",
 }
 
 #: El circuito con el que se ajustan TODAS, encima del que su propia
@@ -145,6 +131,18 @@ COMMON_WITH_L = "L0-R0-(R1|Q1)-(R2|Q2)"
 #: medida; donde no, se dice.
 POROUS = "R0-(R1|Q1)-T1"
 POROUS_WITH_L = "L0-R0-(R1|Q1)-T1"
+
+#: Y TRES arcos, que es lo que un barrido del catálogo propone cuando se
+#: le pide bajar el residuo de EP. Se ajusta y se informa, y NO se
+#: adopta como común: en EP sus tres constantes de tiempo salen
+#: separadas por factores de 10 y 57 y el residuo baja de 5.11 a 2.50 %,
+#: pero el trozo que gana cae justo donde los datos no son consistentes
+#: consigo mismos (el share de `residual_against_kk` sube de 0.64 a 0.77
+#: y la correlación de +0.62 a +0.79), así que el arco nuevo no encontró
+#: un proceso: siguió la deriva. En EB sus dos arcos lentos quedan a un
+#: factor 1.9 en tau, que es la definición de degenerado de este
+#: paquete, con R a ±128 % y ±225 %.
+THREE_ARCS = "R0-(R1|Q1)-(R2|Q2)-(R3|Q3)"
 
 CANDIDATES = ("edlc_cpe", "randles_cpe", "zarc", "poroso", "supercondensador",
               "dos_semicirculos", "randles_wo", "poroso_con_transferencia",
@@ -220,6 +218,8 @@ def main(paths):
         if shape.inductive_top:
             fits.append(_fit_row(label + " (con L)",
                                  fit_circuit(spectrum, COMMON_WITH_L)))
+        three_arcs = fit_circuit(spectrum, THREE_ARCS)
+        fits.append(_fit_row(label + " (tres arcos)", three_arcs))
         # And the porous model, always, because it is the only one that
         # returns the pore's ionic resistance. Where that comes back
         # determined it is a measurement; where it does not, the table
@@ -231,6 +231,29 @@ def main(paths):
                 common.circuit, porous.circuit):
             fits.append(_fit_row(label + " (automático)", analysis.fit))
         relaxation = drt(spectrum)
+
+        # The drift verdict for each circuit that was fitted. A residual
+        # that sits where the Kramers-Kronig residual sits is the cell
+        # moving, not an element missing, and then a more flexible
+        # circuit buys residual by tracking the drift more closely —
+        # which these three rows show happening on EP.
+        drifts = {}
+        for name, candidate in (("automatico", analysis.fit),
+                                ("comun", common),
+                                ("tres_arcos", three_arcs)):
+            verdict = (residual_against_kk(spectrum, candidate.fitted,
+                                           analysis.kk)
+                       if candidate is not None
+                       and candidate.fitted is not None
+                       and analysis.kk is not None else None)
+            drifts[name] = ({
+                "circuito": candidate.circuit,
+                "residuo_pct": candidate.residual_pct,
+                "share": verdict.share,
+                "correlacion": verdict.correlation,
+                "limitado_por_deriva": bool(verdict.drift_limited),
+                "mensaje": verdict.message,
+            } if verdict is not None else None)
 
         stored = analysis.storage_capacitance
         # Both arcs of the COMMON circuit, both relations, so the whole
@@ -329,6 +352,13 @@ def main(paths):
                 "comprobacion": analysis.storage_check,
                 "avisos": list(cap.warnings),
             },
+            # Is what is left of the residual a missing element or the
+            # cell moving? Nobody can read that off the residual, and it
+            # is the question «can this fit be improved?» really asks.
+            # One verdict per circuit, because the whole argument for
+            # NOT adopting three arcs is that the extra arc moves this
+            # number the wrong way.
+            "deriva": drifts,
             "r_ion_ohm": analysis.ionic_resistance_ohm,
             "r_ct_ohm": analysis.charge_transfer_resistance,
             "drt": {
@@ -344,7 +374,7 @@ def main(paths):
             "avisos": list(analysis.warnings),
         })
 
-        slug = SLUGS[label]
+        slug = label
         header = ("f_hz,z_real_ohm,z_imag_ohm,modulo_ohm,fase_grados,"
                   "z_real_ajuste_ohm,z_imag_ajuste_ohm,residuo_pct,"
                   "c_prima_f,c_segunda_f")
@@ -372,12 +402,23 @@ def main(paths):
         (OUT / f"drt_{slug}.csv").write_text("\n".join(lines) + "\n",
                                              encoding="utf-8")
 
+        common_drift = drifts.get("comun")
+        drift_text = ("\n\nCon el circuito común "
+                      f"{common_drift['circuito']} (residuo "
+                      f"{common_drift['residuo_pct']:.2f} %): "
+                      f"{100 * common_drift['share']:.0f} % del residuo "
+                      "cae en la mitad de frecuencias donde Kramers-Kronig "
+                      "es peor, correlación "
+                      f"{common_drift['correlacion']:+.2f}.\n  "
+                      + common_drift["mensaje"]
+                      if common_drift else "")
         text = (f"{label} — {PRECURSORS[label]}\n"
                 f"medido a {biases[label]:+.4f} V vs {REFERENCE}"
                 + (f" = {rhe[label]:+.4f} V vs RHE" if rhe[label] is not None
                    else "")
                 + " (continuo, del archivo)\n\n"
-                + analysis.summary() + "\n\n" + relaxation.describe() + "\n"
+                + analysis.summary() + drift_text
+                + "\n\n" + relaxation.describe() + "\n"
                 + relaxation.interpret() + "\n\n" + ranking.describe())
         (OUT / f"informe_{slug}.txt").write_text(text, encoding="utf-8")
 
@@ -490,6 +531,6 @@ def main(paths):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 6:
+    if len(sys.argv) != 5:
         raise SystemExit(__doc__)
     main(sys.argv[1:])

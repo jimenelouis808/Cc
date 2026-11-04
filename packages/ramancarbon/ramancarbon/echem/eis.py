@@ -1853,6 +1853,138 @@ class KKResult:
         )
 
 
+#: Share of a fit's residual that has to sit in the half of the
+#: frequencies where the Kramers-Kronig residual is worst before the fit
+#: is called drift-limited.
+#:
+#: CALIBRATED, not chosen: forty synthetic two-arc spectra with 0.5 %
+#: noise, all KK-consistent by construction, fitted with a deliberately
+#: deficient one-arc circuit so that every bit of the residual is model
+#: error. Residuals from 1.6 to 11 %. The share came back at
+#: 0.520 ± 0.048, with p95 = 0.608 and a maximum of 0.611 — a half, as
+#: independence says it should be. This is that p95.
+DRIFT_SHARE = 0.60
+
+#: And the correlation, in log space, between the two residuals. The two
+#: criteria are not the same and both are required: the share says WHERE
+#: the misfit is, the correlation says whether it tracks the KK residual
+#: point by point. On the same forty, the correlation came back at
+#: +0.15 ± 0.19 with a maximum of +0.534, so this sits above everything
+#: model error produced. With both gates, those forty give ZERO false
+#: positives.
+DRIFT_CORRELATION = 0.55
+
+
+@dataclass
+class DriftVerdict:
+    """Is what is left of a fit's residual model error, or drift?
+
+    This is the question every «can I improve this fit?» really asks,
+    and neither the residual nor the chi-squared can answer it: a
+    flexible circuit fits data that drifted, and the package says so in
+    four places already without giving anyone a number for it.
+
+    The number is where the misfit SITS. Split the sweep at the median
+    of the Kramers-Kronig residual: if the circuit is missing an
+    element, the frequencies where it fails have no reason to be the
+    frequencies where the data are internally inconsistent, and the
+    share lands near a half. If what is left is drift, the two coincide,
+    because a circuit cannot reproduce data that no causal system could
+    have produced — and then adding elements buys residual by tracking
+    the drift more closely, which is the worst trade in the file.
+
+    Measured on the four carbons by precursor, fitted through
+    ``R0-(R1|Q1)-(R2|Q2)``:
+
+    ====  =========  =====  ===========  ==============================
+    caso  KK         share  correlación  qué era
+    ====  =========  =====  ===========  ==============================
+    E     pasa       0.51   −0.02        error de modelo, al nivel del
+                                         ruido
+    EA    pasa       0.65   +0.46        modelo: el share sube pero la
+                                         correlación no, y hacen falta
+                                         las dos
+    EB    pasa       0.77   +0.77        deriva, con KK aprobado
+    EP    NO pasa    0.64   +0.62        deriva
+    ====  =========  =====  ===========  ==============================
+
+    **EB es el caso que justifica tener esto.** Pasa Kramers-Kronig
+    —residuo 0.73 %, rachas 0.72×— y aun así su ajuste falla donde los
+    datos son menos consistentes. KK decide sobre el espectro entero con
+    un umbral; esto mira dónde cae el fallo, y las dos cosas no son la
+    misma pregunta.
+
+    And the confirmation that makes it worth having: adding a third arc
+    to EP halves its residual (5.11 → 2.50 %) while the share RISES from
+    0.64 to 0.77 and the correlation from +0.62 to +0.79. The extra arc
+    did not find a process; it tracked the drift. On E the same arc
+    leaves the share at 0.48 and the correlation at zero, which is what
+    a fit limited by noise looks like.
+    """
+
+    share: float
+    """Fraction of the fit residual in the KK-worst half of the sweep."""
+    correlation: float
+    """Correlation of the two residuals in log space."""
+    drift_limited: bool
+    message: str = ""
+
+    def summary(self) -> str:
+        return (
+            f"Residuo del ajuste frente al de Kramers-Kronig: "
+            f"{100 * self.share:.0f} % del residuo cae en la mitad de "
+            f"frecuencias donde KK es peor (la mitad sería el azar), "
+            f"correlación {self.correlation:+.2f}\n  {self.message}"
+        )
+
+
+def residual_against_kk(
+    spectrum: Impedance, fitted: np.ndarray, kk: KKResult
+) -> Optional[DriftVerdict]:
+    """Where a fit's residual sits relative to the KK residual.
+
+    Returns ``None`` when there is not enough to compare — fewer than
+    eight frequencies, or a KK residual that is identically zero —
+    rather than a verdict computed from four points.
+    """
+    z = np.asarray(spectrum.z)
+    fitted = np.asarray(fitted)
+    if fitted.shape != z.shape or z.size < 8:
+        return None
+    kk_residual = np.hypot(np.asarray(kk.residual_real),
+                           np.asarray(kk.residual_imag))
+    if kk_residual.shape != z.shape or not np.any(kk_residual > 0):
+        return None
+    residual = np.abs(z - fitted) / np.maximum(np.abs(z), 1e-30)
+    total = float(residual.sum())
+    if total <= 0.0:
+        return None
+    hot = kk_residual > float(np.median(kk_residual))
+    share = float(residual[hot].sum() / total)
+    floor = 1e-12
+    correlation = float(np.corrcoef(np.log(kk_residual + floor),
+                                    np.log(residual + floor))[0, 1])
+    if not math.isfinite(correlation):
+        correlation = 0.0
+    drift = share >= DRIFT_SHARE and correlation >= DRIFT_CORRELATION
+    if drift:
+        message = (
+            "el ajuste falla DONDE los datos no son consistentes consigo "
+            "mismos, así que lo que queda no es un elemento que falte: es "
+            "la deriva de la celda. Añadir elementos baja el residuo "
+            "siguiendo la deriva más de cerca, que es peor que dejarlo. "
+            "Lo que lo arregla es volver a medir, no cambiar el circuito"
+        )
+    else:
+        message = (
+            "el residuo del ajuste no coincide con el de Kramers-Kronig, "
+            "así que es del MODELO: aquí sí tiene sentido probar otro "
+            "circuito"
+        )
+    return DriftVerdict(share=share, correlation=correlation,
+                        drift_limited=drift, message=message)
+
+
 def kramers_kronig(spectrum: Impedance, per_decade: int = KK_PER_DECADE) -> KKResult:
     """Boukamp's linear Kramers–Kronig test.
 
@@ -2292,6 +2424,10 @@ class EISResult:
     """What the spectrum is, read before anything was fitted."""
     comparison: Optional["CircuitComparison"] = None
     """Set when the circuit was chosen by comparison rather than given."""
+    drift: Optional["DriftVerdict"] = None
+    """Whether the residual that is left is model error or cell drift.
+    ``None`` when the KK test was skipped or there was too little to
+    compare."""
     suggestions: list[CircuitSuggestion] = field(default_factory=list)
     series_resistance: Optional[float] = None
     series_resistance_how: str = ""
@@ -2530,6 +2666,24 @@ def analyse_eis(
     if result.fit is None:
         return result
 
+    # Is what is left of the residual model error or drift? Nobody can
+    # read that off the residual, and the question comes up every time
+    # somebody looks at a fit and wonders whether to try another
+    # circuit. It costs one comparison against the KK residual that was
+    # computed a few lines up.
+    if result.kk is not None and result.fit.fitted is not None:
+        result.drift = residual_against_kk(spectrum, result.fit.fitted,
+                                           result.kk)
+        if result.drift is not None and result.drift.drift_limited:
+            result.warnings.append(
+                f"el {100 * result.drift.share:.0f} % del residuo del "
+                "ajuste cae en la mitad de frecuencias donde el residuo "
+                "de Kramers-Kronig es peor (correlación "
+                f"{result.drift.correlation:+.2f}): lo que queda NO es un "
+                "elemento que falte, es la deriva de la celda. Otro "
+                "circuito bajará el residuo siguiéndola más de cerca. Lo "
+                "que lo arregla es volver a medir")
+
     values = result.fit.values()
 
     # The resistance a CPE is in parallel with, read off the circuit's
@@ -2681,7 +2835,11 @@ __all__ = [
     "recommend_circuits",
     "CircuitCandidate",
     "CircuitComparison",
+    "DRIFT_CORRELATION",
+    "DRIFT_SHARE",
+    "DriftVerdict",
     "PARAMETER_DETERMINED",
+    "residual_against_kk",
     "circuit_concerns",
     "circuit_for",
     "compare_circuits",

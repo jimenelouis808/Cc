@@ -132,6 +132,8 @@ LABELS: dict[str, dict[str, str]] = {
         "nyquist": "Nyquist",
         "bode": "Bode",
         "slope45": "45° slope",
+        "slope1": "slope 1 (45° on a linear plot)",
+        "log_dropped": "{n} inductive point(s) left out: log needs −Z″ > 0",
         "rs_marker": "▼ R$_s$ from the data",
         "knee_marker": "● knee: phase = −45°",
         "tau0_marker": "■ C″ maximum → τ₀",
@@ -224,6 +226,8 @@ LABELS: dict[str, dict[str, str]] = {
         "nyquist": "Nyquist",
         "bode": "Bode",
         "slope45": "pendiente 45°",
+        "slope1": "pendiente 1 (los 45° del plano lineal)",
+        "log_dropped": "{n} punto(s) inductivo(s) fuera: el log pide −Z″ > 0",
         "rs_marker": "▼ R$_s$ de los datos",
         "knee_marker": "● codo: fase = −45°",
         "tau0_marker": "■ máximo de C″ → τ₀",
@@ -1072,7 +1076,11 @@ def _panel_nyquist(axis, session, spec, palette) -> None:
     region of a porous electrode almost vertical, and anyone reading a
     depression angle or a transport regime off it is reading the axes.
     The inset is how the field shows the corner without giving up the
-    aspect: it is the commonest supercapacitor figure there is.
+    aspect: it is the commonest supercapacitor figure there is — but
+    only when the corner is not already a panel of its own in the same
+    figure. Drawing the same decade twice in one figure spends a
+    quarter of this panel on something the reader has beside it, and on
+    a Nyquist that quarter is where the low-frequency branch goes.
     """
     spectra = _eis_list(session)
     analyses = session.eis_analyses()
@@ -1095,12 +1103,17 @@ def _panel_nyquist(axis, session, spec, palette) -> None:
     axis.set_xlabel(spec.text("z_real"))
     axis.set_ylabel(spec.text("z_imag"))
     if spec.legends:
+        # "best", not a fixed corner. A Nyquist at equal aspect puts its
+        # curves wherever the impedances are, so the corner that was
+        # empty for one series is under the legend for the next: with
+        # four porous carbons the upper left, which is the usual place,
+        # is exactly where the steepest branch climbs.
         axis.legend(frameon=False, fontsize=spec.font_size - 1.0,
-                    loc="upper left", handlelength=1.2, borderpad=0.2)
+                    loc="best", handlelength=1.2, borderpad=0.2)
     _tidy(axis, spec)
 
     limit = _nyquist_limit(spectra)
-    if limit <= 0.0 or limit >= high:
+    if limit <= 0.0 or limit >= high or _corner_shown_elsewhere(spec):
         return
     inset = axis.inset_axes((0.54, 0.17, 0.42, 0.42))
     for index, (spectrum, analysis) in enumerate(zip(spectra, analyses)):
@@ -1122,6 +1135,128 @@ def _panel_nyquist(axis, session, spec, palette) -> None:
     inset.set_aspect("equal", adjustable="box")
     inset.tick_params(which="both", direction="in", top=True, right=True,
                       labelsize=spec.font_size - 2.5)
+
+
+#: Panels that already put the high-frequency corner in front of the
+#: reader, so the Nyquist does not need to inset it as well.
+CORNER_PANELS = ("eis_rincon", "eis_nyquist_log")
+
+
+def _corner_shown_elsewhere(spec) -> bool:
+    return any(key in spec.panels for key in CORNER_PANELS)
+
+
+def _panel_nyquist_log(axis, session, spec, palette) -> None:
+    """The Nyquist on log-log: four decades of a porous electrode at once.
+
+    **What this panel buys.** On linear axes at equal aspect the whole
+    high-frequency half of a porous carbon lives in a few pixels at the
+    origin, which is why the corner needs an inset or a panel of its
+    own. On log-log every decade of |Z| gets the same room, so the
+    series resistance, the 45° branch and the low-frequency tail are
+    all legible in one box, and a sample whose impedance is two orders
+    of magnitude below another's is still on the plot.
+
+    **What it costs, and it is not small.** A log-log Nyquist is no
+    longer a map of the complex plane:
+
+    - A semicircle is not a semicircle, so a **depression angle cannot
+      be read** off this panel. Neither can a diameter: the distance
+      between two points is not an impedance any more.
+    - The apex of an arc moves, so pointing at the top of a curve here
+      and calling it ``R_ct`` is wrong.
+    - Z′ and −Z″ no longer add as vectors, so nothing can be measured
+      by subtracting one intercept from another.
+
+    **What survives is the SLOPE**, and that is the reason to draw it.
+    A power law ``−Z″ ∝ Z′^m`` is a straight line of slope ``m`` here
+    whatever its prefactor, so the 45° branch of a transmission line or
+    a Warburg is slope 1 and stays slope 1; a blocking capacitive
+    branch steepens away from it; and a closed arc bends over.
+
+    The reference for that reading is the **guide line**, not the
+    aspect ratio. Equal aspect would put slope 1 at 45° on the page,
+    which is prettier, but these electrodes span three decades of Z′
+    against six of −Z″ —the high-frequency points run down towards the
+    real axis— so equal aspect draws a box three times taller than it
+    is wide and spends it on three points. A curve parallel to the
+    dashed line has slope 1 at any aspect, so the line carries the
+    meaning and the box keeps its shape.
+
+    **Inductive points cannot be drawn.** A logarithmic axis needs
+    −Z″ > 0, and the wiring inductance at the top of the sweep puts
+    −Z″ below zero. Those points are dropped and the panel says how
+    many, rather than silently showing a shorter spectrum than the
+    linear panel beside it.
+    """
+    spectra = _eis_list(session)
+    analyses = session.eis_analyses()
+    if not spectra:
+        return
+    dropped = 0
+    reals: list[float] = []
+    imags: list[float] = []
+    for index, (spectrum, analysis) in enumerate(zip(spectra, analyses)):
+        imag = -spectrum.z.imag
+        keep = imag > 0.0
+        dropped += int((~keep).sum())
+        if not keep.any():
+            continue
+        axis.plot(spectrum.z.real[keep], imag[keep], "o",
+                  color=_colour(index), markersize=3.2,
+                  markerfacecolor="none", markeredgewidth=0.9, zorder=3,
+                  label=spectrum.name)
+        reals += [float(spectrum.z.real[keep].min()),
+                  float(spectrum.z.real[keep].max())]
+        imags += [float(imag[keep].min()), float(imag[keep].max())]
+        fit = analysis.fit if analysis else None
+        if fit is not None and fit.fitted is not None:
+            fit_imag = -fit.fitted.imag
+            good = fit_imag > 0.0
+            axis.plot(fit.fitted.real[good], fit_imag[good], "-",
+                      color=_colour(index), linewidth=1.2, zorder=2)
+    if not reals:
+        return
+    # Each axis gets ITS OWN range, not a shared square one. Z' of these
+    # electrodes never goes below the series resistance while -Z" runs
+    # down to a tenth of an ohm, so forcing equal ranges spends three
+    # decades of the x axis on a region where no sample has a point. The
+    # aspect stays equal, which on log axes means equal DECADES per
+    # inch: that is what keeps a slope of one drawn at 45 degrees, and
+    # it is the aspect -- not the range -- that the guide line needs.
+    x_low, x_high = max(min(reals) * 0.7, 1e-3), max(reals) * 1.6
+    y_low, y_high = max(min(imags) * 0.7, 1e-3), max(imags) * 1.6
+    axis.set_xscale("log")
+    axis.set_yscale("log")
+    axis.set_xlim(x_low, x_high)
+    axis.set_ylim(y_low, y_high)
+    guide_low = min(x_low, y_low)
+    guide_high = max(x_high, y_high)
+    axis.plot([guide_low, guide_high], [guide_low, guide_high],
+              linestyle=(0, (3, 2)), color=GREY, linewidth=0.8, zorder=1)
+    # The lower right is the half of a log Nyquist that an electrode
+    # with a capacitive tail never visits -- its curves climb away from
+    # the diagonal, not under it -- so the legend goes there and the
+    # notes take the top left, above where the branches start.
+    axis.text(0.03, 0.97, spec.text("slope1"), transform=axis.transAxes,
+              ha="left", va="top", fontsize=spec.font_size - 1.5,
+              color=GREY)
+    if dropped:
+        axis.text(0.03, 0.90, spec.text("log_dropped", n=dropped),
+                  transform=axis.transAxes, ha="left", va="top",
+                  fontsize=spec.font_size - 2.0, color=GREY)
+    axis.set_xlabel(spec.text("z_real"))
+    axis.set_ylabel(spec.text("z_imag"))
+    if spec.legends:
+        # Lifted clear of the bottom-right corner, which is where the
+        # composite stamps the panel letter when `letters_inside` is on
+        # -- the default. A legend entry under "(b)" is the one
+        # collision a fixed corner guarantees.
+        axis.legend(frameon=False, fontsize=spec.font_size - 1.0,
+                    loc="lower right", handlelength=1.2, borderpad=0.2,
+                    bbox_to_anchor=(1.0, 0.10) if spec.letters_inside
+                    else None)
+    _tidy(axis, spec, log_x=True)
 
 
 def _panel_nyquist_corner(axis, session, spec, palette) -> None:
@@ -1260,12 +1395,31 @@ def _panel_bode(axis, session, spec, palette) -> None:
     phase.set_ylim(-95.0, 5.0)
     phase.tick_params(which="both", direction="in",
                       labelsize=spec.font_size - 0.5)
-    phase.text(0.97, 0.30, spec.text("knee_marker"),
+    # Low in the box, where the phase axis runs out before any real
+    # electrode does: at -80 degrees nothing is drawn, and this is the
+    # only strip of a Bode panel that is reliably empty.
+    phase.text(0.97, 0.22, spec.text("knee_marker"),
                transform=phase.transAxes, ha="right", va="bottom",
                fontsize=spec.font_size - 1.5, color=GREY)
     if spec.legends:
+        # Room made for the legend by dropping the |Z| floor, not by
+        # moving the legend somewhere else. In a Bode panel there IS no
+        # free corner: |Z| fills the diagonal and the phase twin fills
+        # what is left. The one strip that is always empty is the
+        # bottom, because the phase axis runs to −90° and a real
+        # electrode does not get there — so the legend goes there and
+        # the modulus axis is stretched down to clear it.
+        low, high = axis.get_ylim()
+        axis.set_ylim(low / 10 ** 1.3, high)
+        # And in TWO columns. A four-sample legend stacked in one
+        # column is about 30 % of the box tall; the strip free of phase
+        # curves is only the 20 % below the most capacitive sample, so
+        # a single column always has its middle entries crossed by a
+        # dashed line. Two columns halve the height into that strip.
         axis.legend(frameon=False, fontsize=spec.font_size - 1.0,
-                    loc="lower left", handlelength=1.2)
+                    loc="lower left", handlelength=1.2,
+                    ncol=2 if len(_eis_list(session)) > 2 else 1,
+                    columnspacing=1.2)
     _tidy(axis, spec, log_x=True)
 
 
@@ -2214,6 +2368,12 @@ ECHEM_PANELS: tuple[PanelSpec, ...] = (
               _panel_nyquist,
               "a escala uno a uno, con el rincón de alta frecuencia en un "
               "recuadro. La figura más usada del campo",
+              technique="eis"),
+    PanelSpec("eis_nyquist_log", "EIS: el Nyquist en log-log", "eis",
+              _panel_nyquist_log,
+              "las cuatro décadas en una caja, sin recuadro; a cambio, "
+              "aquí NO se puede leer un ángulo de depresión ni un "
+              "diámetro de arco — sólo la PENDIENTE",
               technique="eis"),
     PanelSpec("eis_rincon", "EIS: sólo el rincón de alta frecuencia", "eis",
               _panel_nyquist_corner,

@@ -1,7 +1,7 @@
-EA (+acetonitrilo) — CH3CN: nitrilo, N sp, relación C/N baja
+EA — acetonitrilo, CH3CN: nitrilo, N sp, relación C/N baja
 medido a +0.3105 V vs Ag/AgCl_sat = +0.5252 V vs RHE (continuo, del archivo)
 
-EA (+acetonitrilo): 43 frecuencias, 0.01–1e+05 Hz, |Z| 47.1–9.28e+04 Ω
+EA: 43 frecuencias, 0.01–1e+05 Hz, |Z| 47.1–9.28e+04 Ω
 
 Kramers-Kronig (49 elementos RC): consistente
   residuo RMS 0.14 %, máximo 0.43 %, rachas de signo 0.88× lo esperado por azar
@@ -70,6 +70,9 @@ Circuito: R0-T1
 ⚠ Z″ es POSITIVO en 1 punto(s) del extremo alto: eso es inductancia del cableado, no de la muestra. Un circuito sin una L en serie tiene que absorberla en R0, y entonces R0 no es la resistencia de la disolución
 ⚠ −Z″ no tiene ningún máximo local: sube hasta la frecuencia más baja medida. No hay semicírculo cerrado en estos datos, así que de ellos NO sale ninguna resistencia de transferencia de carga — la que devuelva un ajuste sale del modelo, no de la medida
 ⚠ a alta frecuencia el espectro entra en la mitad inductiva del plano (−Z″ negativo). Casi siempre son los cables, no la muestra: añade una L en serie al circuito o recorta esas frecuencias
+
+Con el circuito común R0-(R1|Q1)-(R2|Q2) (residuo 0.54 %): 65 % del residuo cae en la mitad de frecuencias donde Kramers-Kronig es peor, correlación +0.46.
+  el residuo del ajuste no coincide con el de Kramers-Kronig, así que es del MODELO: aquí sí tiene sentido probar otro circuito
 
 DRT: 3 procesos — τ = 0.441 s (1.19e+03 Ω), τ = 2.29 s (4.85e+03 Ω), τ = 11.9 s (1.67e+04 Ω); R_s = 47.1 Ω, residuo 0.42 %
 DISTRIBUCIÓN DE CONSTANTES DE TIEMPO

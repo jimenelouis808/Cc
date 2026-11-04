@@ -2269,6 +2269,97 @@ def test_the_drt_says_when_its_peaks_are_a_distributed_element():
 # -- the composite, multi-panel figure --------------------------------
 
 
+def test_a_model_limited_residual_is_not_called_drift():
+    """The null case, and the one the threshold was calibrated on.
+
+    Data built from a two-arc circuit are KK-consistent by
+    construction, so fitting them with a deliberately deficient one-arc
+    circuit leaves a residual that is pure model error. Where that
+    residual falls has nothing to do with where the KK residual falls,
+    so the share has to come back near a half.
+    """
+    from ramancarbon.echem.eis import (fit_circuit, kramers_kronig,
+                                       residual_against_kk)
+    from ramancarbon.examples.demo_data import make_eis_demo
+
+    spectrum = make_eis_demo(
+        "R0-(R1|Q1)-(R2|Q2)",
+        values={"R0.R": 50.0, "R1.R": 900.0, "Q1.Q": 3e-4, "Q1.n": 0.85,
+                "R2.R": 4.0e4, "Q2.Q": 2e-4, "Q2.n": 0.78},
+        frequencies=(0.01, 1e5), points=43, noise_pct=0.5, seed=7,
+    )
+    fit = fit_circuit(spectrum, "R0-(R1|Q1)")
+    verdict = residual_against_kk(spectrum, fit.fitted,
+                                  kramers_kronig(spectrum))
+    assert verdict is not None
+    assert fit.residual_pct > 1.0, "el ajuste deficiente tiene que fallar"
+    assert not verdict.drift_limited, (
+        "un residuo que es error de MODELO no puede llamarse deriva: ahí "
+        "cambiar de circuito es exactamente lo que hay que hacer"
+    )
+    assert 0.35 < verdict.share < 0.62, verdict.share
+
+
+def test_a_residual_that_sits_on_the_kk_residual_is_called_drift():
+    """And the positive case, built so the drift is known.
+
+    A spectrum whose points are displaced by a smooth, frequency-ordered
+    perturbation —the shape a cell that moves during the sweep leaves—
+    is inconsistent with Kramers-Kronig at exactly the frequencies where
+    the perturbation is largest, and no circuit can reproduce it there.
+    """
+    import numpy as np
+
+    from ramancarbon.echem.curve import Impedance
+    from ramancarbon.echem.eis import (fit_circuit, kramers_kronig,
+                                       residual_against_kk)
+    from ramancarbon.examples.demo_data import make_eis_demo
+
+    clean = make_eis_demo(
+        "R0-(R1|Q1)-(R2|Q2)",
+        values={"R0.R": 50.0, "R1.R": 900.0, "Q1.Q": 3e-4, "Q1.n": 0.85,
+                "R2.R": 4.0e4, "Q2.Q": 2e-4, "Q2.n": 0.78},
+        frequencies=(0.01, 1e5), points=43, noise_pct=0.1, seed=7,
+    )
+    # A bump in the low-frequency half, non-causal by construction: it
+    # moves Z′ without the Z″ that a real element would bring with it.
+    order = np.argsort(clean.frequency)
+    position = np.empty(clean.frequency.size)
+    position[order] = np.linspace(0.0, 1.0, clean.frequency.size)
+    bump = 0.25 * np.exp(-((position - 0.18) / 0.10) ** 2)
+    drifted = Impedance(frequency=clean.frequency,
+                        z=clean.z.real * (1.0 + bump) + 1j * clean.z.imag,
+                        name="derivado")
+
+    fit = fit_circuit(drifted, "R0-(R1|Q1)-(R2|Q2)")
+    verdict = residual_against_kk(drifted, fit.fitted,
+                                  kramers_kronig(drifted))
+    assert verdict is not None
+    assert verdict.drift_limited, (
+        f"share {verdict.share:.2f}, correlación {verdict.correlation:+.2f}"
+    )
+    assert "volver a medir" in verdict.message
+
+
+def test_the_drift_verdict_refuses_a_spectrum_too_short_to_judge():
+    """A verdict from four points is worse than no verdict."""
+    import numpy as np
+
+    from ramancarbon.echem.curve import Impedance
+    from ramancarbon.echem.eis import KKResult, residual_against_kk
+
+    # Five is the fewest `Impedance` itself accepts, and still three
+    # short of what this check needs: splitting five points at a median
+    # puts two on one side.
+    frequency = np.array([1.0, 10.0, 100.0, 1e3, 1e4])
+    z = np.array([10 - 1j, 9 - 2j, 8 - 3j, 7 - 4j, 6 - 5j])
+    spectrum = Impedance(frequency=frequency, z=z, name="corto")
+    kk = KKResult(residual_real=np.full(5, 0.01),
+                  residual_imag=np.full(5, 0.01),
+                  max_residual=0.01, passes=True, n_elements=3)
+    assert residual_against_kk(spectrum, z * 1.01, kk) is None
+
+
 def _session_with_spectra(count: int = 3):
     from ramancarbon.gui.echem_state import EchemSession
 
@@ -2412,6 +2503,67 @@ def test_different_circuits_still_go_in_the_residual_legend():
               if not str(line.get_label()).startswith("_")]
     assert all("R0" in label for label in labels), (
         "con circuitos distintos, cada línea tiene que decir el suyo"
+    )
+
+
+def test_the_nyquist_drops_its_inset_when_the_corner_has_its_own_panel():
+    """The same decade twice in one figure is a quarter of a panel wasted.
+
+    And on a Nyquist at equal aspect that quarter is exactly where the
+    low-frequency branch goes, so the inset costs the part of the plot
+    the reader came for.
+    """
+    session = _session_with_spectra(3)
+
+    _, alone = _draw_one_panel(session, "eis_nyquist")
+    assert alone.child_axes, (
+        "sin un panel del rincón, el recuadro es la forma estándar de "
+        "enseñarlo sin renunciar a la escala uno a uno"
+    )
+
+    session.set_figure_panels(["eis_nyquist", "eis_rincon"])
+    from matplotlib.figure import Figure
+
+    from ramancarbon.gui.figures_echem import draw_composite
+    from ramancarbon.gui.theme import PALETTES
+
+    figure = Figure(figsize=(7.0, 3.0))
+    assert not draw_composite(figure, session.composite, session,
+                              PALETTES["claro"])
+    assert not figure.axes[0].child_axes, (
+        "con el rincón en su propio panel, el recuadro sobra"
+    )
+
+
+def test_the_log_nyquist_leaves_out_the_inductive_points_and_says_so():
+    """A logarithmic axis cannot take −Z″ ≤ 0.
+
+    Dropping them silently would draw a shorter spectrum than the
+    linear panel next to it, with nothing to say why.
+    """
+    import numpy as np
+
+    from ramancarbon.echem.curve import Impedance
+
+    session = _session_with_spectra(1)
+    spectrum = session.eis_series[0]
+    z = np.array(spectrum.z, dtype=complex)
+    order = np.argsort(spectrum.frequency)[::-1]
+    # Wiring inductance at the top of the sweep: Z″ positive, so −Z″
+    # negative, on the two highest frequencies.
+    z[order[:2]] = z[order[:2]].real + 1j * 0.5
+    session.eis_series[0] = Impedance(frequency=spectrum.frequency, z=z,
+                                      name=spectrum.name)
+    session.eis = session.eis_series[0]
+    session._eis_analyses = None
+
+    _, axis = _draw_one_panel(session, "eis_nyquist_log")
+    assert axis.get_xscale() == "log" and axis.get_yscale() == "log"
+    drawn = [line for line in axis.get_lines()
+             if not str(line.get_label()).startswith("_")]
+    assert len(drawn[0].get_xdata()) == spectrum.frequency.size - 2
+    assert any("2" in text.get_text() for text in axis.texts), (
+        "tiene que decir cuántos puntos se quedaron fuera"
     )
 
 

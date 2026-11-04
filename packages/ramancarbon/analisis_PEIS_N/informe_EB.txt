@@ -1,7 +1,7 @@
-EB (+bencilamina) +0.54 V — PhCH2NH2: amina primaria sp3 sobre un anillo. La MISMA muestra, en la ventana de las otras tres
+EB — bencilamina, PhCH2NH2: amina primaria sp3 sobre un anillo
 medido a +0.3249 V vs Ag/AgCl_sat = +0.5397 V vs RHE (continuo, del archivo)
 
-EB (+bencilamina) +0.54 V: 43 frecuencias, 0.01–1e+05 Hz, |Z| 85–5.8e+04 Ω
+EB: 43 frecuencias, 0.01–1e+05 Hz, |Z| 85–5.8e+04 Ω
 
 Kramers-Kronig (49 elementos RC): consistente
   residuo RMS 0.73 %, máximo 2.84 %, rachas de signo 0.72× lo esperado por azar
@@ -61,6 +61,9 @@ Circuito: R0-(R1|Q1)
 ⚠ −Z″ no tiene ningún máximo local: sube hasta la frecuencia más baja medida. No hay semicírculo cerrado en estos datos, así que de ellos NO sale ninguna resistencia de transferencia de carga — la que devuelva un ajuste sale del modelo, no de la medida
 ⚠ la R de transferencia de carga (1.598e+05 Ω) sale del circuito y no de los datos: −Z″ no cierra ningún arco dentro del barrido, así que su constante de tiempo está fuera de lo medido. La capacitancia efectiva convertida con ella hereda esa dependencia
 ⚠ Q1: Q = 0.0001224 S·sⁿ NO son faradios. Para dar una capacitancia hace falta convertir con la resistencia en paralelo (echem.eis.cpe_to_capacitance) y citar siempre la n al lado
+
+Con el circuito común R0-(R1|Q1)-(R2|Q2) (residuo 1.83 %): 77 % del residuo cae en la mitad de frecuencias donde Kramers-Kronig es peor, correlación +0.77.
+  el ajuste falla DONDE los datos no son consistentes consigo mismos, así que lo que queda no es un elemento que falte: es la deriva de la celda. Añadir elementos baja el residuo siguiendo la deriva más de cerca, que es peor que dejarlo. Lo que lo arregla es volver a medir, no cambiar el circuito
 
 DRT: 1 procesos — τ = 0.707 s (2.98e+04 Ω); R_s = 86.2 Ω, residuo 6.33 %
 DISTRIBUCIÓN DE CONSTANTES DE TIEMPO
