@@ -151,3 +151,15 @@ topológico en MoCS Janus; hay comprobaciones por hacer. Lo que hace falta en tb
 3. Bordes: bandas de una cinta (zigzag/armchair) y los estados de borde helicoidales.
 4. Contrastar con GPAW con espín-órbita (no colineal) en la monocapa: gap y orden de
    bandas en Γ/K; el invariante de GPAW (Wannier, si es viable) como referencia.
+
+### Mo ajustado solo con moléculas (xu_tm, noviembre 2026): no sirve para las monocapas
+
+`out/tm/xu_chnosmo.json` (no publicado): en sus 79 estructuras moleculares fuerzas 0,26 eV/Å,
+energías 0,17 eV, niveles 0,41 eV; pero la energía p del Mo se fue a 78 eV (sin cotas) y el
+Mo-Mo sale solo de Mo2. En las monocapas GPAW (`recipes/tm_crystals`): MoS2 sale metálico
+(gap TB -0,01 eV frente a 1,66 eV), bandas con RMS 0,9-1,1 eV; MoCS gap 0,35 frente a 0,40
+eV con el mismo error de bandas; fuerzas en el mínimo de GPAW 0,14-0,24 eV/Å y una red que
+TB prefiere comprimida (MoCS x0,98: -0,21 eV, GPAW +0,06). Las bandas d de un TMD no se
+extrapolan desde moléculas. Siguiente: un conjunto electrónico de Mo ajustado a bandas GPAW
+de MoS2 (varias deformaciones) y Mo bcc, con MoCS apartado; cotas físicas en las energías
+de sitio.

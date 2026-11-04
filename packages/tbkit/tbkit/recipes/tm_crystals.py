@@ -40,10 +40,16 @@ STRAINS = (0.98, 1.02)
 N_RANDOM = 3
 SIGMA = 0.05
 FMAX = 0.02
-SYSTEMS = ("MoS2", "MoCS")
+SYSTEMS = ("MoS2", "MoCS", "Mo_bcc")
+#: extra strains of each layer with bands only (the band fit of the Mo set)
+BAND_STRAINS = (0.96, 0.98, 1.02, 1.04)
 
 
 def start(name: str) -> Atoms:
+    if name == "Mo_bcc":
+        from ase.build import bulk
+
+        return bulk("Mo", "bcc", a=3.16)
     a = 3.18
     cell = [[a, 0, 0], [-a / 2, a * np.sqrt(3) / 2, 0], [0, 0, VACUUM_C]]
     frac = np.array([[1 / 3, 2 / 3], [2 / 3, 1 / 3]])
@@ -61,10 +67,14 @@ def start(name: str) -> Atoms:
     return Atoms(symbols, positions=positions, cell=cell, pbc=True)
 
 
-def _calc(txt: Path):
+def _kpts(atoms: Atoms):
+    return (KMESH, KMESH, KMESH) if atoms.cell.lengths()[2] < 10 else (KMESH, KMESH, 1)
+
+
+def _calc(txt: Path, kpts=(KMESH, KMESH, 1)):
     from gpaw import GPAW, PW
 
-    return GPAW(mode=PW(PW_CUTOFF), xc="PBE", kpts=(KMESH, KMESH, 1),
+    return GPAW(mode=PW(PW_CUTOFF), xc="PBE", kpts=kpts,
                 occupations={"name": "fermi-dirac", "width": KT}, setups={"Mo": "6"},
                 txt=str(txt))
 
@@ -98,8 +108,10 @@ def relax(name: str) -> Atoms:
     traj = folder / "relax.traj"
     atoms = read(traj, index=-1) if traj.exists() else start(name)
     atoms.pbc = True
-    atoms.calc = _calc(folder / "relax.txt")
+    atoms.calc = _calc(folder / "relax.txt", _kpts(atoms))
     mask = [True, True, False, False, False, True]          # in-plane cell only
+    if name == "Mo_bcc":
+        mask = [True, True, True, False, False, False]      # cubic: the volume
     BFGS(FrechetCellFilter(atoms, mask=mask), trajectory=str(traj), logfile=None).run(
         fmax=FMAX, steps=200)
     _write(out, _point(atoms, f"{name}/relaxed",
@@ -123,24 +135,37 @@ def run(name: str) -> None:
             atoms.positions[:, 2] = relaxed.positions[:, 2]
         if seed is not None:
             atoms.rattle(SIGMA, seed=100 + seed)
-        atoms.calc = _calc(out.with_suffix(".txt"))
+        atoms.calc = _calc(out.with_suffix(".txt"), _kpts(atoms))
         _write(out, _point(atoms, f"{name}/{label}"))
-    bands = folder / "bands.json"
-    if not bands.exists():
+    write_bands(name, relaxed, folder / "bands.json")
+    for scale in BAND_STRAINS if name != "Mo_bcc" else ():
         atoms = relaxed.copy()
-        atoms.calc = _calc(folder / "scf.txt")
-        atoms.get_potential_energy()
-        fermi = float(atoms.calc.get_fermi_level())
-        bp = atoms.cell.bandpath("GMKG", npoints=NK_PATH, pbc=(True, True, False))
-        n_occ = int(round(sum({"Mo": 6, "S": 6, "C": 4}[s]
-                              for s in atoms.get_chemical_symbols()) / 2))
-        calc = atoms.calc.fixed_density(kpts=bp.kpts, symmetry="off", txt=None,
-                                        nbands=n_occ + 8, convergence={"bands": n_occ + 6})
-        eps = np.array([calc.get_eigenvalues(kpt=i) for i in range(len(bp.kpts))])
-        _write(bands, {"system": name, "code": "gpaw_pw", "fermi_eV": fermi, "n_occ": n_occ,
-                       "kpts": bp.kpts.tolist(), "bands": eps[:, :n_occ + 6].tolist(),
-                       "settings": f"GPAW PBE PW {PW_CUTOFF} eV, Mo.6, FD {KT} eV, "
-                                   f"k {KMESH}x{KMESH}, sin espín-órbita"})
+        atoms.set_cell(np.asarray(atoms.cell) * [[scale], [scale], [1.0]], scale_atoms=True)
+        atoms.positions[:, 2] = relaxed.positions[:, 2]
+        write_bands(name, atoms, folder / f"bands_x{scale}.json")
+
+
+def write_bands(name: str, atoms: Atoms, out: Path) -> None:
+    if out.exists():
+        return
+    atoms = atoms.copy()
+    atoms.calc = _calc(out.with_suffix(".scf.txt"), _kpts(atoms))
+    atoms.get_potential_energy()
+    fermi = float(atoms.calc.get_fermi_level())
+    path = "GHNGPH" if name == "Mo_bcc" else "GMKG"
+    bp = atoms.cell.bandpath(path, npoints=NK_PATH,
+                             pbc=(True, True, name == "Mo_bcc"))
+    n_occ = int(round(sum({"Mo": 6, "S": 6, "C": 4}[s]
+                          for s in atoms.get_chemical_symbols()) / 2))
+    calc = atoms.calc.fixed_density(kpts=bp.kpts, symmetry="off", txt=None,
+                                    nbands=n_occ + 8, convergence={"bands": n_occ + 6})
+    eps = np.array([calc.get_eigenvalues(kpt=i) for i in range(len(bp.kpts))])
+    _write(out, {"system": name, "code": "gpaw_pw", "fermi_eV": fermi, "n_occ": n_occ,
+                 "kpts": bp.kpts.tolist(), "bands": eps[:, :n_occ + 6].tolist(),
+                 "cell": np.asarray(atoms.cell).tolist(), "positions": atoms.positions.tolist(),
+                 "symbols": atoms.get_chemical_symbols(),
+                 "settings": f"GPAW PBE PW {PW_CUTOFF} eV, Mo.6, FD {KT} eV, k {_kpts(atoms)}, "
+                             "sin espín-órbita"})
 
 
 PARAMS = [
