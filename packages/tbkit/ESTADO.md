@@ -128,9 +128,8 @@ mitad de las hessianas apartada) y referencias GPAW de moléculas de Mo
 
 Sistemas objetivo, cada uno con referencias GPAW periódicas además de las moleculares:
 
-- **MoCS tipo Janus** (monocapa hexagonal, C arriba, S abajo): conjunto Mo sobre
-  `xu_chnos` (C y S ya están); referencias de la monocapa (estirada y distorsionada) y
-  de MoS₂ 2H para comparar. Bandas frente a GPAW PW.
+- **MoCS tipo Janus** (monocapa hexagonal, C arriba, S abajo): conjunto `xu_chnosmo`
+  publicado (ver «Mo con bandas y cristales» abajo); MoCS apartado del ajuste como prueba.
 - **FeSe tetragonal** (tipo PbO, el superconductor) y **FeSe hexagonal** (tipo NiAs):
   conjunto Fe sobre el Se con d. El Fe necesita referencias con espín y ajuste con el
   SCC con espín; en PBE el FeSe tetragonal tiene órdenes magnéticos (rayas, damero) cerca
@@ -163,3 +162,33 @@ TB prefiere comprimida (MoCS x0,98: -0,21 eV, GPAW +0,06). Las bandas d de un TM
 extrapolan desde moléculas. Siguiente: un conjunto electrónico de Mo ajustado a bandas GPAW
 de MoS2 (varias deformaciones) y Mo bcc, con MoCS apartado; cotas físicas en las energías
 de sitio.
+
+### Mo con bandas y cristales: `xu_chnosmo` (publicado, noviembre 2026)
+
+Ajuste conjunto de `xu_tm` con las moléculas de `gpaw_mo.json` más, por primera vez,
+cristales GPAW PW (`recipes/tm_crystals`, copiados a `parameters/references/tm_crystals/`):
+bandas de MoS₂ (relajado, ±2 %, ±4 %) y Mo bcc, y los puntos de energía y fuerzas de MoS₂ y
+Mo bcc (`--bands`, `--crystals`). MoCS queda fuera en todo: es la prueba.
+
+Dos arreglos que lo hicieron posible: (1) la ley Mo-Mo se centraba en el dímero (1,94 Å) y
+moría antes de los 3,18 Å del Mo-Mo de MoS₂: el gap saltaba de 1,49 eV a metálico entre
+-2 % y +2 %; ahora se centra en el enlace bcc (2,73 Å) con cola 3,9-4,2 Å; (2) solo con
+bandas, las fuerzas en el mínimo de GPAW eran 1,1 eV/Å: los puntos del cristal entran en
+fuerzas y energías.
+
+| | TB | GPAW |
+|---|---|---|
+| MoS₂ gap (relajado; −4 % → +4 %) | 1,56; 1,61 → 1,29 eV | 1,66; 1,85 → 1,08 eV |
+| MoS₂ RMS de bandas (±3 eV) | 0,33-0,38 eV | |
+| MoS₂ fuerzas en el mínimo GPAW | 0,27 eV/Å | 0 |
+| **MoCS (prueba)** gap relajado | 0,40 eV | 0,40 eV |
+| MoCS RMS de bandas (0,96; 1; 1,04) | 0,37-0,42 eV | |
+| MoCS fuerzas en el mínimo GPAW | 0,27 eV/Å | 0 |
+| MoCS ΔE a ±2 % | 0,43 / 0,27 eV | 0,06 / 0,05 eV |
+
+Lo que falla y queda escrito en `validity`: la red 3-10 veces demasiado rígida (no relajar
+la celda con este conjunto); el gap de MoS₂ sale indirecto (GPAW directo en K); la
+tendencia del gap de MoCS con la deformación va al revés (0,62 / 0,21 eV frente a 0,36 /
+0,41). Subir el peso de las energías (10 en vez de 3) no corrigió la rigidez y empeoró
+las fuerzas de MoCS (0,27 → 0,61 eV/Å): descartado. Siguiente para la rigidez: tensión
+(estrés) de la celda como objetivo, o más deformaciones con relajación interna.

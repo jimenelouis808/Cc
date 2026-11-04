@@ -342,7 +342,15 @@ docs/                 # GUIA_USUARIO, METODOS, VALIDACION (generated: never edit
   change to the table must keep the rotational-covariance test (every shell pair, real p
   and d representations) green: it is what catches a sign. `.skf` d columns are read;
   matching DFTB+ on a published d set is still to be checked. Spin constants exist for
-  Ti-Zn, Mo, Pd, Ag (no relativity: the 4d ones are approximate); no fitted d set yet.
+  Ti-Zn, Mo, Pd, Ag (no relativity: the 4d ones are approximate). Fitted d sets:
+  `xu_chnose_d` (Se with d) and `xu_chnosmo` (Mo, `recipes/xu_tm`).
+- Crystals in a Xu fit (`--bands`, `--crystals`, `recipes/tm_crystals` references in
+  `parameters/references/tm_crystals/`): molecules alone do not fix a TMD's d bands, and
+  bands alone do not fix its forces; both go in, and one crystal (MoCS) stays out as the
+  test. A metal-metal law centred on a molecular dimer dies before the crystal's
+  metal-metal distance: check the hopping at the crystal distances (the MoS₂ gap jumped
+  to metallic between ±2 % strain). `xu_chnosmo` lattice energetics are 3-10× too stiff:
+  never relax a cell with it.
 - Tests compare with closed-form results (graphene, Hückel, Lieb). A new
   feature needs such a check, not only a regression number.
 

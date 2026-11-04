@@ -945,7 +945,8 @@ def bond_lengths(atoms, factor: float = 1.2) -> dict[tuple[int, int], float]:
     ii, jj, dd = neighbor_list("ijd", atoms, factor * 2 * radii.max())
     out = {}
     for i, j, d in zip(ii, jj, dd, strict=True):
-        if i < j and d < factor * (radii[i] + radii[j]) and \
+        # i == j: a periodic image of the same atom (the Mo-Mo of a crystal)
+        if i <= j and d < factor * (radii[i] + radii[j]) and \
                 not symbols[i] == symbols[j] == "H":
             out[(int(i), int(j))] = float(d)
     return out
@@ -1077,14 +1078,17 @@ def _sha256(path: Path) -> str:
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
-def validity_text(family: XuFamily, sampled: dict) -> str:
-    """The ``validity`` of a set: fitted on molecules; crystals as measured, or unchecked."""
+def validity_text(family: XuFamily, sampled: dict, crystals_fitted: str = "") -> str:
+    """The ``validity`` of a set: fitted on molecules; crystals as measured, or unchecked;
+    ``crystals_fitted`` names the crystals that entered the fit itself."""
     ranges = ", ".join(f"{k} {v[0]:.2f}-{v[1]:.2f} Å" for k, v in sorted(sampled.items())
                        if k != "C-C" and (family.base is None
                                           or set(k.split("-")) & set(family.heteroatoms)))
     if family.base is not None:
         ranges += f"; el resto, como {family.base}"
-    crystals = (f"cristales (SCC periódico): extrapolación comprobada contra GPAW "
+    crystals = (f"cristales en el ajuste ({crystals_fitted}): bandas, energías y fuerzas "
+                "GPAW PW; resultados en fit.bands y fit.crystals" if crystals_fitted else
+                f"cristales (SCC periódico): extrapolación comprobada contra GPAW "
                 f"(validation/crystals_tb_vs_gpaw.json): {family.crystal_notes}"
                 if family.crystal_notes else
                 "en cristales es una extrapolación sin comprobar")
@@ -1106,7 +1110,10 @@ def parameter_file(family: XuFamily, model: TBModel, x, shift: float, report: di
     data["reference"] = ("C-C: C. H. Xu, C. Z. Wang, C. T. Chan, K. M. Ho, J. Phys.: Condens. "
                          f"Matter 4, 6047 (1992). {hetero}: " + source)
     data["system"] = family.system
-    data["validity"] = validity_text(family, report.get("bond_ranges", {}))
+    fitted = sorted({k.split("/")[0] for k in (report.get("bands") or {}).get("train", {})} |
+                    {k for k, v in (report.get("crystals") or {}).items()
+                     if v["role"] == "train"})
+    data["validity"] = validity_text(family, report.get("bond_ranges", {}), ", ".join(fitted))
     data["notes"] = ("C-C idéntico a xu_carbon. Niveles: todos los ocupados, el LUMO y el "
                      f"LUMO+1, con un desplazamiento común de {shift:.4f} eV entre el cero de Xu "
                      "y el vacío de GPAW. H-H: solo la repulsión de contacto de hh_contact. U de Hubbard: dε/dn del átomo "
@@ -1329,6 +1336,16 @@ def run(family: XuFamily, references: Sequence[Path], out: Path, verbose: bool =
                 print(f"  {name:12s} RMS {entry['rms']:6.0f} cm⁻¹, máx {entry['max_error']:6.0f}"
                       f"{hits}")
     data = parameter_file(family, model, x, shift, report, references, settings)
+    if bands or held_out_bands or crystals or held_out_crystals:
+        data["fit"]["crystal_sources"] = {
+            "bands": {str(p): _sha256(p) for p in bands},
+            "held_out_bands": {str(p): _sha256(p) for p in held_out_bands},
+            "crystals": {str(p): {q.name: _sha256(q) for q in sorted(Path(p).glob("*.json"))}
+                         for p in crystals},
+            "held_out_crystals": {str(p): {q.name: _sha256(q)
+                                           for q in sorted(Path(p).glob("*.json"))}
+                                  for p in held_out_crystals},
+            "recipe": "tbkit.recipes.tm_crystals (GPAW PW 500 eV, PBE, Mo.6)"}
     if hessians:
         data["fit"]["hessians"] = Path(hessians).name
         data["fit"]["hessians_sha256"] = _sha256(hessians)

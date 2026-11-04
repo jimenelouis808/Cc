@@ -3,7 +3,12 @@
 Run from packages/tbkit (after ``recipes/tm_references Mo``)::
 
     python -m tbkit.recipes.xu_tm Mo tbkit/parameters/references/gpaw_mo.json OUT.json \\
-        --workers 4
+        --workers 4 --onsite-window 8 --bands T/MoS2/bands*.json T/Mo_bcc/bands.json \\
+        --held-out-bands T/MoCS/bands.json T/MoCS/bands_x0.96.json T/MoCS/bands_x1.04.json \\
+        --crystals T/MoS2 T/Mo_bcc --held-out-crystals T/MoCS
+
+(``T`` = ``tbkit/parameters/references/tm_crystals``, from :mod:`tbkit.recipes.tm_crystals`;
+the shipped ``xu_chnosmo.json``.)
 
 Same machinery as :mod:`tbkit.recipes.xu_bsp` (:class:`~tbkit.recipes.xu_family.XuFamily`):
 the base set is held fixed (xu_chnos, which has the C and S of MoCS and MoS₂) and the metal
@@ -63,9 +68,12 @@ FAMILIES = {
         onsite_dipole={},
         d_elements=("Mo",),
         validity_notes=("Mo ajustado en moléculas de capa cerrada (Mo(VI) d0 con oxo, hidroxo, "
-                        "metilo, amido, tiolato, sulfuro e hidruro; Mo(CO)6; Mo2); sólidos y "
-                        "monocapas (MoS2, MoCS) son extrapolación hasta su validación; sin "
-                        "espín-órbita; Mo junto con B, P o Se no está cubierto"),
+                        "metilo, amido, tiolato, sulfuro e hidruro; Mo(CO)6; Mo2) y, con "
+                        "--crystals/--bands, en MoS2 2H y Mo bcc (MoCS Janus apartado como "
+                        "prueba); la energía frente a la deformación de la red sale 3-10 veces "
+                        "más rígida que GPAW (MoS2 ±2 %: 0,13/0,48 eV frente a 0,05/0,04): no "
+                        "relajar la celda; el gap de MoS2 sale indirecto (GPAW directo en K); "
+                        "sin espín-órbita; Mo junto con B, P o Se no está cubierto"),
         system="xu_chnos más molibdeno: óxidos, sulfuros, carbonilos, carburos de Mo",
         h_tail=(0.40, 0.60),
         base="xu_chnos"),

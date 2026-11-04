@@ -1,0 +1,3562 @@
+{
+ "name": "C/H/N/O/S/Mo: xu_chnos + Mo (s, p, d) ajustado a GPAW",
+ "units": {
+  "energy": "eV",
+  "length": "Å"
+ },
+ "orbitals": {
+  "C": [
+   "s",
+   "px",
+   "py",
+   "pz"
+  ],
+  "H": [
+   "s"
+  ],
+  "N": [
+   "s",
+   "px",
+   "py",
+   "pz"
+  ],
+  "O": [
+   "s",
+   "px",
+   "py",
+   "pz"
+  ],
+  "S": [
+   "s",
+   "px",
+   "py",
+   "pz"
+  ],
+  "Mo": [
+   "s",
+   "px",
+   "py",
+   "pz",
+   "dxy",
+   "dyz",
+   "dzx",
+   "dx2-y2",
+   "dz2"
+  ]
+ },
+ "onsite": {
+  "C": {
+   "s": {
+    "value": -2.99,
+    "unit": "eV",
+    "source": "Xu 1992 (idéntico a xu_carbon)"
+   },
+   "p": {
+    "value": 3.71,
+    "unit": "eV",
+    "source": "Xu 1992 (idéntico a xu_carbon)"
+   }
+  },
+  "H": {
+   "s": {
+    "value": 3.549111755142683,
+    "unit": "eV",
+    "source": "xu_chnos (fijo)"
+   }
+  },
+  "N": {
+   "s": {
+    "value": -9.118395719194638,
+    "unit": "eV",
+    "source": "xu_chnos (fijo)"
+   },
+   "p": {
+    "value": 0.2602958907153356,
+    "unit": "eV",
+    "source": "xu_chnos (fijo)"
+   }
+  },
+  "O": {
+   "s": {
+    "value": -16.285051217963908,
+    "unit": "eV",
+    "source": "xu_chnos (fijo)"
+   },
+   "p": {
+    "value": -1.698492085812274,
+    "unit": "eV",
+    "source": "xu_chnos (fijo)"
+   }
+  },
+  "S": {
+   "s": {
+    "value": -8.5183901010446,
+    "unit": "eV",
+    "source": "xu_chnos (fijo)"
+   },
+   "p": {
+    "value": 0.5763960269237226,
+    "unit": "eV",
+    "source": "xu_chnos (fijo)"
+   }
+  },
+  "Mo": {
+   "s": {
+    "value": 6.540023550799309,
+    "unit": "eV",
+    "source": "ajustado (ajuste a GPAW (PBE, lcao/dzp, GPAW 26.7.0); receta tbkit.recipes.xu_tm)"
+   },
+   "p": {
+    "value": 14.445030260821476,
+    "unit": "eV",
+    "source": "ajustado (ajuste a GPAW (PBE, lcao/dzp, GPAW 26.7.0); receta tbkit.recipes.xu_tm)"
+   },
+   "d": {
+    "value": 3.9512605335247653,
+    "unit": "eV",
+    "source": "ajustado (ajuste a GPAW (PBE, lcao/dzp, GPAW 26.7.0); receta tbkit.recipes.xu_tm)"
+   }
+  }
+ },
+ "valence": {
+  "C": 4.0,
+  "H": 1.0,
+  "N": 5.0,
+  "O": 6.0,
+  "S": 6.0,
+  "Mo": 6.0
+ },
+ "hubbard_u": {
+  "C": {
+   "value": 9.9228,
+   "unit": "eV",
+   "source": "GPAW aeatom PBE, dε/dn del nivel de valencia"
+  },
+  "H": {
+   "value": 11.4154,
+   "unit": "eV",
+   "source": "GPAW aeatom PBE, dε/dn del nivel de valencia"
+  },
+  "N": {
+   "value": 11.7247,
+   "unit": "eV",
+   "source": "GPAW aeatom PBE, dε/dn del nivel de valencia"
+  },
+  "O": {
+   "value": 13.4802,
+   "unit": "eV",
+   "source": "GPAW aeatom PBE, dε/dn del nivel de valencia"
+  },
+  "S": {
+   "value": 8.9465,
+   "unit": "eV",
+   "source": "GPAW aeatom PBE, dε/dn del nivel de valencia"
+  },
+  "Mo": {
+   "value": 7.886,
+   "unit": "eV",
+   "source": "GPAW aeatom PBE, dε/dn del nivel de valencia"
+  }
+ },
+ "hopping": [
+  {
+   "pair": [
+    "C",
+    "C"
+   ],
+   "bond": "sss",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": -5.0,
+     "r0": 1.536329,
+     "n": 2.0,
+     "nc": 6.5,
+     "rc": 2.18,
+     "cutoff": 2.6
+    },
+    "r1": 2.45,
+    "rm": 2.6
+   },
+   "unit": "eV",
+   "source": "Xu 1992 (idéntico a xu_carbon)"
+  },
+  {
+   "pair": [
+    "C",
+    "C"
+   ],
+   "bond": "sps",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": 4.7,
+     "r0": 1.536329,
+     "n": 2.0,
+     "nc": 6.5,
+     "rc": 2.18,
+     "cutoff": 2.6
+    },
+    "r1": 2.45,
+    "rm": 2.6
+   },
+   "unit": "eV",
+   "source": "Xu 1992 (idéntico a xu_carbon)"
+  },
+  {
+   "pair": [
+    "C",
+    "C"
+   ],
+   "bond": "pps",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": 5.5,
+     "r0": 1.536329,
+     "n": 2.0,
+     "nc": 6.5,
+     "rc": 2.18,
+     "cutoff": 2.6
+    },
+    "r1": 2.45,
+    "rm": 2.6
+   },
+   "unit": "eV",
+   "source": "Xu 1992 (idéntico a xu_carbon)"
+  },
+  {
+   "pair": [
+    "C",
+    "C"
+   ],
+   "bond": "ppp",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": -1.55,
+     "r0": 1.536329,
+     "n": 2.0,
+     "nc": 6.5,
+     "rc": 2.18,
+     "cutoff": 2.6
+    },
+    "r1": 2.45,
+    "rm": 2.6
+   },
+   "unit": "eV",
+   "source": "Xu 1992 (idéntico a xu_carbon)"
+  },
+  {
+   "pair": [
+    "H",
+    "C"
+   ],
+   "bond": "sss",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": -4.343978443327805,
+     "r0": 1.09,
+     "n": 0.6539744816857604,
+     "nc": 6.5,
+     "rc": 1.5466739220570596,
+     "cutoff": 1.69
+    },
+    "r1": 1.49,
+    "rm": 1.69
+   },
+   "unit": "eV",
+   "source": "xu_chnos (fijo)"
+  },
+  {
+   "pair": [
+    "H",
+    "C"
+   ],
+   "bond": "sps",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": 5.589370082452819,
+     "r0": 1.09,
+     "n": 0.6539744816857604,
+     "nc": 6.5,
+     "rc": 1.5466739220570596,
+     "cutoff": 1.69
+    },
+    "r1": 1.49,
+    "rm": 1.69
+   },
+   "unit": "eV",
+   "source": "xu_chnos (fijo)"
+  },
+  {
+   "pair": [
+    "H",
+    "N"
+   ],
+   "bond": "sss",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": -6.03536988697005,
+     "r0": 1.01,
+     "n": 0.5000000000940366,
+     "nc": 6.5,
+     "rc": 1.433156569979477,
+     "cutoff": 1.61
+    },
+    "r1": 1.41,
+    "rm": 1.61
+   },
+   "unit": "eV",
+   "source": "xu_chnos (fijo)"
+  },
+  {
+   "pair": [
+    "H",
+    "N"
+   ],
+   "bond": "sps",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": 5.840032607108475,
+     "r0": 1.01,
+     "n": 0.5000000000940366,
+     "nc": 6.5,
+     "rc": 1.433156569979477,
+     "cutoff": 1.61
+    },
+    "r1": 1.41,
+    "rm": 1.61
+   },
+   "unit": "eV",
+   "source": "xu_chnos (fijo)"
+  },
+  {
+   "pair": [
+    "C",
+    "N"
+   ],
+   "bond": "sss",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": -3.6609949618559874,
+     "r0": 1.47,
+     "n": 1.5274946783324317,
+     "nc": 6.5,
+     "rc": 2.0858813444255757,
+     "cutoff": 2.4877483924341726
+    },
+    "r1": 2.3442244467168165,
+    "rm": 2.4877483924341726
+   },
+   "unit": "eV",
+   "source": "xu_chnos (fijo)"
+  },
+  {
+   "pair": [
+    "C",
+    "N"
+   ],
+   "bond": "sps",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": 3.4526861806682536,
+     "r0": 1.47,
+     "n": 1.5274946783324317,
+     "nc": 6.5,
+     "rc": 2.0858813444255757,
+     "cutoff": 2.4877483924341726
+    },
+    "r1": 2.3442244467168165,
+    "rm": 2.4877483924341726
+   },
+   "unit": "eV",
+   "source": "xu_chnos (fijo)"
+  },
+  {
+   "pair": [
+    "N",
+    "C"
+   ],
+   "bond": "sps",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": 3.530486569571112,
+     "r0": 1.47,
+     "n": 1.5274946783324317,
+     "nc": 6.5,
+     "rc": 2.0858813444255757,
+     "cutoff": 2.4877483924341726
+    },
+    "r1": 2.3442244467168165,
+    "rm": 2.4877483924341726
+   },
+   "unit": "eV",
+   "source": "xu_chnos (fijo)"
+  },
+  {
+   "pair": [
+    "C",
+    "N"
+   ],
+   "bond": "pps",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": 4.501498363078524,
+     "r0": 1.47,
+     "n": 1.5274946783324317,
+     "nc": 6.5,
+     "rc": 2.0858813444255757,
+     "cutoff": 2.4877483924341726
+    },
+    "r1": 2.3442244467168165,
+    "rm": 2.4877483924341726
+   },
+   "unit": "eV",
+   "source": "xu_chnos (fijo)"
+  },
+  {
+   "pair": [
+    "C",
+    "N"
+   ],
+   "bond": "ppp",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": -2.1424365270434595,
+     "r0": 1.47,
+     "n": 1.5274946783324317,
+     "nc": 6.5,
+     "rc": 2.0858813444255757,
+     "cutoff": 2.4877483924341726
+    },
+    "r1": 2.3442244467168165,
+    "rm": 2.4877483924341726
+   },
+   "unit": "eV",
+   "source": "xu_chnos (fijo)"
+  },
+  {
+   "pair": [
+    "N",
+    "N"
+   ],
+   "bond": "sss",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": -4.178518297442452,
+     "r0": 1.45,
+     "n": 1.4793154427803195,
+     "nc": 6.5,
+     "rc": 2.05750200640618,
+     "cutoff": 2.4539014755303064
+    },
+    "r1": 2.312330236557404,
+    "rm": 2.4539014755303064
+   },
+   "unit": "eV",
+   "source": "xu_chnos (fijo)"
+  },
+  {
+   "pair": [
+    "N",
+    "N"
+   ],
+   "bond": "sps",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": 4.886377063205327,
+     "r0": 1.45,
+     "n": 1.4793154427803195,
+     "nc": 6.5,
+     "rc": 2.05750200640618,
+     "cutoff": 2.4539014755303064
+    },
+    "r1": 2.312330236557404,
+    "rm": 2.4539014755303064
+   },
+   "unit": "eV",
+   "source": "xu_chnos (fijo)"
+  },
+  {
+   "pair": [
+    "N",
+    "N"
+   ],
+   "bond": "pps",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": 4.739593431078798,
+     "r0": 1.45,
+     "n": 1.4793154427803195,
+     "nc": 6.5,
+     "rc": 2.05750200640618,
+     "cutoff": 2.4539014755303064
+    },
+    "r1": 2.312330236557404,
+    "rm": 2.4539014755303064
+   },
+   "unit": "eV",
+   "source": "xu_chnos (fijo)"
+  },
+  {
+   "pair": [
+    "N",
+    "N"
+   ],
+   "bond": "ppp",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": -2.893602257061185,
+     "r0": 1.45,
+     "n": 1.4793154427803195,
+     "nc": 6.5,
+     "rc": 2.05750200640618,
+     "cutoff": 2.4539014755303064
+    },
+    "r1": 2.312330236557404,
+    "rm": 2.4539014755303064
+   },
+   "unit": "eV",
+   "source": "xu_chnos (fijo)"
+  },
+  {
+   "pair": [
+    "C",
+    "O"
+   ],
+   "bond": "sss",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": -3.697146212554229,
+     "r0": 1.43,
+     "n": 1.5331447031610494,
+     "nc": 6.5,
+     "rc": 2.0291226683867842,
+     "cutoff": 2.42005455862644
+    },
+    "r1": 2.2804360263979917,
+    "rm": 2.42005455862644
+   },
+   "unit": "eV",
+   "source": "xu_chnos (fijo)"
+  },
+  {
+   "pair": [
+    "C",
+    "O"
+   ],
+   "bond": "sps",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": 3.958389974959643,
+     "r0": 1.43,
+     "n": 1.5331447031610494,
+     "nc": 6.5,
+     "rc": 2.0291226683867842,
+     "cutoff": 2.42005455862644
+    },
+    "r1": 2.2804360263979917,
+    "rm": 2.42005455862644
+   },
+   "unit": "eV",
+   "source": "xu_chnos (fijo)"
+  },
+  {
+   "pair": [
+    "O",
+    "C"
+   ],
+   "bond": "sps",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": 4.537880407786455,
+     "r0": 1.43,
+     "n": 1.5331447031610494,
+     "nc": 6.5,
+     "rc": 2.0291226683867842,
+     "cutoff": 2.42005455862644
+    },
+    "r1": 2.2804360263979917,
+    "rm": 2.42005455862644
+   },
+   "unit": "eV",
+   "source": "xu_chnos (fijo)"
+  },
+  {
+   "pair": [
+    "C",
+    "O"
+   ],
+   "bond": "pps",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": 5.308539350928151,
+     "r0": 1.43,
+     "n": 1.5331447031610494,
+     "nc": 6.5,
+     "rc": 2.0291226683867842,
+     "cutoff": 2.42005455862644
+    },
+    "r1": 2.2804360263979917,
+    "rm": 2.42005455862644
+   },
+   "unit": "eV",
+   "source": "xu_chnos (fijo)"
+  },
+  {
+   "pair": [
+    "C",
+    "O"
+   ],
+   "bond": "ppp",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": -2.2455348755381928,
+     "r0": 1.43,
+     "n": 1.5331447031610494,
+     "nc": 6.5,
+     "rc": 2.0291226683867842,
+     "cutoff": 2.42005455862644
+    },
+    "r1": 2.2804360263979917,
+    "rm": 2.42005455862644
+   },
+   "unit": "eV",
+   "source": "xu_chnos (fijo)"
+  },
+  {
+   "pair": [
+    "H",
+    "O"
+   ],
+   "bond": "sss",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": -5.960451387723109,
+     "r0": 0.97,
+     "n": 0.6142026456012214,
+     "nc": 6.5,
+     "rc": 1.3763978939406858,
+     "cutoff": 1.57
+    },
+    "r1": 1.37,
+    "rm": 1.57
+   },
+   "unit": "eV",
+   "source": "xu_chnos (fijo)"
+  },
+  {
+   "pair": [
+    "H",
+    "O"
+   ],
+   "bond": "sps",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": 6.045497859388961,
+     "r0": 0.97,
+     "n": 0.6142026456012214,
+     "nc": 6.5,
+     "rc": 1.3763978939406858,
+     "cutoff": 1.57
+    },
+    "r1": 1.37,
+    "rm": 1.57
+   },
+   "unit": "eV",
+   "source": "xu_chnos (fijo)"
+  },
+  {
+   "pair": [
+    "N",
+    "O"
+   ],
+   "bond": "sss",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": -3.966535968516446,
+     "r0": 1.4,
+     "n": 1.4218018322460566,
+     "nc": 6.5,
+     "rc": 1.9865536613576908,
+     "cutoff": 2.3692841832706404
+    },
+    "r1": 2.232594711158873,
+    "rm": 2.3692841832706404
+   },
+   "unit": "eV",
+   "source": "xu_chnos (fijo)"
+  },
+  {
+   "pair": [
+    "N",
+    "O"
+   ],
+   "bond": "sps",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": 5.296208104720882,
+     "r0": 1.4,
+     "n": 1.4218018322460566,
+     "nc": 6.5,
+     "rc": 1.9865536613576908,
+     "cutoff": 2.3692841832706404
+    },
+    "r1": 2.232594711158873,
+    "rm": 2.3692841832706404
+   },
+   "unit": "eV",
+   "source": "xu_chnos (fijo)"
+  },
+  {
+   "pair": [
+    "O",
+    "N"
+   ],
+   "bond": "sps",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": 5.316202193083568,
+     "r0": 1.4,
+     "n": 1.4218018322460566,
+     "nc": 6.5,
+     "rc": 1.9865536613576908,
+     "cutoff": 2.3692841832706404
+    },
+    "r1": 2.232594711158873,
+    "rm": 2.3692841832706404
+   },
+   "unit": "eV",
+   "source": "xu_chnos (fijo)"
+  },
+  {
+   "pair": [
+    "N",
+    "O"
+   ],
+   "bond": "pps",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": 4.509913827364588,
+     "r0": 1.4,
+     "n": 1.4218018322460566,
+     "nc": 6.5,
+     "rc": 1.9865536613576908,
+     "cutoff": 2.3692841832706404
+    },
+    "r1": 2.232594711158873,
+    "rm": 2.3692841832706404
+   },
+   "unit": "eV",
+   "source": "xu_chnos (fijo)"
+  },
+  {
+   "pair": [
+    "N",
+    "O"
+   ],
+   "bond": "ppp",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": -2.7951234652965984,
+     "r0": 1.4,
+     "n": 1.4218018322460566,
+     "nc": 6.5,
+     "rc": 1.9865536613576908,
+     "cutoff": 2.3692841832706404
+    },
+    "r1": 2.232594711158873,
+    "rm": 2.3692841832706404
+   },
+   "unit": "eV",
+   "source": "xu_chnos (fijo)"
+  },
+  {
+   "pair": [
+    "O",
+    "O"
+   ],
+   "bond": "sss",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": -3.0479707351198573,
+     "r0": 1.47,
+     "n": 2.124671071842823,
+     "nc": 6.5,
+     "rc": 2.0858813444255757,
+     "cutoff": 2.4877483924341726
+    },
+    "r1": 2.3442244467168165,
+    "rm": 2.4877483924341726
+   },
+   "unit": "eV",
+   "source": "xu_chnos (fijo)"
+  },
+  {
+   "pair": [
+    "O",
+    "O"
+   ],
+   "bond": "sps",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": 4.765844986128385,
+     "r0": 1.47,
+     "n": 2.124671071842823,
+     "nc": 6.5,
+     "rc": 2.0858813444255757,
+     "cutoff": 2.4877483924341726
+    },
+    "r1": 2.3442244467168165,
+    "rm": 2.4877483924341726
+   },
+   "unit": "eV",
+   "source": "xu_chnos (fijo)"
+  },
+  {
+   "pair": [
+    "O",
+    "O"
+   ],
+   "bond": "pps",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": 5.0243921603986195,
+     "r0": 1.47,
+     "n": 2.124671071842823,
+     "nc": 6.5,
+     "rc": 2.0858813444255757,
+     "cutoff": 2.4877483924341726
+    },
+    "r1": 2.3442244467168165,
+    "rm": 2.4877483924341726
+   },
+   "unit": "eV",
+   "source": "xu_chnos (fijo)"
+  },
+  {
+   "pair": [
+    "O",
+    "O"
+   ],
+   "bond": "ppp",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": -1.7579873116794322,
+     "r0": 1.47,
+     "n": 2.124671071842823,
+     "nc": 6.5,
+     "rc": 2.0858813444255757,
+     "cutoff": 2.4877483924341726
+    },
+    "r1": 2.3442244467168165,
+    "rm": 2.4877483924341726
+   },
+   "unit": "eV",
+   "source": "xu_chnos (fijo)"
+  },
+  {
+   "pair": [
+    "H",
+    "S"
+   ],
+   "bond": "sss",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": -4.127396201942461,
+     "r0": 1.34,
+     "n": 0.96014211103573,
+     "nc": 6.5,
+     "rc": 1.9014156472995043,
+     "cutoff": 1.94
+    },
+    "r1": 1.74,
+    "rm": 1.94
+   },
+   "unit": "eV",
+   "source": "xu_chnos (fijo)"
+  },
+  {
+   "pair": [
+    "H",
+    "S"
+   ],
+   "bond": "sps",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": 5.230156784108823,
+     "r0": 1.34,
+     "n": 0.96014211103573,
+     "nc": 6.5,
+     "rc": 1.9014156472995043,
+     "cutoff": 1.94
+    },
+    "r1": 1.74,
+    "rm": 1.94
+   },
+   "unit": "eV",
+   "source": "xu_chnos (fijo)"
+  },
+  {
+   "pair": [
+    "C",
+    "S"
+   ],
+   "bond": "sss",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": -2.6451051262009866,
+     "r0": 1.82,
+     "n": 1.5443755816717093,
+     "nc": 6.5,
+     "rc": 2.582519759764998,
+     "cutoff": 3.0800694382518325
+    },
+    "r1": 2.9023731245065347,
+    "rm": 3.0800694382518325
+   },
+   "unit": "eV",
+   "source": "xu_chnos (fijo)"
+  },
+  {
+   "pair": [
+    "C",
+    "S"
+   ],
+   "bond": "sps",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": 3.8145353052189677,
+     "r0": 1.82,
+     "n": 1.5443755816717093,
+     "nc": 6.5,
+     "rc": 2.582519759764998,
+     "cutoff": 3.0800694382518325
+    },
+    "r1": 2.9023731245065347,
+    "rm": 3.0800694382518325
+   },
+   "unit": "eV",
+   "source": "xu_chnos (fijo)"
+  },
+  {
+   "pair": [
+    "S",
+    "C"
+   ],
+   "bond": "sps",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": 3.4711374993046253,
+     "r0": 1.82,
+     "n": 1.5443755816717093,
+     "nc": 6.5,
+     "rc": 2.582519759764998,
+     "cutoff": 3.0800694382518325
+    },
+    "r1": 2.9023731245065347,
+    "rm": 3.0800694382518325
+   },
+   "unit": "eV",
+   "source": "xu_chnos (fijo)"
+  },
+  {
+   "pair": [
+    "C",
+    "S"
+   ],
+   "bond": "pps",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": 4.121653050397547,
+     "r0": 1.82,
+     "n": 1.5443755816717093,
+     "nc": 6.5,
+     "rc": 2.582519759764998,
+     "cutoff": 3.0800694382518325
+    },
+    "r1": 2.9023731245065347,
+    "rm": 3.0800694382518325
+   },
+   "unit": "eV",
+   "source": "xu_chnos (fijo)"
+  },
+  {
+   "pair": [
+    "C",
+    "S"
+   ],
+   "bond": "ppp",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": -1.5033509696299028,
+     "r0": 1.82,
+     "n": 1.5443755816717093,
+     "nc": 6.5,
+     "rc": 2.582519759764998,
+     "cutoff": 3.0800694382518325
+    },
+    "r1": 2.9023731245065347,
+    "rm": 3.0800694382518325
+   },
+   "unit": "eV",
+   "source": "xu_chnos (fijo)"
+  },
+  {
+   "pair": [
+    "N",
+    "S"
+   ],
+   "bond": "sss",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": -3.14734315851788,
+     "r0": 1.65,
+     "n": 1.22565369343343,
+     "nc": 6.5,
+     "rc": 2.3412953866001356,
+     "cutoff": 2.792370644568969
+    },
+    "r1": 2.6312723381515286,
+    "rm": 2.792370644568969
+   },
+   "unit": "eV",
+   "source": "xu_chnos (fijo)"
+  },
+  {
+   "pair": [
+    "N",
+    "S"
+   ],
+   "bond": "sps",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": 5.897043850039312,
+     "r0": 1.65,
+     "n": 1.22565369343343,
+     "nc": 6.5,
+     "rc": 2.3412953866001356,
+     "cutoff": 2.792370644568969
+    },
+    "r1": 2.6312723381515286,
+    "rm": 2.792370644568969
+   },
+   "unit": "eV",
+   "source": "xu_chnos (fijo)"
+  },
+  {
+   "pair": [
+    "S",
+    "N"
+   ],
+   "bond": "sps",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": 4.4826154582599225,
+     "r0": 1.65,
+     "n": 1.22565369343343,
+     "nc": 6.5,
+     "rc": 2.3412953866001356,
+     "cutoff": 2.792370644568969
+    },
+    "r1": 2.6312723381515286,
+    "rm": 2.792370644568969
+   },
+   "unit": "eV",
+   "source": "xu_chnos (fijo)"
+  },
+  {
+   "pair": [
+    "N",
+    "S"
+   ],
+   "bond": "pps",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": 5.021857216279198,
+     "r0": 1.65,
+     "n": 1.22565369343343,
+     "nc": 6.5,
+     "rc": 2.3412953866001356,
+     "cutoff": 2.792370644568969
+    },
+    "r1": 2.6312723381515286,
+    "rm": 2.792370644568969
+   },
+   "unit": "eV",
+   "source": "xu_chnos (fijo)"
+  },
+  {
+   "pair": [
+    "N",
+    "S"
+   ],
+   "bond": "ppp",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": -0.6913387244229062,
+     "r0": 1.65,
+     "n": 1.22565369343343,
+     "nc": 6.5,
+     "rc": 2.3412953866001356,
+     "cutoff": 2.792370644568969
+    },
+    "r1": 2.6312723381515286,
+    "rm": 2.792370644568969
+   },
+   "unit": "eV",
+   "source": "xu_chnos (fijo)"
+  },
+  {
+   "pair": [
+    "O",
+    "S"
+   ],
+   "bond": "sss",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": -4.366909495857286,
+     "r0": 1.45,
+     "n": 0.9337918041099352,
+     "nc": 6.5,
+     "rc": 2.05750200640618,
+     "cutoff": 2.4539014755303064
+    },
+    "r1": 2.312330236557404,
+    "rm": 2.4539014755303064
+   },
+   "unit": "eV",
+   "source": "xu_chnos (fijo)"
+  },
+  {
+   "pair": [
+    "O",
+    "S"
+   ],
+   "bond": "sps",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": 6.315277009018716,
+     "r0": 1.45,
+     "n": 0.9337918041099352,
+     "nc": 6.5,
+     "rc": 2.05750200640618,
+     "cutoff": 2.4539014755303064
+    },
+    "r1": 2.312330236557404,
+    "rm": 2.4539014755303064
+   },
+   "unit": "eV",
+   "source": "xu_chnos (fijo)"
+  },
+  {
+   "pair": [
+    "S",
+    "O"
+   ],
+   "bond": "sps",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": 5.404506548654436,
+     "r0": 1.45,
+     "n": 0.9337918041099352,
+     "nc": 6.5,
+     "rc": 2.05750200640618,
+     "cutoff": 2.4539014755303064
+    },
+    "r1": 2.312330236557404,
+    "rm": 2.4539014755303064
+   },
+   "unit": "eV",
+   "source": "xu_chnos (fijo)"
+  },
+  {
+   "pair": [
+    "O",
+    "S"
+   ],
+   "bond": "pps",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": 5.786209279972073,
+     "r0": 1.45,
+     "n": 0.9337918041099352,
+     "nc": 6.5,
+     "rc": 2.05750200640618,
+     "cutoff": 2.4539014755303064
+    },
+    "r1": 2.312330236557404,
+    "rm": 2.4539014755303064
+   },
+   "unit": "eV",
+   "source": "xu_chnos (fijo)"
+  },
+  {
+   "pair": [
+    "O",
+    "S"
+   ],
+   "bond": "ppp",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": -2.7343021153934486,
+     "r0": 1.45,
+     "n": 0.9337918041099352,
+     "nc": 6.5,
+     "rc": 2.05750200640618,
+     "cutoff": 2.4539014755303064
+    },
+    "r1": 2.312330236557404,
+    "rm": 2.4539014755303064
+   },
+   "unit": "eV",
+   "source": "xu_chnos (fijo)"
+  },
+  {
+   "pair": [
+    "S",
+    "S"
+   ],
+   "bond": "sss",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": -1.6193029767394633,
+     "r0": 2.05,
+     "n": 2.6227899114222395,
+     "nc": 6.5,
+     "rc": 2.9088821469880477,
+     "cutoff": 3.469308982646295
+    },
+    "r1": 3.269156541339778,
+    "rm": 3.469308982646295
+   },
+   "unit": "eV",
+   "source": "xu_chnos (fijo)"
+  },
+  {
+   "pair": [
+    "S",
+    "S"
+   ],
+   "bond": "sps",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": 4.317688064950254,
+     "r0": 2.05,
+     "n": 2.6227899114222395,
+     "nc": 6.5,
+     "rc": 2.9088821469880477,
+     "cutoff": 3.469308982646295
+    },
+    "r1": 3.269156541339778,
+    "rm": 3.469308982646295
+   },
+   "unit": "eV",
+   "source": "xu_chnos (fijo)"
+  },
+  {
+   "pair": [
+    "S",
+    "S"
+   ],
+   "bond": "pps",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": 4.037006897811625,
+     "r0": 2.05,
+     "n": 2.6227899114222395,
+     "nc": 6.5,
+     "rc": 2.9088821469880477,
+     "cutoff": 3.469308982646295
+    },
+    "r1": 3.269156541339778,
+    "rm": 3.469308982646295
+   },
+   "unit": "eV",
+   "source": "xu_chnos (fijo)"
+  },
+  {
+   "pair": [
+    "S",
+    "S"
+   ],
+   "bond": "ppp",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": -2.6888835037886,
+     "r0": 2.05,
+     "n": 2.6227899114222395,
+     "nc": 6.5,
+     "rc": 2.9088821469880477,
+     "cutoff": 3.469308982646295
+    },
+    "r1": 3.269156541339778,
+    "rm": 3.469308982646295
+   },
+   "unit": "eV",
+   "source": "xu_chnos (fijo)"
+  },
+  {
+   "pair": [
+    "H",
+    "Mo"
+   ],
+   "bond": "sss",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": -2.575435804133662,
+     "r0": 1.7,
+     "n": 0.5000000000000001,
+     "nc": 6.5,
+     "rc": 2.4122437316486245,
+     "cutoff": 2.3
+    },
+    "r1": 2.1,
+    "rm": 2.3
+   },
+   "unit": "eV",
+   "source": "ajustado (ajuste a GPAW (PBE, lcao/dzp, GPAW 26.7.0); receta tbkit.recipes.xu_tm)"
+  },
+  {
+   "pair": [
+    "H",
+    "Mo"
+   ],
+   "bond": "sps",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": 4.6459620030521265,
+     "r0": 1.7,
+     "n": 0.5000000000000001,
+     "nc": 6.5,
+     "rc": 2.4122437316486245,
+     "cutoff": 2.3
+    },
+    "r1": 2.1,
+    "rm": 2.3
+   },
+   "unit": "eV",
+   "source": "ajustado (ajuste a GPAW (PBE, lcao/dzp, GPAW 26.7.0); receta tbkit.recipes.xu_tm)"
+  },
+  {
+   "pair": [
+    "H",
+    "Mo"
+   ],
+   "bond": "sds",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": -2.5034203550962255,
+     "r0": 1.7,
+     "n": 0.5000000000000001,
+     "nc": 6.5,
+     "rc": 2.4122437316486245,
+     "cutoff": 2.3
+    },
+    "r1": 2.1,
+    "rm": 2.3
+   },
+   "unit": "eV",
+   "source": "ajustado (ajuste a GPAW (PBE, lcao/dzp, GPAW 26.7.0); receta tbkit.recipes.xu_tm)"
+  },
+  {
+   "pair": [
+    "C",
+    "Mo"
+   ],
+   "bond": "sss",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": -1.6072967345459972,
+     "r0": 2.1,
+     "n": 1.8859253914190142,
+     "nc": 6.5,
+     "rc": 2.9798304920365366,
+     "cutoff": 3.553926274905961
+    },
+    "r1": 3.3488920667383093,
+    "rm": 3.553926274905961
+   },
+   "unit": "eV",
+   "source": "ajustado (ajuste a GPAW (PBE, lcao/dzp, GPAW 26.7.0); receta tbkit.recipes.xu_tm)"
+  },
+  {
+   "pair": [
+    "C",
+    "Mo"
+   ],
+   "bond": "sps",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": 4.057679435260287,
+     "r0": 2.1,
+     "n": 1.8859253914190142,
+     "nc": 6.5,
+     "rc": 2.9798304920365366,
+     "cutoff": 3.553926274905961
+    },
+    "r1": 3.3488920667383093,
+    "rm": 3.553926274905961
+   },
+   "unit": "eV",
+   "source": "ajustado (ajuste a GPAW (PBE, lcao/dzp, GPAW 26.7.0); receta tbkit.recipes.xu_tm)"
+  },
+  {
+   "pair": [
+    "Mo",
+    "C"
+   ],
+   "bond": "sps",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": 1.8460721325330325,
+     "r0": 2.1,
+     "n": 1.8859253914190142,
+     "nc": 6.5,
+     "rc": 2.9798304920365366,
+     "cutoff": 3.553926274905961
+    },
+    "r1": 3.3488920667383093,
+    "rm": 3.553926274905961
+   },
+   "unit": "eV",
+   "source": "ajustado (ajuste a GPAW (PBE, lcao/dzp, GPAW 26.7.0); receta tbkit.recipes.xu_tm)"
+  },
+  {
+   "pair": [
+    "C",
+    "Mo"
+   ],
+   "bond": "pps",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": 2.0257434126789415,
+     "r0": 2.1,
+     "n": 1.8859253914190142,
+     "nc": 6.5,
+     "rc": 2.9798304920365366,
+     "cutoff": 3.553926274905961
+    },
+    "r1": 3.3488920667383093,
+    "rm": 3.553926274905961
+   },
+   "unit": "eV",
+   "source": "ajustado (ajuste a GPAW (PBE, lcao/dzp, GPAW 26.7.0); receta tbkit.recipes.xu_tm)"
+  },
+  {
+   "pair": [
+    "C",
+    "Mo"
+   ],
+   "bond": "ppp",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": -0.1780088294697054,
+     "r0": 2.1,
+     "n": 1.8859253914190142,
+     "nc": 6.5,
+     "rc": 2.9798304920365366,
+     "cutoff": 3.553926274905961
+    },
+    "r1": 3.3488920667383093,
+    "rm": 3.553926274905961
+   },
+   "unit": "eV",
+   "source": "ajustado (ajuste a GPAW (PBE, lcao/dzp, GPAW 26.7.0); receta tbkit.recipes.xu_tm)"
+  },
+  {
+   "pair": [
+    "C",
+    "Mo"
+   ],
+   "bond": "sds",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": -1.654801647265279,
+     "r0": 2.1,
+     "n": 1.8859253914190142,
+     "nc": 6.5,
+     "rc": 2.9798304920365366,
+     "cutoff": 3.553926274905961
+    },
+    "r1": 3.3488920667383093,
+    "rm": 3.553926274905961
+   },
+   "unit": "eV",
+   "source": "ajustado (ajuste a GPAW (PBE, lcao/dzp, GPAW 26.7.0); receta tbkit.recipes.xu_tm)"
+  },
+  {
+   "pair": [
+    "C",
+    "Mo"
+   ],
+   "bond": "pds",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": -2.3221301306587385,
+     "r0": 2.1,
+     "n": 1.8859253914190142,
+     "nc": 6.5,
+     "rc": 2.9798304920365366,
+     "cutoff": 3.553926274905961
+    },
+    "r1": 3.3488920667383093,
+    "rm": 3.553926274905961
+   },
+   "unit": "eV",
+   "source": "ajustado (ajuste a GPAW (PBE, lcao/dzp, GPAW 26.7.0); receta tbkit.recipes.xu_tm)"
+  },
+  {
+   "pair": [
+    "C",
+    "Mo"
+   ],
+   "bond": "pdp",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": 1.4734763356187257,
+     "r0": 2.1,
+     "n": 1.8859253914190142,
+     "nc": 6.5,
+     "rc": 2.9798304920365366,
+     "cutoff": 3.553926274905961
+    },
+    "r1": 3.3488920667383093,
+    "rm": 3.553926274905961
+   },
+   "unit": "eV",
+   "source": "ajustado (ajuste a GPAW (PBE, lcao/dzp, GPAW 26.7.0); receta tbkit.recipes.xu_tm)"
+  },
+  {
+   "pair": [
+    "N",
+    "Mo"
+   ],
+   "bond": "sss",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": -2.782552131137927,
+     "r0": 1.98,
+     "n": 1.8476065027688842,
+     "nc": 6.5,
+     "rc": 2.809554463920163,
+     "cutoff": 3.350844773482763
+    },
+    "r1": 3.1575268057818344,
+    "rm": 3.350844773482763
+   },
+   "unit": "eV",
+   "source": "ajustado (ajuste a GPAW (PBE, lcao/dzp, GPAW 26.7.0); receta tbkit.recipes.xu_tm)"
+  },
+  {
+   "pair": [
+    "N",
+    "Mo"
+   ],
+   "bond": "sps",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": 3.70473873213099,
+     "r0": 1.98,
+     "n": 1.8476065027688842,
+     "nc": 6.5,
+     "rc": 2.809554463920163,
+     "cutoff": 3.350844773482763
+    },
+    "r1": 3.1575268057818344,
+    "rm": 3.350844773482763
+   },
+   "unit": "eV",
+   "source": "ajustado (ajuste a GPAW (PBE, lcao/dzp, GPAW 26.7.0); receta tbkit.recipes.xu_tm)"
+  },
+  {
+   "pair": [
+    "Mo",
+    "N"
+   ],
+   "bond": "sps",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": 2.038499278120392,
+     "r0": 1.98,
+     "n": 1.8476065027688842,
+     "nc": 6.5,
+     "rc": 2.809554463920163,
+     "cutoff": 3.350844773482763
+    },
+    "r1": 3.1575268057818344,
+    "rm": 3.350844773482763
+   },
+   "unit": "eV",
+   "source": "ajustado (ajuste a GPAW (PBE, lcao/dzp, GPAW 26.7.0); receta tbkit.recipes.xu_tm)"
+  },
+  {
+   "pair": [
+    "N",
+    "Mo"
+   ],
+   "bond": "pps",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": 2.413606146589838,
+     "r0": 1.98,
+     "n": 1.8476065027688842,
+     "nc": 6.5,
+     "rc": 2.809554463920163,
+     "cutoff": 3.350844773482763
+    },
+    "r1": 3.1575268057818344,
+    "rm": 3.350844773482763
+   },
+   "unit": "eV",
+   "source": "ajustado (ajuste a GPAW (PBE, lcao/dzp, GPAW 26.7.0); receta tbkit.recipes.xu_tm)"
+  },
+  {
+   "pair": [
+    "N",
+    "Mo"
+   ],
+   "bond": "ppp",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": -1.1412394461949509,
+     "r0": 1.98,
+     "n": 1.8476065027688842,
+     "nc": 6.5,
+     "rc": 2.809554463920163,
+     "cutoff": 3.350844773482763
+    },
+    "r1": 3.1575268057818344,
+    "rm": 3.350844773482763
+   },
+   "unit": "eV",
+   "source": "ajustado (ajuste a GPAW (PBE, lcao/dzp, GPAW 26.7.0); receta tbkit.recipes.xu_tm)"
+  },
+  {
+   "pair": [
+    "N",
+    "Mo"
+   ],
+   "bond": "sds",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": -2.023623549796686,
+     "r0": 1.98,
+     "n": 1.8476065027688842,
+     "nc": 6.5,
+     "rc": 2.809554463920163,
+     "cutoff": 3.350844773482763
+    },
+    "r1": 3.1575268057818344,
+    "rm": 3.350844773482763
+   },
+   "unit": "eV",
+   "source": "ajustado (ajuste a GPAW (PBE, lcao/dzp, GPAW 26.7.0); receta tbkit.recipes.xu_tm)"
+  },
+  {
+   "pair": [
+    "N",
+    "Mo"
+   ],
+   "bond": "pds",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": -2.4673894597373995,
+     "r0": 1.98,
+     "n": 1.8476065027688842,
+     "nc": 6.5,
+     "rc": 2.809554463920163,
+     "cutoff": 3.350844773482763
+    },
+    "r1": 3.1575268057818344,
+    "rm": 3.350844773482763
+   },
+   "unit": "eV",
+   "source": "ajustado (ajuste a GPAW (PBE, lcao/dzp, GPAW 26.7.0); receta tbkit.recipes.xu_tm)"
+  },
+  {
+   "pair": [
+    "N",
+    "Mo"
+   ],
+   "bond": "pdp",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": 1.3860805780307777,
+     "r0": 1.98,
+     "n": 1.8476065027688842,
+     "nc": 6.5,
+     "rc": 2.809554463920163,
+     "cutoff": 3.350844773482763
+    },
+    "r1": 3.1575268057818344,
+    "rm": 3.350844773482763
+   },
+   "unit": "eV",
+   "source": "ajustado (ajuste a GPAW (PBE, lcao/dzp, GPAW 26.7.0); receta tbkit.recipes.xu_tm)"
+  },
+  {
+   "pair": [
+    "O",
+    "Mo"
+   ],
+   "bond": "sss",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": -1.7850187246384202,
+     "r0": 1.8,
+     "n": 1.5969920570019174,
+     "nc": 6.5,
+     "rc": 2.5541404217456027,
+     "cutoff": 3.0462225213479663
+    },
+    "r1": 2.8704789143471223,
+    "rm": 3.0462225213479663
+   },
+   "unit": "eV",
+   "source": "ajustado (ajuste a GPAW (PBE, lcao/dzp, GPAW 26.7.0); receta tbkit.recipes.xu_tm)"
+  },
+  {
+   "pair": [
+    "O",
+    "Mo"
+   ],
+   "bond": "sps",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": 3.8477950225990214,
+     "r0": 1.8,
+     "n": 1.5969920570019174,
+     "nc": 6.5,
+     "rc": 2.5541404217456027,
+     "cutoff": 3.0462225213479663
+    },
+    "r1": 2.8704789143471223,
+    "rm": 3.0462225213479663
+   },
+   "unit": "eV",
+   "source": "ajustado (ajuste a GPAW (PBE, lcao/dzp, GPAW 26.7.0); receta tbkit.recipes.xu_tm)"
+  },
+  {
+   "pair": [
+    "Mo",
+    "O"
+   ],
+   "bond": "sps",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": 2.367079700133163,
+     "r0": 1.8,
+     "n": 1.5969920570019174,
+     "nc": 6.5,
+     "rc": 2.5541404217456027,
+     "cutoff": 3.0462225213479663
+    },
+    "r1": 2.8704789143471223,
+    "rm": 3.0462225213479663
+   },
+   "unit": "eV",
+   "source": "ajustado (ajuste a GPAW (PBE, lcao/dzp, GPAW 26.7.0); receta tbkit.recipes.xu_tm)"
+  },
+  {
+   "pair": [
+    "O",
+    "Mo"
+   ],
+   "bond": "pps",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": 0.5168295979639252,
+     "r0": 1.8,
+     "n": 1.5969920570019174,
+     "nc": 6.5,
+     "rc": 2.5541404217456027,
+     "cutoff": 3.0462225213479663
+    },
+    "r1": 2.8704789143471223,
+    "rm": 3.0462225213479663
+   },
+   "unit": "eV",
+   "source": "ajustado (ajuste a GPAW (PBE, lcao/dzp, GPAW 26.7.0); receta tbkit.recipes.xu_tm)"
+  },
+  {
+   "pair": [
+    "O",
+    "Mo"
+   ],
+   "bond": "ppp",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": -3.1972476664534732,
+     "r0": 1.8,
+     "n": 1.5969920570019174,
+     "nc": 6.5,
+     "rc": 2.5541404217456027,
+     "cutoff": 3.0462225213479663
+    },
+    "r1": 2.8704789143471223,
+    "rm": 3.0462225213479663
+   },
+   "unit": "eV",
+   "source": "ajustado (ajuste a GPAW (PBE, lcao/dzp, GPAW 26.7.0); receta tbkit.recipes.xu_tm)"
+  },
+  {
+   "pair": [
+    "O",
+    "Mo"
+   ],
+   "bond": "sds",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": -2.373233218943665,
+     "r0": 1.8,
+     "n": 1.5969920570019174,
+     "nc": 6.5,
+     "rc": 2.5541404217456027,
+     "cutoff": 3.0462225213479663
+    },
+    "r1": 2.8704789143471223,
+    "rm": 3.0462225213479663
+   },
+   "unit": "eV",
+   "source": "ajustado (ajuste a GPAW (PBE, lcao/dzp, GPAW 26.7.0); receta tbkit.recipes.xu_tm)"
+  },
+  {
+   "pair": [
+    "O",
+    "Mo"
+   ],
+   "bond": "pds",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": -2.7841126098569062,
+     "r0": 1.8,
+     "n": 1.5969920570019174,
+     "nc": 6.5,
+     "rc": 2.5541404217456027,
+     "cutoff": 3.0462225213479663
+    },
+    "r1": 2.8704789143471223,
+    "rm": 3.0462225213479663
+   },
+   "unit": "eV",
+   "source": "ajustado (ajuste a GPAW (PBE, lcao/dzp, GPAW 26.7.0); receta tbkit.recipes.xu_tm)"
+  },
+  {
+   "pair": [
+    "O",
+    "Mo"
+   ],
+   "bond": "pdp",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": 1.6332551466117013,
+     "r0": 1.8,
+     "n": 1.5969920570019174,
+     "nc": 6.5,
+     "rc": 2.5541404217456027,
+     "cutoff": 3.0462225213479663
+    },
+    "r1": 2.8704789143471223,
+    "rm": 3.0462225213479663
+   },
+   "unit": "eV",
+   "source": "ajustado (ajuste a GPAW (PBE, lcao/dzp, GPAW 26.7.0); receta tbkit.recipes.xu_tm)"
+  },
+  {
+   "pair": [
+    "S",
+    "Mo"
+   ],
+   "bond": "sss",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": -1.4365509819619007,
+     "r0": 2.2,
+     "n": 0.8676786719269689,
+     "nc": 6.5,
+     "rc": 3.121727182133515,
+     "cutoff": 3.7231608594252927
+    },
+    "r1": 3.508363117535372,
+    "rm": 3.7231608594252927
+   },
+   "unit": "eV",
+   "source": "ajustado (ajuste a GPAW (PBE, lcao/dzp, GPAW 26.7.0); receta tbkit.recipes.xu_tm)"
+  },
+  {
+   "pair": [
+    "S",
+    "Mo"
+   ],
+   "bond": "sps",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": 4.113635910363679,
+     "r0": 2.2,
+     "n": 0.8676786719269689,
+     "nc": 6.5,
+     "rc": 3.121727182133515,
+     "cutoff": 3.7231608594252927
+    },
+    "r1": 3.508363117535372,
+    "rm": 3.7231608594252927
+   },
+   "unit": "eV",
+   "source": "ajustado (ajuste a GPAW (PBE, lcao/dzp, GPAW 26.7.0); receta tbkit.recipes.xu_tm)"
+  },
+  {
+   "pair": [
+    "Mo",
+    "S"
+   ],
+   "bond": "sps",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": 1.3582125894769113,
+     "r0": 2.2,
+     "n": 0.8676786719269689,
+     "nc": 6.5,
+     "rc": 3.121727182133515,
+     "cutoff": 3.7231608594252927
+    },
+    "r1": 3.508363117535372,
+    "rm": 3.7231608594252927
+   },
+   "unit": "eV",
+   "source": "ajustado (ajuste a GPAW (PBE, lcao/dzp, GPAW 26.7.0); receta tbkit.recipes.xu_tm)"
+  },
+  {
+   "pair": [
+    "S",
+    "Mo"
+   ],
+   "bond": "pps",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": 2.0545929021581313,
+     "r0": 2.2,
+     "n": 0.8676786719269689,
+     "nc": 6.5,
+     "rc": 3.121727182133515,
+     "cutoff": 3.7231608594252927
+    },
+    "r1": 3.508363117535372,
+    "rm": 3.7231608594252927
+   },
+   "unit": "eV",
+   "source": "ajustado (ajuste a GPAW (PBE, lcao/dzp, GPAW 26.7.0); receta tbkit.recipes.xu_tm)"
+  },
+  {
+   "pair": [
+    "S",
+    "Mo"
+   ],
+   "bond": "ppp",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": -0.9651065769548864,
+     "r0": 2.2,
+     "n": 0.8676786719269689,
+     "nc": 6.5,
+     "rc": 3.121727182133515,
+     "cutoff": 3.7231608594252927
+    },
+    "r1": 3.508363117535372,
+    "rm": 3.7231608594252927
+   },
+   "unit": "eV",
+   "source": "ajustado (ajuste a GPAW (PBE, lcao/dzp, GPAW 26.7.0); receta tbkit.recipes.xu_tm)"
+  },
+  {
+   "pair": [
+    "S",
+    "Mo"
+   ],
+   "bond": "sds",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": -1.8130381147779155,
+     "r0": 2.2,
+     "n": 0.8676786719269689,
+     "nc": 6.5,
+     "rc": 3.121727182133515,
+     "cutoff": 3.7231608594252927
+    },
+    "r1": 3.508363117535372,
+    "rm": 3.7231608594252927
+   },
+   "unit": "eV",
+   "source": "ajustado (ajuste a GPAW (PBE, lcao/dzp, GPAW 26.7.0); receta tbkit.recipes.xu_tm)"
+  },
+  {
+   "pair": [
+    "S",
+    "Mo"
+   ],
+   "bond": "pds",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": -2.530990458848954,
+     "r0": 2.2,
+     "n": 0.8676786719269689,
+     "nc": 6.5,
+     "rc": 3.121727182133515,
+     "cutoff": 3.7231608594252927
+    },
+    "r1": 3.508363117535372,
+    "rm": 3.7231608594252927
+   },
+   "unit": "eV",
+   "source": "ajustado (ajuste a GPAW (PBE, lcao/dzp, GPAW 26.7.0); receta tbkit.recipes.xu_tm)"
+  },
+  {
+   "pair": [
+    "S",
+    "Mo"
+   ],
+   "bond": "pdp",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": 1.022934560972552,
+     "r0": 2.2,
+     "n": 0.8676786719269689,
+     "nc": 6.5,
+     "rc": 3.121727182133515,
+     "cutoff": 3.7231608594252927
+    },
+    "r1": 3.508363117535372,
+    "rm": 3.7231608594252927
+   },
+   "unit": "eV",
+   "source": "ajustado (ajuste a GPAW (PBE, lcao/dzp, GPAW 26.7.0); receta tbkit.recipes.xu_tm)"
+  },
+  {
+   "pair": [
+    "Mo",
+    "Mo"
+   ],
+   "bond": "sss",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": -0.7334083245740172,
+     "r0": 2.73,
+     "n": 1.4444474258457354,
+     "nc": 6.5,
+     "rc": 3.8737796396474975,
+     "cutoff": 4.2
+    },
+    "r1": 3.9,
+    "rm": 4.2
+   },
+   "unit": "eV",
+   "source": "ajustado (ajuste a GPAW (PBE, lcao/dzp, GPAW 26.7.0); receta tbkit.recipes.xu_tm)"
+  },
+  {
+   "pair": [
+    "Mo",
+    "Mo"
+   ],
+   "bond": "sps",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": 1.3817763165217982,
+     "r0": 2.73,
+     "n": 1.4444474258457354,
+     "nc": 6.5,
+     "rc": 3.8737796396474975,
+     "cutoff": 4.2
+    },
+    "r1": 3.9,
+    "rm": 4.2
+   },
+   "unit": "eV",
+   "source": "ajustado (ajuste a GPAW (PBE, lcao/dzp, GPAW 26.7.0); receta tbkit.recipes.xu_tm)"
+  },
+  {
+   "pair": [
+    "Mo",
+    "Mo"
+   ],
+   "bond": "pps",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": 5.415780583109972,
+     "r0": 2.73,
+     "n": 1.4444474258457354,
+     "nc": 6.5,
+     "rc": 3.8737796396474975,
+     "cutoff": 4.2
+    },
+    "r1": 3.9,
+    "rm": 4.2
+   },
+   "unit": "eV",
+   "source": "ajustado (ajuste a GPAW (PBE, lcao/dzp, GPAW 26.7.0); receta tbkit.recipes.xu_tm)"
+  },
+  {
+   "pair": [
+    "Mo",
+    "Mo"
+   ],
+   "bond": "ppp",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": -4.217406468213133,
+     "r0": 2.73,
+     "n": 1.4444474258457354,
+     "nc": 6.5,
+     "rc": 3.8737796396474975,
+     "cutoff": 4.2
+    },
+    "r1": 3.9,
+    "rm": 4.2
+   },
+   "unit": "eV",
+   "source": "ajustado (ajuste a GPAW (PBE, lcao/dzp, GPAW 26.7.0); receta tbkit.recipes.xu_tm)"
+  },
+  {
+   "pair": [
+    "Mo",
+    "Mo"
+   ],
+   "bond": "sds",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": -0.0012289326743038227,
+     "r0": 2.73,
+     "n": 1.4444474258457354,
+     "nc": 6.5,
+     "rc": 3.8737796396474975,
+     "cutoff": 4.2
+    },
+    "r1": 3.9,
+    "rm": 4.2
+   },
+   "unit": "eV",
+   "source": "ajustado (ajuste a GPAW (PBE, lcao/dzp, GPAW 26.7.0); receta tbkit.recipes.xu_tm)"
+  },
+  {
+   "pair": [
+    "Mo",
+    "Mo"
+   ],
+   "bond": "pds",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": 0.3318802302743184,
+     "r0": 2.73,
+     "n": 1.4444474258457354,
+     "nc": 6.5,
+     "rc": 3.8737796396474975,
+     "cutoff": 4.2
+    },
+    "r1": 3.9,
+    "rm": 4.2
+   },
+   "unit": "eV",
+   "source": "ajustado (ajuste a GPAW (PBE, lcao/dzp, GPAW 26.7.0); receta tbkit.recipes.xu_tm)"
+  },
+  {
+   "pair": [
+    "Mo",
+    "Mo"
+   ],
+   "bond": "pdp",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": 1.1779368683460423,
+     "r0": 2.73,
+     "n": 1.4444474258457354,
+     "nc": 6.5,
+     "rc": 3.8737796396474975,
+     "cutoff": 4.2
+    },
+    "r1": 3.9,
+    "rm": 4.2
+   },
+   "unit": "eV",
+   "source": "ajustado (ajuste a GPAW (PBE, lcao/dzp, GPAW 26.7.0); receta tbkit.recipes.xu_tm)"
+  },
+  {
+   "pair": [
+    "Mo",
+    "Mo"
+   ],
+   "bond": "dds",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": -0.7481326044226805,
+     "r0": 2.73,
+     "n": 1.4444474258457354,
+     "nc": 6.5,
+     "rc": 3.8737796396474975,
+     "cutoff": 4.2
+    },
+    "r1": 3.9,
+    "rm": 4.2
+   },
+   "unit": "eV",
+   "source": "ajustado (ajuste a GPAW (PBE, lcao/dzp, GPAW 26.7.0); receta tbkit.recipes.xu_tm)"
+  },
+  {
+   "pair": [
+    "Mo",
+    "Mo"
+   ],
+   "bond": "ddp",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": 1.0605537791892363,
+     "r0": 2.73,
+     "n": 1.4444474258457354,
+     "nc": 6.5,
+     "rc": 3.8737796396474975,
+     "cutoff": 4.2
+    },
+    "r1": 3.9,
+    "rm": 4.2
+   },
+   "unit": "eV",
+   "source": "ajustado (ajuste a GPAW (PBE, lcao/dzp, GPAW 26.7.0); receta tbkit.recipes.xu_tm)"
+  },
+  {
+   "pair": [
+    "Mo",
+    "Mo"
+   ],
+   "bond": "ddd",
+   "law": {
+    "type": "Tail",
+    "inner": {
+     "type": "GSP",
+     "v0": -0.37293970882510014,
+     "r0": 2.73,
+     "n": 1.4444474258457354,
+     "nc": 6.5,
+     "rc": 3.8737796396474975,
+     "cutoff": 4.2
+    },
+    "r1": 3.9,
+    "rm": 4.2
+   },
+   "unit": "eV",
+   "source": "ajustado (ajuste a GPAW (PBE, lcao/dzp, GPAW 26.7.0); receta tbkit.recipes.xu_tm)"
+  }
+ ],
+ "overlap": [],
+ "scc": true,
+ "onsite_dipole": {
+  "C": {
+   "value": 0.4952,
+   "unit": "Å",
+   "source": "GPAW aeatom PBE, |⟨ns|r|np⟩| del átomo libre"
+  },
+  "N": {
+   "value": 0.4131,
+   "unit": "Å",
+   "source": "GPAW aeatom PBE, |⟨ns|r|np⟩| del átomo libre"
+  },
+  "O": {
+   "value": 0.355,
+   "unit": "Å",
+   "source": "GPAW aeatom PBE, |⟨ns|r|np⟩| del átomo libre"
+  },
+  "S": {
+   "value": 0.5491,
+   "unit": "Å",
+   "source": "GPAW aeatom PBE, |⟨ns|r|np⟩| del átomo libre"
+  }
+ },
+ "extra_polarizability": {
+  "S": {
+   "value": 2.64186,
+   "unit": "Å^3",
+   "source": "de xu_chnos (no reajustada)",
+   "description": "polarizabilidad atómica que la base mínima no tiene; solo respuesta óptica, apantallada con cargas y dipolos"
+  },
+  "O": {
+   "value": 0.56697,
+   "unit": "Å^3",
+   "source": "de xu_chnos (no reajustada)",
+   "description": "polarizabilidad atómica que la base mínima no tiene; solo respuesta óptica, apantallada con cargas y dipolos"
+  },
+  "H": {
+   "value": 0.42865,
+   "unit": "Å^3",
+   "source": "de xu_chnos (no reajustada)",
+   "description": "polarizabilidad atómica que la base mínima no tiene; solo respuesta óptica, apantallada con cargas y dipolos"
+  },
+  "C": {
+   "value": 0.95312,
+   "unit": "Å^3",
+   "source": "de xu_chnos (no reajustada)",
+   "description": "polarizabilidad atómica que la base mínima no tiene; solo respuesta óptica, apantallada con cargas y dipolos"
+  },
+  "N": {
+   "value": 0.73688,
+   "unit": "Å^3",
+   "source": "de xu_chnos (no reajustada)",
+   "description": "polarizabilidad atómica que la base mínima no tiene; solo respuesta óptica, apantallada con cargas y dipolos"
+  }
+ },
+ "repulsive": {
+  "type": "sum",
+  "terms": [
+   {
+    "type": "embedded",
+    "elements": [
+     "C"
+    ],
+    "phi": {
+     "type": "Tail",
+     "inner": {
+      "type": "GSP",
+      "v0": 8.18555,
+      "r0": 1.64,
+      "n": 3.30304,
+      "nc": 8.6655,
+      "rc": 2.1052,
+      "cutoff": 2.6
+     },
+     "r1": 2.45,
+     "rm": 2.6
+    },
+    "polynomial": [
+     -2.5909765118191,
+     0.5721151498619,
+     -0.0017896349903996,
+     2.3539221516757e-05,
+     -1.24251169551587e-07
+    ]
+   },
+   {
+    "type": "hh_contact",
+    "v0": 0.12194,
+    "r0": 1.5,
+    "rho": 0.2211,
+    "tail": [
+     2.0,
+     2.4
+    ],
+    "h2": [
+     0.9,
+     1.1
+    ],
+    "bonds": {
+     "C": [
+      1.24,
+      1.44
+     ],
+     "N": [
+      1.16,
+      1.36
+     ],
+     "O": [
+      1.12,
+      1.32
+     ],
+     "B": [
+      1.34,
+      1.54
+     ],
+     "S": [
+      1.49,
+      1.69
+     ],
+     "P": [
+      1.57,
+      1.77
+     ],
+     "Se": [
+      1.62,
+      1.82
+     ]
+    },
+    "unit": "eV, Å",
+    "source": "repulsión H···H de GPAW (H2···H2 colineal, PBE, LCAO dzp; receta tbkit.recipes.hh_contact); no ajustada"
+   },
+   {
+    "type": "pair",
+    "pairs": [
+     {
+      "pair": [
+       "C",
+       "H"
+      ],
+      "law": {
+       "type": "CutoffPolynomial",
+       "coefficients": [
+        98.52949062001247,
+        -157.4022295593722,
+        -74.55974865046483,
+        319.93007259492026,
+        -173.29834680591884
+       ],
+       "rc": 1.69,
+       "first_power": 3
+      },
+      "unit": "eV",
+      "source": "ajustado (ajuste a GPAW (PBE, lcao/dzp, GPAW 25.7.0); receta tbkit.recipes.xu_chno)",
+      "fitted_range_angstrom": [
+       0.971,
+       1.259
+      ]
+     },
+     {
+      "pair": [
+       "N",
+       "H"
+      ],
+      "law": {
+       "type": "CutoffPolynomial",
+       "coefficients": [
+        129.5851508032731,
+        -288.91846393592726,
+        134.17562889828534,
+        162.84699790075214,
+        -119.90954739700626
+       ],
+       "rc": 1.61,
+       "first_power": 3
+      },
+      "unit": "eV",
+      "source": "ajustado (ajuste a GPAW (PBE, lcao/dzp, GPAW 25.7.0); receta tbkit.recipes.xu_chno)",
+      "fitted_range_angstrom": [
+       0.91,
+       1.172
+      ]
+     },
+     {
+      "pair": [
+       "C",
+       "N"
+      ],
+      "law": {
+       "type": "CutoffPolynomial",
+       "coefficients": [
+        -10.344893888543503,
+        133.8181248051809,
+        -224.1018548107877,
+        147.36631086152454,
+        -30.961987003309805
+       ],
+       "rc": 2.2,
+       "first_power": 3
+      },
+      "unit": "eV",
+      "source": "ajustado (ajuste a GPAW (PBE, lcao/dzp, GPAW 25.7.0); receta tbkit.recipes.xu_chno)",
+      "fitted_range_angstrom": [
+       1.108,
+       1.614
+      ]
+     },
+     {
+      "pair": [
+       "N",
+       "N"
+      ],
+      "law": {
+       "type": "CutoffPolynomial",
+       "coefficients": [
+        69.79254016995016,
+        -91.8699615828374,
+        96.87758437104146,
+        -90.74439067088385,
+        42.32507407490134
+       ],
+       "rc": 2.1,
+       "first_power": 3
+      },
+      "unit": "eV",
+      "source": "ajustado (ajuste a GPAW (PBE, lcao/dzp, GPAW 25.7.0); receta tbkit.recipes.xu_chno)",
+      "fitted_range_angstrom": [
+       1.07,
+       1.522
+      ]
+     },
+     {
+      "pair": [
+       "C",
+       "O"
+      ],
+      "law": {
+       "type": "CutoffPolynomial",
+       "coefficients": [
+        98.75908518788837,
+        -209.1396918843191,
+        230.49975930303128,
+        -136.54602442950073,
+        39.88353816843706
+       ],
+       "rc": 2.1,
+       "first_power": 3
+      },
+      "unit": "eV",
+      "source": "ajustado (ajuste a GPAW (PBE, lcao/dzp, GPAW 25.7.0); receta tbkit.recipes.xu_chno)",
+      "fitted_range_angstrom": [
+       1.1,
+       1.585
+      ]
+     },
+     {
+      "pair": [
+       "O",
+       "H"
+      ],
+      "law": {
+       "type": "CutoffPolynomial",
+       "coefficients": [
+        132.5165001405139,
+        -278.07535127599846,
+        116.84087691321324,
+        153.14814867196765,
+        -101.9368342834704
+       ],
+       "rc": 1.57,
+       "first_power": 3
+      },
+      "unit": "eV",
+      "source": "ajustado (ajuste a GPAW (PBE, lcao/dzp, GPAW 25.7.0); receta tbkit.recipes.xu_chno)",
+      "fitted_range_angstrom": [
+       0.886,
+       1.091
+      ]
+     },
+     {
+      "pair": [
+       "N",
+       "O"
+      ],
+      "law": {
+       "type": "CutoffPolynomial",
+       "coefficients": [
+        109.75105471045131,
+        -137.90699731167632,
+        -12.192396284495208,
+        110.54000590091921,
+        -39.75458616476231
+       ],
+       "rc": 2.0,
+       "first_power": 3
+      },
+      "unit": "eV",
+      "source": "ajustado (ajuste a GPAW (PBE, lcao/dzp, GPAW 25.7.0); receta tbkit.recipes.xu_chno)",
+      "fitted_range_angstrom": [
+       1.137,
+       1.311
+      ]
+     },
+     {
+      "pair": [
+       "O",
+       "O"
+      ],
+      "law": {
+       "type": "CutoffPolynomial",
+       "coefficients": [
+        203.77176918570956,
+        -341.4999273097834,
+        118.99623729327583,
+        167.62003155553802,
+        -62.90881712071125
+       ],
+       "rc": 1.9,
+       "first_power": 3
+      },
+      "unit": "eV",
+      "source": "ajustado (ajuste a GPAW (PBE, lcao/dzp, GPAW 25.7.0); receta tbkit.recipes.xu_chno)",
+      "fitted_range_angstrom": [
+       1.346,
+       1.539
+      ]
+     }
+    ]
+   },
+   {
+    "type": "acute_angle",
+    "coefficients": [
+     -5.767256924760327,
+     11.115453630860667
+    ],
+    "theta0_degrees": 80.0,
+    "r1": 1.7,
+    "rm": 2.0,
+    "elements": [
+     "C",
+     "N",
+     "O"
+    ],
+    "unit": "eV",
+    "source": "corrección de ángulos agudos (anillos de tres miembros), ajustado (ajuste a GPAW (PBE, lcao/dzp, GPAW 25.7.0); receta tbkit.recipes.xu_chno)"
+   },
+   {
+    "type": "pair",
+    "pairs": [
+     {
+      "pair": [
+       "H",
+       "S"
+      ],
+      "law": {
+       "type": "CutoffPolynomial",
+       "coefficients": [
+        108.33486998249113,
+        -225.567961033657,
+        99.98391891268675,
+        143.72612191492425,
+        -111.67164130211299
+       ],
+       "rc": 1.89,
+       "first_power": 3
+      },
+      "unit": "eV",
+      "source": "ajustado (ajuste a GPAW (PBE, lcao/dzp, GPAW 25.7.0); receta tbkit.recipes.xu_bsp)",
+      "fitted_range_angstrom": [
+       1.238,
+       1.445
+      ]
+     },
+     {
+      "pair": [
+       "C",
+       "S"
+      ],
+      "law": {
+       "type": "CutoffPolynomial",
+       "coefficients": [
+        87.7895164897259,
+        -177.82652493086542,
+        163.25517912101122,
+        -67.50115477146609,
+        13.355546773733657
+       ],
+       "rc": 2.37,
+       "first_power": 3
+      },
+      "unit": "eV",
+      "source": "ajustado (ajuste a GPAW (PBE, lcao/dzp, GPAW 25.7.0); receta tbkit.recipes.xu_bsp)",
+      "fitted_range_angstrom": [
+       1.396,
+       1.937
+      ]
+     },
+     {
+      "pair": [
+       "N",
+       "S"
+      ],
+      "law": {
+       "type": "CutoffPolynomial",
+       "coefficients": [
+        141.08420823203713,
+        -305.5753831989231,
+        156.1014887481825,
+        190.73737443263843,
+        -168.15488699030968
+       ],
+       "rc": 2.2,
+       "first_power": 3
+      },
+      "unit": "eV",
+      "source": "ajustado (ajuste a GPAW (PBE, lcao/dzp, GPAW 25.7.0); receta tbkit.recipes.xu_bsp)",
+      "fitted_range_angstrom": [
+       1.616,
+       1.787
+      ]
+     },
+     {
+      "pair": [
+       "O",
+       "S"
+      ],
+      "law": {
+       "type": "CutoffPolynomial",
+       "coefficients": [
+        297.76939634798714,
+        -901.2864048155072,
+        1009.8202169099736,
+        -272.14976352189933,
+        -116.94352438177812
+       ],
+       "rc": 2.0,
+       "first_power": 3
+      },
+      "unit": "eV",
+      "source": "ajustado (ajuste a GPAW (PBE, lcao/dzp, GPAW 25.7.0); receta tbkit.recipes.xu_bsp)",
+      "fitted_range_angstrom": [
+       1.342,
+       1.751
+      ]
+     },
+     {
+      "pair": [
+       "S",
+       "S"
+      ],
+      "law": {
+       "type": "CutoffPolynomial",
+       "coefficients": [
+        170.40451169348444,
+        -354.0465779805465,
+        182.62286701518033,
+        252.24313400244975,
+        -235.1502238223741
+       ],
+       "rc": 2.6,
+       "first_power": 3
+      },
+      "unit": "eV",
+      "source": "ajustado (ajuste a GPAW (PBE, lcao/dzp, GPAW 25.7.0); receta tbkit.recipes.xu_bsp)",
+      "fitted_range_angstrom": [
+       1.963,
+       2.169
+      ]
+     }
+    ]
+   },
+   {
+    "type": "pair",
+    "pairs": [
+     {
+      "pair": [
+       "H",
+       "Mo"
+      ],
+      "law": {
+       "type": "CutoffPolynomial",
+       "coefficients": [
+        30.248169922216725,
+        -70.78460108925402,
+        55.10471643791957,
+        5.921320779767846,
+        -14.511031983972895
+       ],
+       "rc": 2.25,
+       "first_power": 3
+      },
+      "unit": "eV",
+      "source": "ajustado (ajuste a GPAW (PBE, lcao/dzp, GPAW 26.7.0); receta tbkit.recipes.xu_tm)",
+      "fitted_range_angstrom": [
+       1.551,
+       1.818
+      ]
+     },
+     {
+      "pair": [
+       "C",
+       "Mo"
+      ],
+      "law": {
+       "type": "CutoffPolynomial",
+       "coefficients": [
+        129.25816056072344,
+        -383.8903802533536,
+        521.8436390073504,
+        -322.67564791704547,
+        71.88347043241194
+       ],
+       "rc": 2.65,
+       "first_power": 3
+      },
+      "unit": "eV",
+      "source": "ajustado (ajuste a GPAW (PBE, lcao/dzp, GPAW 26.7.0); receta tbkit.recipes.xu_tm)",
+      "fitted_range_angstrom": [
+       1.945,
+       2.369
+      ]
+     },
+     {
+      "pair": [
+       "N",
+       "Mo"
+      ],
+      "law": {
+       "type": "CutoffPolynomial",
+       "coefficients": [
+        80.32207181619961,
+        -127.45803321273263,
+        36.12879628763503,
+        83.07179671795133,
+        -50.03395668730251
+       ],
+       "rc": 2.53,
+       "first_power": 3
+      },
+      "unit": "eV",
+      "source": "ajustado (ajuste a GPAW (PBE, lcao/dzp, GPAW 26.7.0); receta tbkit.recipes.xu_tm)",
+      "fitted_range_angstrom": [
+       1.853,
+       2.075
+      ]
+     },
+     {
+      "pair": [
+       "O",
+       "Mo"
+      ],
+      "law": {
+       "type": "CutoffPolynomial",
+       "coefficients": [
+        149.20825095145173,
+        -345.03865858039893,
+        324.6182679120669,
+        -72.8975965659877,
+        -26.6390314592162
+       ],
+       "rc": 2.35,
+       "first_power": 3
+      },
+      "unit": "eV",
+      "source": "ajustado (ajuste a GPAW (PBE, lcao/dzp, GPAW 26.7.0); receta tbkit.recipes.xu_tm)",
+      "fitted_range_angstrom": [
+       1.62,
+       2.033
+      ]
+     },
+     {
+      "pair": [
+       "S",
+       "Mo"
+      ],
+      "law": {
+       "type": "CutoffPolynomial",
+       "coefficients": [
+        128.9988417420344,
+        -532.8964546470729,
+        1003.8241354455315,
+        -932.7953843173435,
+        351.366018265514
+       ],
+       "rc": 2.75,
+       "first_power": 3
+      },
+      "unit": "eV",
+      "source": "ajustado (ajuste a GPAW (PBE, lcao/dzp, GPAW 26.7.0); receta tbkit.recipes.xu_tm)",
+      "fitted_range_angstrom": [
+       2.034,
+       2.529
+      ]
+     },
+     {
+      "pair": [
+       "Mo",
+       "Mo"
+      ],
+      "law": {
+       "type": "CutoffPolynomial",
+       "coefficients": [
+        177.2713792462505,
+        -483.5561424153008,
+        516.0536140017954,
+        -248.31742870668057,
+        45.64134814179361
+       ],
+       "rc": 3.28,
+       "first_power": 3
+      },
+      "unit": "eV",
+      "source": "ajustado (ajuste a GPAW (PBE, lcao/dzp, GPAW 26.7.0); receta tbkit.recipes.xu_tm)",
+      "fitted_range_angstrom": [
+       1.846,
+       2.04
+      ]
+     }
+    ]
+   }
+  ],
+  "unit": "eV",
+  "source": "términos de xu_chnos (fijos); pares H-Mo, C-Mo, N-Mo, O-Mo, S-Mo, Mo-Mo: ajustado (ajuste a GPAW (PBE, lcao/dzp, GPAW 26.7.0); receta tbkit.recipes.xu_tm)"
+ },
+ "reference": "C-C: C. H. Xu, C. Z. Wang, C. T. Chan, K. M. Ho, J. Phys.: Condens. Matter 4, 6047 (1992). Mo: ajuste a GPAW (PBE, lcao/dzp, GPAW 26.7.0); receta tbkit.recipes.xu_tm. Resto: xu_chnos (fijo)",
+ "system": "xu_chnos más molibdeno: óxidos, sulfuros, carbonilos, carburos de Mo",
+ "validity": "ajustado en moléculas de capa cerrada; cristales en el ajuste (MoS2, Mo_bcc): bandas, energías y fuerzas GPAW PW; resultados en fit.bands y fit.crystals; enlaces dentro de lo muestreado (C-Mo 1.95-2.37 Å, H-Mo 1.55-1.82 Å, Mo-Mo 1.85-3.26 Å, Mo-N 1.85-2.08 Å, Mo-O 1.62-2.03 Å, Mo-S 2.03-2.53 Å; el resto, como xu_chnos); energías relativas solo entre estructuras de la misma composición y los mismos tipos de enlace (no se ajustaron energías de atomización; isómeros con enlaces distintos fallan: dimetil éter frente a etanol -1,44 eV con xu_chno, GPAW +0,38); C-C como en xu_carbon; Mo ajustado en moléculas de capa cerrada (Mo(VI) d0 con oxo, hidroxo, metilo, amido, tiolato, sulfuro e hidruro; Mo(CO)6; Mo2) y, con --crystals/--bands, en MoS2 2H y Mo bcc (MoCS Janus apartado como prueba); la energía frente a la deformación de la red sale 3-10 veces más rígida que GPAW (MoS2 ±2 %: 0,13/0,48 eV frente a 0,05/0,04): no relajar la celda; el gap de MoS2 sale indirecto (GPAW directo en K); sin espín-órbita; Mo junto con B, P o Se no está cubierto",
+ "notes": "Todo lo de xu_chnos sin cambios; se ajustan solo Mo y sus pares, con el desplazamiento de niveles de xu_chnos (7.0723 eV). U de Hubbard y dipolos: átomo libre con GPAW (PBE).",
+ "fit": {
+  "references": "gpaw_mo.json",
+  "references_sha256": "17497fa48a828e62ff43c5319add6308523780dde1c3c4f909bcd0d51bfe9e18",
+  "parameters": {
+   "onsite Mo s": 6.540023550799309,
+   "onsite Mo p": 14.445030260821476,
+   "onsite Mo d": 3.9512605335247653,
+   "H-Mo sss(H,Mo) v0": -2.575435804133662,
+   "H-Mo sps(H,Mo) v0": 4.6459620030521265,
+   "H-Mo sds(H,Mo) v0": -2.5034203550962255,
+   "H-Mo n": 0.5000000000000001,
+   "C-Mo sss(C,Mo) v0": -1.6072967345459972,
+   "C-Mo sps(C,Mo) v0": 4.057679435260287,
+   "C-Mo sps(Mo,C) v0": 1.8460721325330325,
+   "C-Mo pps(C,Mo) v0": 2.0257434126789415,
+   "C-Mo ppp(C,Mo) v0": -0.1780088294697054,
+   "C-Mo sds(C,Mo) v0": -1.654801647265279,
+   "C-Mo pds(C,Mo) v0": -2.3221301306587385,
+   "C-Mo pdp(C,Mo) v0": 1.4734763356187257,
+   "C-Mo n": 1.8859253914190142,
+   "N-Mo sss(N,Mo) v0": -2.782552131137927,
+   "N-Mo sps(N,Mo) v0": 3.70473873213099,
+   "N-Mo sps(Mo,N) v0": 2.038499278120392,
+   "N-Mo pps(N,Mo) v0": 2.413606146589838,
+   "N-Mo ppp(N,Mo) v0": -1.1412394461949509,
+   "N-Mo sds(N,Mo) v0": -2.023623549796686,
+   "N-Mo pds(N,Mo) v0": -2.4673894597373995,
+   "N-Mo pdp(N,Mo) v0": 1.3860805780307777,
+   "N-Mo n": 1.8476065027688842,
+   "O-Mo sss(O,Mo) v0": -1.7850187246384202,
+   "O-Mo sps(O,Mo) v0": 3.8477950225990214,
+   "O-Mo sps(Mo,O) v0": 2.367079700133163,
+   "O-Mo pps(O,Mo) v0": 0.5168295979639252,
+   "O-Mo ppp(O,Mo) v0": -3.1972476664534732,
+   "O-Mo sds(O,Mo) v0": -2.373233218943665,
+   "O-Mo pds(O,Mo) v0": -2.7841126098569062,
+   "O-Mo pdp(O,Mo) v0": 1.6332551466117013,
+   "O-Mo n": 1.5969920570019174,
+   "S-Mo sss(S,Mo) v0": -1.4365509819619007,
+   "S-Mo sps(S,Mo) v0": 4.113635910363679,
+   "S-Mo sps(Mo,S) v0": 1.3582125894769113,
+   "S-Mo pps(S,Mo) v0": 2.0545929021581313,
+   "S-Mo ppp(S,Mo) v0": -0.9651065769548864,
+   "S-Mo sds(S,Mo) v0": -1.8130381147779155,
+   "S-Mo pds(S,Mo) v0": -2.530990458848954,
+   "S-Mo pdp(S,Mo) v0": 1.022934560972552,
+   "S-Mo n": 0.8676786719269689,
+   "Mo-Mo sss(Mo,Mo) v0": -0.7334083245740172,
+   "Mo-Mo sps(Mo,Mo) v0": 1.3817763165217982,
+   "Mo-Mo pps(Mo,Mo) v0": 5.415780583109972,
+   "Mo-Mo ppp(Mo,Mo) v0": -4.217406468213133,
+   "Mo-Mo sds(Mo,Mo) v0": -0.0012289326743038227,
+   "Mo-Mo pds(Mo,Mo) v0": 0.3318802302743184,
+   "Mo-Mo pdp(Mo,Mo) v0": 1.1779368683460423,
+   "Mo-Mo dds(Mo,Mo) v0": -0.7481326044226805,
+   "Mo-Mo ddp(Mo,Mo) v0": 1.0605537791892363,
+   "Mo-Mo ddd(Mo,Mo) v0": -0.37293970882510014,
+   "Mo-Mo n": 1.4444474258457354
+  },
+  "level_shift_eV": 7.0722936864315145,
+  "stage1_level_rms": 0.34806250028799607,
+  "joint_start": {
+   "level_rms": 0.3788462303303332,
+   "force_rms": 0.5417188984460916,
+   "energy_rms": 0.3536583426736682
+  },
+  "level_rms_train": 0.4420728584544863,
+  "force_rms": 0.3170152541184288,
+  "energy_rms": 0.19325719020727547,
+  "optimiser": "`xtol` termination condition is satisfied.",
+  "hessian_rms": null,
+  "fit_settings": {
+   "level_weight": 1.0,
+   "force_weight": 1.0,
+   "energy_weight": 3.0,
+   "ridge": 1e-06,
+   "max_nfev": 400
+  },
+  "bond_ranges": {
+   "C-Mo": [
+    1.945,
+    2.369
+   ],
+   "C-H": [
+    0.983,
+    1.273
+   ],
+   "C-O": [
+    1.085,
+    1.25
+   ],
+   "Mo-O": [
+    1.62,
+    2.033
+   ],
+   "Mo-N": [
+    1.853,
+    2.075
+   ],
+   "H-N": [
+    0.926,
+    1.109
+   ],
+   "H-O": [
+    0.94,
+    1.081
+   ],
+   "Mo-S": [
+    2.034,
+    2.529
+   ],
+   "H-S": [
+    1.304,
+    1.469
+   ],
+   "H-Mo": [
+    1.551,
+    1.818
+   ],
+   "Mo-Mo": [
+    1.846,
+    3.258
+   ]
+  },
+  "validation": {
+   "MoMe6": {
+    "role": "train",
+    "level_rms": 0.7042243966380287,
+    "gap_tb": 2.932937629363975,
+    "gap_dft": 2.8820740000000002,
+    "bond_error_max": {
+     "C-Mo": 0.06599542446489037,
+     "C-H": 0.014962311562810804
+    }
+   },
+   "Mo(CO)6": {
+    "role": "train",
+    "level_rms": 0.5466848978738739,
+    "gap_tb": 3.338401865070294,
+    "gap_dft": 3.5873229999999996,
+    "bond_error_max": {
+     "C-Mo": 0.07120572114926826,
+     "C-O": 0.012159404656554296
+    }
+   },
+   "MoO2Me2": {
+    "role": "train",
+    "level_rms": 0.3858335636837212,
+    "gap_tb": 3.115409007942139,
+    "gap_dft": 3.18852,
+    "bond_error_max": {
+     "Mo-O": 0.0044863257160061565,
+     "C-Mo": 0.04854894264137011,
+     "C-H": 0.015375775182219886
+    }
+   },
+   "MoO2(NH2)2": {
+    "role": "train",
+    "level_rms": 0.1959024641089301,
+    "gap_tb": 3.0547805372957946,
+    "gap_dft": 3.0696109999999996,
+    "bond_error_max": {
+     "Mo-O": 0.0021652232783004877,
+     "Mo-N": 0.003287997811869392,
+     "H-N": 0.002587135745302671
+    }
+   },
+   "MoO2(SH)Me": {
+    "role": "test",
+    "level_rms": 0.27980669939444053,
+    "gap_tb": 2.857857428592604,
+    "gap_dft": 3.1663820000000005,
+    "bond_error_max": {
+     "Mo-O": 0.004037481633430984,
+     "Mo-S": 0.05636560870606777,
+     "C-Mo": 0.03898220289744714,
+     "H-S": 0.008242393245587953,
+     "C-H": 0.015150145298707951
+    }
+   },
+   "MoO2(OH)2": {
+    "role": "train",
+    "level_rms": 0.30411185386790485,
+    "gap_tb": 3.5629992359661973,
+    "gap_dft": 3.639539,
+    "bond_error_max": {
+     "Mo-O": 0.012653911376664162,
+     "H-O": 0.0011603998969713647
+    }
+   },
+   "MoO2(SH)2": {
+    "role": "train",
+    "level_rms": 0.21522017145920835,
+    "gap_tb": 2.6328751800958994,
+    "gap_dft": 2.721077,
+    "bond_error_max": {
+     "Mo-O": 0.0039054047873294806,
+     "Mo-S": 0.061182863904098106,
+     "H-S": 0.008948791174064219
+    }
+   },
+   "MoH6": {
+    "role": "train",
+    "level_rms": 0.24967427785958418,
+    "gap_tb": 3.883331079117581,
+    "gap_dft": 3.6746110000000005,
+    "bond_error_max": {
+     "H-Mo": 0.06196159670397372
+    }
+   },
+   "MoS2(OH)2": {
+    "role": "test",
+    "level_rms": 0.27506338769953825,
+    "gap_tb": 1.686371556584966,
+    "gap_dft": 2.1601860000000004,
+    "bond_error_max": {
+     "Mo-S": 0.01593494087846592,
+     "Mo-O": 0.005908218702813661,
+     "H-O": 0.0005548544630921137
+    }
+   },
+   "MoO3": {
+    "role": "train",
+    "level_rms": 0.4691980273939376,
+    "gap_tb": 2.2472711804329606,
+    "gap_dft": 1.836392,
+    "bond_error_max": {
+     "Mo-O": 0.004943499701089316
+    }
+   },
+   "MoS3": {
+    "role": "train",
+    "level_rms": 0.4603099795103824,
+    "gap_tb": 1.419803057848691,
+    "gap_dft": 0.6579580000000007,
+    "bond_error_max": {
+     "Mo-S": 0.007220350397746156
+    }
+   },
+   "MoOS2": {
+    "role": "train",
+    "level_rms": 0.3263600665524051,
+    "gap_tb": 1.4333145742094526,
+    "gap_dft": 0.8618609999999993,
+    "bond_error_max": {
+     "Mo-O": 0.010339306457977981,
+     "Mo-S": 0.0008713309654027057
+    }
+   },
+   "Mo2": {
+    "role": "train",
+    "level_rms": 0.26418781653146517,
+    "gap_tb": 1.3917522382694223,
+    "gap_dft": 1.956633,
+    "bond_error_max": {
+     "Mo-Mo": 0.0007058808670414862
+    }
+   }
+  },
+  "crystals": {
+   "MoS2": {
+    "role": "train",
+    "points": {
+     "relaxed": {
+      "force_rms": 0.2708249298996264,
+      "force_rms_gpaw": 0.007117716170147544,
+      "delta_e_tb": 0.0,
+      "delta_e_gpaw": 0.0
+     },
+     "rnd0": {
+      "force_rms": 0.2558252522985079,
+      "force_rms_gpaw": 0.8914378753739834,
+      "delta_e_tb": 0.10405801820758143,
+      "delta_e_gpaw": 0.13506623344239088
+     },
+     "rnd1": {
+      "force_rms": 0.9015626250617822,
+      "force_rms_gpaw": 1.4758096986127702,
+      "delta_e_tb": 0.38534698958041247,
+      "delta_e_gpaw": 0.35368525870377
+     },
+     "rnd2": {
+      "force_rms": 0.29508731865229837,
+      "force_rms_gpaw": 1.1523094179962923,
+      "delta_e_tb": 0.1659890704129907,
+      "delta_e_gpaw": 0.2128833793660725
+     },
+     "x0.98": {
+      "force_rms": 0.2507223247559673,
+      "force_rms_gpaw": 0.20489115104912184,
+      "delta_e_tb": 0.12625144763771345,
+      "delta_e_gpaw": 0.051711068278965655
+     },
+     "x1.02": {
+      "force_rms": 0.23343626590124508,
+      "force_rms_gpaw": 0.18799884704565747,
+      "delta_e_tb": 0.4839641417113185,
+      "delta_e_gpaw": 0.03863275538897781
+     }
+    }
+   },
+   "Mo_bcc": {
+    "role": "train",
+    "points": {
+     "relaxed": {
+      "force_rms": 1.6812946133982628e-15,
+      "force_rms_gpaw": 4.941253165850447e-29,
+      "delta_e_tb": 0.0,
+      "delta_e_gpaw": 0.0
+     },
+     "rnd0": {
+      "force_rms": 2.77174628242375e-06,
+      "force_rms_gpaw": 2.771746280888997e-06,
+      "delta_e_tb": 0.0,
+      "delta_e_gpaw": 1.3127449349781273e-08
+     },
+     "rnd1": {
+      "force_rms": 1.8949811438693967e-06,
+      "force_rms_gpaw": 1.8949811423591651e-06,
+      "delta_e_tb": 0.0,
+      "delta_e_gpaw": 1.274505478932042e-08
+     },
+     "rnd2": {
+      "force_rms": 1.765368773229628e-06,
+      "force_rms_gpaw": 1.7653687727332414e-06,
+      "delta_e_tb": 0.0,
+      "delta_e_gpaw": 1.4051007468651733e-08
+     },
+     "x0.98": {
+      "force_rms": 1.117600002952727e-15,
+      "force_rms_gpaw": 0.0,
+      "delta_e_tb": 0.025163672072761045,
+      "delta_e_gpaw": 0.026996536134085147
+     },
+     "x1.02": {
+      "force_rms": 8.107922592650824e-16,
+      "force_rms_gpaw": 0.0,
+      "delta_e_tb": 0.0052276662888992576,
+      "delta_e_gpaw": 0.02277149180184601
+     }
+    }
+   },
+   "MoCS": {
+    "role": "test",
+    "points": {
+     "relaxed": {
+      "force_rms": 0.26512704889734484,
+      "force_rms_gpaw": 0.003857652517667521,
+      "delta_e_tb": 0.0,
+      "delta_e_gpaw": 0.0
+     },
+     "rnd0": {
+      "force_rms": 0.5104347516916348,
+      "force_rms_gpaw": 0.8879146059091919,
+      "delta_e_tb": 0.14195886471537023,
+      "delta_e_gpaw": 0.13325111551049318
+     },
+     "rnd1": {
+      "force_rms": 1.507056234133617,
+      "force_rms_gpaw": 1.3920696478816572,
+      "delta_e_tb": 0.48903653638143396,
+      "delta_e_gpaw": 0.3395788464884397
+     },
+     "rnd2": {
+      "force_rms": 0.5769568274722667,
+      "force_rms_gpaw": 1.1933200725832858,
+      "delta_e_tb": 0.23356403341912468,
+      "delta_e_gpaw": 0.21996227616065056
+     },
+     "x0.98": {
+      "force_rms": 0.3868894780655933,
+      "force_rms_gpaw": 0.2870711812386341,
+      "delta_e_tb": 0.42600195795730045,
+      "delta_e_gpaw": 0.058345928563639404
+     },
+     "x1.02": {
+      "force_rms": 0.13730902263855782,
+      "force_rms_gpaw": 0.24117243973090557,
+      "delta_e_tb": 0.27335690015506486,
+      "delta_e_gpaw": 0.044971369419581464
+     }
+    }
+   }
+  },
+  "bands": {
+   "window_eV": 3.0,
+   "weight": 1.0,
+   "train": {
+    "MoS2/bands": {
+     "rms_eV": 0.3319453100631993,
+     "gap_tb_eV": 1.5603234142015587,
+     "gap_gpaw_eV": 1.6584804165068492
+    },
+    "MoS2/bands_x0.96": {
+     "rms_eV": 0.3828060798279869,
+     "gap_tb_eV": 1.6084471566129892,
+     "gap_gpaw_eV": 1.850585910570087
+    },
+    "MoS2/bands_x0.98": {
+     "rms_eV": 0.3370057158070919,
+     "gap_tb_eV": 1.5985441998944623,
+     "gap_gpaw_eV": 1.858820665488179
+    },
+    "MoS2/bands_x1.02": {
+     "rms_eV": 0.3370497298395583,
+     "gap_tb_eV": 1.4656207604740175,
+     "gap_gpaw_eV": 1.365357690578438
+    },
+    "MoS2/bands_x1.04": {
+     "rms_eV": 0.3314637904065526,
+     "gap_tb_eV": 1.291615648908568,
+     "gap_gpaw_eV": 1.080343315040747
+    },
+    "Mo_bcc/bands": {
+     "rms_eV": 0.7209194390952812,
+     "gap_tb_eV": -4.968571677686215,
+     "gap_gpaw_eV": -5.191696553572148
+    }
+   },
+   "held_out": {
+    "MoCS/bands": {
+     "rms_eV": 0.3698907915015801,
+     "gap_tb_eV": 0.40356108772549604,
+     "gap_gpaw_eV": 0.40141339223470096
+    },
+    "MoCS/bands_x0.96": {
+     "rms_eV": 0.37347611178240014,
+     "gap_tb_eV": 0.6248776331367658,
+     "gap_gpaw_eV": 0.3631780093915422
+    },
+    "MoCS/bands_x1.04": {
+     "rms_eV": 0.42471983185990264,
+     "gap_tb_eV": 0.20793781926314026,
+     "gap_gpaw_eV": 0.41467067546206104
+    }
+   }
+  },
+  "crystal_sources": {
+   "bands": {
+    "tbkit/parameters/references/tm_crystals/MoS2/bands.json": "0214c351eb0fc74e19a26cebd69a36078f7f3768d308c6ed2179f3ec2aea8814",
+    "tbkit/parameters/references/tm_crystals/MoS2/bands_x0.96.json": "fef33fdc452985667da51ab9dedd39e3f8077e80e8cec80310a259ed3d6e4d3e",
+    "tbkit/parameters/references/tm_crystals/MoS2/bands_x0.98.json": "f431240b5284a090f6586091a15cc217f0895fdf8156e639826e4bb1e0775ff9",
+    "tbkit/parameters/references/tm_crystals/MoS2/bands_x1.02.json": "2d63f8da95b324bcc36ee46d52916c5546e70345a55160d7b2790a2b3c4a6307",
+    "tbkit/parameters/references/tm_crystals/MoS2/bands_x1.04.json": "1519a0700dc91593153233b88425d8b1a45d00a42e9e87f5feb3836dc302cd2a",
+    "tbkit/parameters/references/tm_crystals/Mo_bcc/bands.json": "ae1d317b2ae70e0f28ba96ae143256a816e6927199cc8f1af41f6b59a0db839f"
+   },
+   "held_out_bands": {
+    "tbkit/parameters/references/tm_crystals/MoCS/bands.json": "e4d764608b615c90e840cc31dcee974b2ef719fbc87fa946bfd91d21bc193bf9",
+    "tbkit/parameters/references/tm_crystals/MoCS/bands_x0.96.json": "35b9a468a4bee396db5c92335cb06c1e56728ac5d6ee02bf9e39909b67122c10",
+    "tbkit/parameters/references/tm_crystals/MoCS/bands_x1.04.json": "ed1ac7d4cf8a1f1679c62eec649ecc946102e3bd987c505b40edf9d8bd932dcb"
+   },
+   "crystals": {
+    "tbkit/parameters/references/tm_crystals/MoS2": {
+     "bands.json": "0214c351eb0fc74e19a26cebd69a36078f7f3768d308c6ed2179f3ec2aea8814",
+     "bands_x0.96.json": "fef33fdc452985667da51ab9dedd39e3f8077e80e8cec80310a259ed3d6e4d3e",
+     "bands_x0.98.json": "f431240b5284a090f6586091a15cc217f0895fdf8156e639826e4bb1e0775ff9",
+     "bands_x1.02.json": "2d63f8da95b324bcc36ee46d52916c5546e70345a55160d7b2790a2b3c4a6307",
+     "bands_x1.04.json": "1519a0700dc91593153233b88425d8b1a45d00a42e9e87f5feb3836dc302cd2a",
+     "relaxed.json": "8172ee6736a8bc176eb1b84dbf4653dec9e055314bf3affcf74fc9cdc1d3caa3",
+     "rnd0.json": "9f43b061eb9f261ed9547376eeb847e8f5801e8cb0db1f35e9658eb03780d2b0",
+     "rnd1.json": "39fc02ef72f6e347ed34ae67e3d4b57960128ca538c2324bb69a75f718de0162",
+     "rnd2.json": "31c6518d89dbad9257bc5479828f4db97aac7d6f4a6f251a2931d7c657861682",
+     "x0.98.json": "a4382c707cf45db4a9354cc7cbe950ee65aa92503da27c065c51bfefd864e4be",
+     "x1.02.json": "353afb1a11b0f7cdd195b2524c13cf92f430c52ed0567253d3fa4f5a8cec9f6b"
+    },
+    "tbkit/parameters/references/tm_crystals/Mo_bcc": {
+     "bands.json": "ae1d317b2ae70e0f28ba96ae143256a816e6927199cc8f1af41f6b59a0db839f",
+     "relaxed.json": "a866bbbcc31a998e1aede5d83e64e07a4db7b6cf1df72e2a192a877dfa4ca146",
+     "rnd0.json": "0773dd7d5adfd66cf343b9e78283c54b1fbe06d252664ddaf5f0c084909a0c22",
+     "rnd1.json": "e9b5b0d03836d8af7b4a996c853e85c2fb4b65b76461842ddab2013b59248765",
+     "rnd2.json": "4a16a7ff359e19c4971762d92c1ec0c0a34b748957f19d65d257a4480e9437ed",
+     "x0.98.json": "cfe17ad6607a225b75cea7f556deafc9c6adbc459c0df1a94794fbeb9420c867",
+     "x1.02.json": "42237d26ad32651acb7a22ba29f909cf7714497a6072d563ae577a61671552f0"
+    }
+   },
+   "held_out_crystals": {
+    "tbkit/parameters/references/tm_crystals/MoCS": {
+     "bands.json": "e4d764608b615c90e840cc31dcee974b2ef719fbc87fa946bfd91d21bc193bf9",
+     "bands_x0.96.json": "35b9a468a4bee396db5c92335cb06c1e56728ac5d6ee02bf9e39909b67122c10",
+     "bands_x0.98.json": "efabefae70cd0a4d681961491a550ef2e6b6a433968dffeabf25446a43d0a510",
+     "bands_x1.02.json": "6ceea98f43c5cd93b9c1c21a62fb22f6d2170c3a13495d7ed53979844692797b",
+     "bands_x1.04.json": "ed1ac7d4cf8a1f1679c62eec649ecc946102e3bd987c505b40edf9d8bd932dcb",
+     "relaxed.json": "cf19be6c556090f6f788d22825b809a0bdd6a39a79daac8d6c41a370039615b8",
+     "rnd0.json": "5ad337b213146db87b13c756242230993d8bd5491a008ff69280814a42733b66",
+     "rnd1.json": "e0c7b1bc72426ba6ed227929a2d13756a7fa6d36bb943e2a9f8236bf4aa54ea7",
+     "rnd2.json": "4ce481b34839d5c9aa39ef474fd5a9f7483150d1d24a1ddfb2dfd6b0603dd7ee",
+     "x0.98.json": "9a10f46142027ffe1d73c00e4893c68787b90de3c36e4f7edb68c0f04f9628b7",
+     "x1.02.json": "dc76e7d39079a21283f4030148be7edcc63439d8b2d4081205252f89670c46a7"
+    }
+   },
+   "recipe": "tbkit.recipes.tm_crystals (GPAW PW 500 eV, PBE, Mo.6)"
+  },
+  "fit_command": "python -m tbkit.recipes.xu_tm Mo (ver docstring de xu_tm), --onsite-window 8, pesos por defecto"
+ }
+}
