@@ -2348,6 +2348,73 @@ def test_the_figure_exports_the_numbers_of_every_panel():
                 f"{key} no lleva ninguna serie de {sample}")
 
 
+def _draw_one_panel(session, key):
+    """Draw a single panel through the real composite path.
+
+    Not by calling the panel function directly: the letter, the grid and
+    the scale override all happen in ``draw_composite``, and a test that
+    skips them is testing something the window never draws.
+    """
+    from matplotlib.figure import Figure
+
+    from ramancarbon.gui.figures_echem import draw_composite
+    from ramancarbon.gui.theme import PALETTES
+
+    session.set_figure_panels([key])
+    figure = Figure(figsize=(4.0, 3.0))
+    problems = draw_composite(figure, session.composite, session,
+                              PALETTES["claro"])
+    assert not problems, problems
+    return figure, figure.axes[0]
+
+
+def test_one_common_circuit_is_named_once_in_the_residual_panel():
+    """Not once per sample, which is what pushed the legend over the ticks.
+
+    With ``auto`` each spectrum can carry a different circuit and the
+    legend has to say which. With one circuit forced on all of them the
+    string is the same on every line, costs about thirty characters
+    each, and past four samples the legend lands on the tick labels.
+    """
+    session = _session_with_spectra(5)
+    session.circuit = "R0-(R1|Q1)-(R2|Q2)"
+    _, axis = _draw_one_panel(session, "eis_residuo")
+
+    labels = [str(line.get_label()) for line in axis.get_lines()
+              if not str(line.get_label()).startswith("_")]
+    assert len(labels) == 5
+    assert not any("R0-" in label for label in labels), (
+        "el circuito común no va en cada línea de la leyenda"
+    )
+    texts = [text.get_text() for text in axis.texts]
+    assert "R0-(R1|Q1)-(R2|Q2)" in texts, (
+        "pero sí tiene que estar escrito UNA vez: una figura que no dice "
+        "con qué circuito se ajustó no se puede leer"
+    )
+
+
+def test_different_circuits_still_go_in_the_residual_legend():
+    """The other half of the same rule.
+
+    When the spectra were fitted through different circuits —which is
+    what ``auto`` does— the circuit is the whole point of the legend
+    entry and cannot move to a single line of text.
+    """
+    session = _session_with_spectra(2)
+    analyses = session.eis_analyses()
+    assert all(a is not None and a.fit is not None for a in analyses)
+    circuits = {a.fit.circuit for a in analyses}
+    if len(circuits) == 1:
+        analyses[0].fit.circuit = analyses[0].fit.circuit + "-C9"
+
+    _, axis = _draw_one_panel(session, "eis_residuo")
+    labels = [str(line.get_label()) for line in axis.get_lines()
+              if not str(line.get_label()).startswith("_")]
+    assert all("R0" in label for label in labels), (
+        "con circuitos distintos, cada línea tiene que decir el suyo"
+    )
+
+
 def test_the_figure_is_saved_at_its_own_width(tmp_path):
     from PIL import Image
 

@@ -1349,26 +1349,44 @@ def _panel_eis_residual(axis, session, spec, palette) -> None:
     The impedance equivalent of a Rietveld difference curve: a pretty
     mean residual with a systematic wobble in it is a worse fit than an
     ugly one with no structure.
+
+    The circuit goes in the legend only when the spectra were fitted
+    with DIFFERENT ones, which is what ``auto`` does. Repeating one
+    common circuit on every line costs about thirty characters per
+    sample and, past four samples, pushes the legend over the tick
+    labels — measured on five spectra fitted through one circuit. When
+    they all share it, it is said once, above the legend.
     """
+    fits = []
     for index, (spectrum, analysis) in enumerate(
             zip(_eis_list(session), session.eis_analyses())):
         fit = analysis.fit if analysis else None
         if fit is None or fit.fitted is None:
             continue
+        fits.append((index, spectrum, fit))
+    shared = {fit.circuit for _, _, fit in fits}
+    common = shared.pop() if len(shared) == 1 else None
+    for index, spectrum, fit in fits:
         residual = 100.0 * np.abs(spectrum.z - fit.fitted) / np.abs(spectrum.z)
+        label = (f"{spectrum.name} ({fit.residual_pct:.2f} %)" if common
+                 else f"{spectrum.name}: {fit.circuit} "
+                      f"({fit.residual_pct:.2f} %)")
         axis.plot(spectrum.frequency, residual, "o-", color=_colour(index),
-                  markersize=2.8, linewidth=1.0, zorder=3,
-                  label=f"{spectrum.name}: {fit.circuit} "
-                        f"({fit.residual_pct:.2f} %)")
+                  markersize=2.8, linewidth=1.0, zorder=3, label=label)
     axis.axhline(0.0, color=GREY, linewidth=0.6, zorder=1)
     axis.set_xscale("log")
     axis.set_xlabel(spec.text("frequency"))
     axis.set_ylabel(spec.text("residual"))
     low, high = axis.get_ylim()
-    axis.set_ylim(low, high + 0.35 * (high - low))
+    axis.set_ylim(low, high + (0.45 if common else 0.35) * (high - low))
+    if common:
+        axis.text(0.97, 0.985, common, transform=axis.transAxes,
+                  ha="right", va="top", fontsize=spec.font_size - 1.0,
+                  color=GREY)
     if spec.legends:
         axis.legend(frameon=False, fontsize=spec.font_size - 1.5,
-                    loc="upper right", handlelength=1.3)
+                    loc="upper right", handlelength=1.3,
+                    bbox_to_anchor=(1.0, 0.94) if common else None)
     _tidy(axis, spec, log_x=True)
 
 

@@ -1,110 +1,161 @@
-# Cuatro carbones Fe/Fe₃C, cuatro precursores de nitrógeno — lectura del PEIS
+# Carbones Fe/Fe₃C y el precursor de nitrógeno — lectura del PEIS
 
 Etanol como fuente de carbono en las cuatro muestras. Lo que cambia es
 el precursor que aporta el nitrógeno: ninguno (**E**), acetonitrilo
-(**EA**), bencilamina (**EB**) y piridina (**EP**). Las medidas son
-PEIS de 100 kHz a 0.01 Hz, 43 frecuencias, ~10.5 mV de amplitud y unos
-once minutos por espectro, en **H₂SO₄ 0.5 M** sobre el **disco de
-carbón vítreo de 3 mm**.
+(**EA**), bencilamina (**EB**) y piridina (**EP**). PEIS de 100 kHz a
+0.01 Hz, 43 frecuencias, ~10.5 mV y unos once minutos por espectro, en
+**H₂SO₄ 0.5 M** sobre el **disco de carbón vítreo de 3 mm**, frente a
+**Ag/AgCl saturado**, con **0.909 mg** de material depositado.
+
+**EB está dos veces, a dos potenciales.** Esa pareja es el control
+interno de todo el análisis y es de donde sale casi todo lo que sigue.
 
 Los números están en [`tablas.md`](tablas.md) y en los CSV; esto es qué
 significan.
 
 ```bash
-uv run python -I analisis_PEIS_N/exportar.py E.mpr EA.mpr EB.mpr EP.mpr
-uv run python -I analisis_PEIS_N/figuras.py  E.mpr EA.mpr EB.mpr EP.mpr
+uv run python -I analisis_PEIS_N/exportar.py \
+    E.mpr EA.mpr EB_catodico.mpr EB_anodico.mpr EP.mpr
+uv run python -I analisis_PEIS_N/figuras.py \
+    E.mpr EA.mpr EB_catodico.mpr EB_anodico.mpr EP.mpr
 ```
 
 ---
 
-## Lo primero, porque cambia qué se puede concluir
+## El resultado: el mismo electrodo, dos potenciales, dos medidas distintas
 
-### EB no estaba midiendo una doble capa: estaba haciendo hidrógeno
+| | **EB a −0.19 V vs RHE** | **EB a +0.54 V vs RHE** |
+|---|---|---|
+| Kramers-Kronig | **NO pasa** (rms 6.57 %, rachas 0.24×) | **pasa** (0.73 %, 0.72×) |
+| Corriente media | 15.9 µA (**0.225 mA cm⁻²**) | 2.47 µA (0.035 mA cm⁻²) |
+| Fase a 0.01 Hz | −20.1° | **−47.0°** |
+| C′(0.01 Hz) | 0.084 mF | **0.200 mF** |
+| ápice de arco | **0.032 Hz** | ninguno |
+| Residuo del ajuste común | 5.79 % | **1.83 %** |
+| R_s | 85.01 Ω | 85.22 Ω |
 
-Con el electrolito puesto, el pH es 0.3 y los continuos se pueden pasar
-a la escala del hidrógeno (suponiendo Ag/AgCl saturado, que es la
-referencia de la serie anterior del usuario — **no la dio para ésta**):
+Misma muestra, misma celda —las dos R_s coinciden al 0.25 %, que es lo
+que dice que el electrodo no se tocó entre medidas— y mismo barrido. Lo
+único que cambia es el potencial. Y con él cambia el veredicto.
 
-| | V vs Ag/AgCl sat | **V vs RHE** | \|j\| (µA cm⁻², geométrica) |
-|---|---|---|---|
-| E | +0.4489 | +0.664 | 5.0 |
-| EA | +0.3105 | +0.525 | 3.8 |
-| **EB** | **−0.4043** | **−0.190** | **225** |
-| EP | +0.4853 | +0.700 | 7.6 |
+A −0.190 V vs RHE el electrodo está **por debajo del equilibrio del
+hidrógeno**, con 190 mV de sobrepotencial catódico y 0.225 mA cm⁻²
+pasando: eso es **desprendimiento de hidrógeno corriendo durante los
+once minutos del barrido**. Una reacción farádica, burbujas, y una
+interfase que cambia mientras se la mide. El arco que se cerraba a
+0.032 Hz era ese proceso; a +0.54 V no está.
 
-**EB está 190 mV por DEBAJO del equilibrio del hidrógeno**, y pasa
-0.225 mA cm⁻² — de treinta a sesenta veces la corriente de las otras
-tres, con la misma amplitud de 10 mV. Eso es **desprendimiento de
-hidrógeno corriendo durante los once minutos del barrido**: una
-reacción farádica, burbujas, y una interfase que cambia mientras se la
-mide. No es ruido ni un artefacto del equipo, y explica por sí solo por
-qué ese espectro no pasa Kramers-Kronig.
+**Tres conclusiones, y las tres cambian lo que se puede escribir:**
 
-Es, además, un resultado por derecho propio y no sólo un problema: el
-OCP de EB está donde el hidrógeno se desprende, que es lo que hace un
-electrodo con hierro accesible al electrolito.
-
-### Dos de los cuatro espectros no son consistentes con Kramers-Kronig
-
-| | residuo RMS | rachas de signo | |
-|---|---|---|---|
-| E | 0.25 % | 0.71× | pasa |
-| EA | 0.14 % | 0.88× | pasa |
-| **EB** | **6.57 %** | **0.24×** | **no pasa** |
-| **EP** | **1.65 %** | **0.41×** | **no pasa** |
-
-Kramers-Kronig no comprueba el modelo: comprueba que el sistema fuera
-**el mismo** del principio al final del barrido. Lo que lo decide no es
-el tamaño del residuo sino su **estructura**: un residuo que cambia de
-signo cuatro veces menos de lo que cambiaría por azar no es ruido.
-
-**Consecuencia:** de EB y EP se pueden usar la forma, R_s, el codo y
-C′(f), que son datos. **No** se pueden citar los parámetros de ningún
-circuito ajustado a ellos, por bien que ajuste. Está en la pantalla
-del residuo (panel f de la figura).
-
-### Y los cuatro se midieron a potenciales distintos
-
-Entre EB y EP hay **0.89 V**. Una resistencia de transferencia de carga
-depende **exponencialmente** del sobrepotencial: a esa distancia, una
-diferencia de un orden de magnitud en R_ct no dice nada sobre la
-química del nitrógeno, dice dónde estaba polarizada cada celda. Que el
-OCP mismo difiera *sí* es un resultado —es el potencial mixto del
-material— pero es otro resultado.
-
-> **El experimento que arregla las dos cosas es el mismo:** repetir los
-> cuatro PEIS al **mismo potencial** frente a la misma referencia, y
-> medir cada uno **dos veces, de alta a baja frecuencia y al revés**. Si
-> las dos pasadas no coinciden, ahí está la deriva, con nombre y
-> apellidos.
+1. **El fallo de Kramers-Kronig de EB no era de la muestra ni del
+   equipo. Era el potencial.** Es la demostración, no la hipótesis.
+2. **La capacitancia de EB estaba subestimada más del doble.** A
+   potencial comparable da 0.200 mF, no 0.084.
+3. **Y el OCP de EB sigue siendo un resultado.** Que el potencial mixto
+   de esa muestra caiga en la región del hidrógeno mientras el de las
+   otras tres está medio voltio más arriba es una propiedad del
+   material, no un accidente de la medida. En una muestra con mucho Fe
+   y Fe₃C, eso apunta a **hierro accesible al electrolito**.
 
 ---
 
-## El ajuste: un circuito para las cuatro, y cuál
+## Lo que esto arregla, y lo que sigue abierto
 
-La primera versión de esta figura dejaba que el automático eligiera el
-circuito de cada espectro, que es lo correcto para describir una
-muestra y lo incorrecto para comparar cuatro. Y además ajustaba mal:
-la curva de EP no seguía a los puntos.
+### Los potenciales, casi resueltos
+
+| | V vs Ag/AgCl sat | **V vs RHE** |
+|---|---|---|
+| EA | +0.3105 | +0.525 |
+| **EB an.** | +0.3249 | **+0.540** |
+| E | +0.4489 | +0.664 |
+| EP | +0.4853 | +0.700 |
+| ~~EB cat.~~ | −0.4043 | −0.190 |
+
+Cuatro de los cinco caen dentro de **0.18 V** entre sí, y **EB an. y EA
+están a 13 mV**: ésa es una comparación directa, sin excusas. Antes la
+tabla tenía 0.89 V de recorrido y nada era comparable.
+
+### EP sigue sin pasar Kramers-Kronig
+
+Residuo 1.65 % con rachas 0.41×. No hay corriente anómala que lo
+explique (0.54 µA) y el potencial es el más anódico de los cinco:
++0.700 V vs RHE. La sospecha razonable es oxidación lenta de la
+superficie del carbón a ese potencial, pero **no está demostrada**, y el
+experimento que lo zanjaría es el mismo que para todo lo demás: medir de
+alta a baja frecuencia y otra vez al revés.
+
+**De EP y de EB cat. se pueden usar la forma, R_s, el codo y C′(f), que
+son datos. No los parámetros de ningún circuito.**
+
+---
+
+## El ajuste: un circuito para todas
 
 | | automático | residuo | **común: `R0-(R1\|Q1)-(R2\|Q2)`** |
 |---|---|---|---|
 | E | R0-(R1\|Q1)-T1 | 2.38 % | **0.71 %** |
 | EA | R0-T1 | 3.18 % | **0.54 %** |
-| EB | R0-(R1\|Q1) | 9.75 % | **5.79 %** |
+| EB cat. | R0-(R1\|Q1) | 9.75 % | **5.79 %** |
+| EB an. | R0-(R1\|Q1) | 3.05 % | **1.83 %** |
 | EP | R0-(R1\|Q1) | **17.83 %** | **5.11 %** |
 
-Dos arcos ganan en las cuatro a la vez y devuelven los siete parámetros
-determinados en tres de ellas (cinco de siete en EB, que es la que no
-pasa KK). Es el circuito de la figura y el de todas las columnas de
-arco de las tablas.
+Dos arcos ganan en todas a la vez. Es el circuito de la figura y el de
+todas las columnas de arco de las tablas.
 
-**El arco lento es el que almacena**: su capacitancia sigue el mismo
-orden que la C′ medida (1.33 / 0.22 / 0.07 / 0.37 mF frente a 0.83 /
-0.16 / 0.08 / 0.29), que es la comprobación de que el modelo no está
-inventando el almacenamiento. Pero **en E y EA ese arco está
-extrapolado**: su τ vale 86 y 145 s, o sea un ápice en 1.9 y 1.1 mHz,
-dos décadas por debajo de lo medido.
+**Pero un residuo bajo no garantiza parámetros determinados.** EB an.
+ajusta al 1.83 % y devuelve cinco de siete: sus dos arcos están a un
+factor 3.5 en τ, y a esa distancia el reparto lo decide el punto de
+partida más que los datos. El residuo mide descripción; la columna
+«determinados» de `tablas.md` mide medida.
+
+**Sólo EA tiene una resistencia iónica de poro medida**: 43.87 Ω ± 4.7 %
+con el modelo físico `L0-R0-(R1|Q1)-T1` al 0.51 % de residuo. En los dos
+EB la línea de transmisión colapsa con ±10⁸ % — en uno de ellos con un
+residuo excelente, que es exactamente por lo que la incertidumbre se
+mira y el residuo no basta.
+
+---
+
+## La capacitancia, y el problema que la masa destapó
+
+Con los 0.909 mg ya se pueden dar F/g. El resultado es incómodo y hay
+que decirlo:
+
+| | V vs RHE | C′(0.01 Hz) | **F g⁻¹** | fase ahí |
+|---|---|---|---|---|
+| **E** | +0.664 | 0.827 mF | **0.910** | −56° |
+| EP | +0.700 | 0.287 mF | 0.316 | −22° |
+| **EB an.** | +0.540 | 0.200 mF | **0.220** | −47° |
+| EA | +0.525 | 0.162 mF | 0.178 | −71° |
+| EB cat. | −0.190 | 0.084 mF | 0.093 | −20° |
+
+**Un carbón poroso publica de 50 a 300 F/g. Aquí el mejor da 0.91.** Eso
+son dos órdenes de magnitud, y no es un error de cuenta: es lo que la
+medida mide.
+
+La causa está en la propia preparación. 0.909 mg sobre 0.0707 cm² son
+**12.9 mg cm⁻²**, de diez a cien veces la carga habitual sobre un carbón
+vítreo, o sea una película de decenas de micras. Una película así tiene
+una resistencia iónica **en profundidad** que el ion no atraviesa en los
+100 s que dura un punto a 0.01 Hz. Lo que estos espectros miden no es la
+capacitancia del material: es **la fracción de la película a la que el
+ion llega en 100 segundos**.
+
+Y encaja con todo lo demás: ninguna muestra alcanza el régimen
+capacitivo (la fase se queda entre −20° y −71°, un condensador está en
+−90°), las cinco C′ son cotas inferiores, y las cinco tienen entre 0.5 y
+1.8 décadas de fase cerca de −45°, que es justo la firma de un poro —o
+de una película— que se está cargando por difusión.
+
+> **El experimento que lo arregla es una tinta más diluida.** Con
+> 0.05–0.1 mg cm⁻² (unos 2–5 µL de una tinta diez veces más diluida) la
+> película baja a micras y el barrido actual ya la atraviesa. Eso, más
+> bajar a 1 mHz, convierte esta tabla en capacitancias de verdad.
+
+La masa es además **nominal**: sale del volumen depositado, no de pesar
+el electrodo seco. 20 µL sobre un disco de 3 mm es mucho líquido para
+ese diámetro, así que si parte se salió, la masa real es menor y los F/g
+reales algo mayores. Sigue sin cambiar el orden de magnitud.
 
 ---
 
@@ -112,18 +163,14 @@ dos décadas por debajo de lo medido.
 
 ### Ninguna cierra un semicírculo
 
-En las cuatro, −Z″ sube hasta la última frecuencia medida (EB roza un
-ápice en el último punto, a 0.032 Hz). **Ninguna resistencia de
-transferencia de carga sale de los datos**: la que devuelva un ajuste
-sale del modelo. Y en EB y EP, que además no cruzan el eje real, **R_s
-es una cota superior**. En E y EA sí hay cruce interpolado, y por
-encima de él Z″ se va positivo: inductancia del cableado, no de la
-muestra.
+Salvo el roce de EB cat. a 0.032 Hz —que era la reacción— en ninguna.
+**Ninguna resistencia de transferencia de carga sale de los datos**: la
+que devuelva un ajuste sale del modelo. Y en EB y EP, que además no
+cruzan el eje real, **R_s es una cota superior**. En E y EA sí hay cruce
+interpolado, y por encima de él Z″ se va positivo: inductancia del
+cableado, no de la muestra.
 
 ### EA es la única con un electrodo poroso bien medido
-
-Es el único espectro donde el modelo FÍSICO del poro vuelve entero
-determinado:
 
 ```
 L0-R0-(R1|Q1)-T1     residuo 0.51 %
@@ -132,109 +179,75 @@ L0-R0-(R1|Q1)-T1     residuo 0.51 %
   T1.n  = 0.895  ± 2.6 %
 ```
 
-`T1.Ri` es la magnitud que limita la potencia de un electrodo poroso, y
-es la que un ajuste con `R-(R|Q)` entierra. En EA está medida. En E el
-mismo circuito la devuelve con un **146 %** de incertidumbre; en EB y
-EP la línea de transmisión no tiene nada que describir y colapsa
-(±2·10⁸ % y ±76 %) — que no son valores, son huecos.
-
-Dicho de otro modo: **sólo EA se comporta como el electrodo poroso que
-las cuatro pretenden ser.** Su fase llega a −71° a 0.01 Hz, la más
-capacitiva de las cuatro, y su Nyquist (panel a) es la única rama casi
-vertical.
+Su fase llega a −71° a 0.01 Hz, la más capacitiva de las cinco, y su
+Nyquist (panel a) es la única rama casi vertical. **Sólo EA se comporta
+como el electrodo poroso que todas pretenden ser** — aunque almacene
+menos que EB al mismo potencial, que son dos cosas distintas: una es
+cómo entra el ion, la otra cuánta carga cabe.
 
 ### El codo ordena las muestras, y mide el dispositivo
 
 | | codo (Hz) | τ (s) |
 |---|---|---|
 | E | 10.9 | 0.092 |
+| EB an. | 25.2 | 0.040 |
 | EA | 41.0 | 0.024 |
-| EB | 46.9 | 0.021 |
+| EB cat. | 46.9 | 0.021 |
 | **EP** | **712** | **0.0014** |
 
-El codo es la frecuencia a la que la fase pasa por −45°: por encima, el
-electrodo deja de comportarse como un condensador. Lleva dentro la R_s
-de la celda a propósito —es del **dispositivo**, no del material— así
+El codo es la frecuencia a la que la fase pasa por −45°. Lleva dentro la
+R_s de la celda a propósito —es del **dispositivo**, no del material— así
 que no tiene por qué ordenar igual que la resistencia del poro, y aquí
-no lo hace.
-
-EP tiene el codo a 712 Hz, **un factor 65 por encima de E**. Eso suena
-a electrodo rápido y hay que resistirse: con una fase que a 0.01 Hz
-sigue en −22°, lo que EP tiene no es una respuesta capacitiva rápida
-sino **poca capacitancia** repartida sobre una resistencia grande. El
-codo baja cuando τ = RC sube, y EP tiene C pequeña.
-
-### Las capacitancias son todas límites inferiores
-
-| | C′(0.01 Hz) | fase ahí | mF cm⁻² (geométrica) |
-|---|---|---|---|
-| **E** | **0.827 mF** | −56° | 11.7 |
-| EP | 0.287 mF | −22° | 4.1 |
-| EA | 0.162 mF | −71° | 2.3 |
-| EB | 0.084 mF | −20° | 1.2 |
-
-A 0.01 Hz ninguna ha llegado al régimen capacitivo (un condensador está
-en −90°), así que las cuatro son **cotas inferiores**. La distancia
-entre C_s y C′ lo dice por otro lado: 12 % en EA, 47 % en E, **606 %**
-en EP y **745 %** en EB. Donde la respuesta todavía es resistiva, las
-dos definiciones de capacitancia no se parecen.
-
-Y los mF cm⁻² usan el área **geométrica** del disco: la activa de un
-carbón poroso es de diez a mil veces mayor, así que esa columna compara
-estas cuatro muestras entre sí y nada más.
-
-**Bajar a 1 mHz es lo que convierte estos cuatro números en medidas.**
-Con el barrido actual, lo honesto es decir que E almacena al menos
-cinco veces más que EA y diez veces más que EB, y que el orden final
-puede cambiar.
+no lo hace. EP está un factor 65 por encima de E, y eso suena a
+electrodo rápido: hay que resistirse. Con una fase que a 0.01 Hz sigue
+en −22°, lo que EP tiene no es una respuesta capacitiva rápida sino
+**poca capacitancia** repartida sobre una resistencia grande.
 
 ---
 
 ## La lectura química, con lo que aguanta y lo que no
 
-**El control sin nitrógeno (E) es el que más carga almacena** de los
-cuatro, al menos a 0.01 Hz. Si el objetivo del dopaje era subir la
-capacitancia, estos espectros no lo apoyan. Pero antes de escribir eso
-en un artículo hay tres cosas que lo bloquean, y las tres son
-arreglables:
+**El control sin nitrógeno (E) sigue siendo el que más carga almacena**,
+y ahora la comparación es más limpia que antes: cuatro de los cinco
+espectros están dentro de 0.18 V. Si el objetivo del dopaje era subir la
+capacitancia, estos espectros no lo apoyan. Pero antes de escribirlo hay
+dos cosas que lo bloquean:
 
-1. Los cuatro están a potenciales distintos, y uno de ellos (EB) ni
-   siquiera estaba midiendo una doble capa.
-2. Ninguno llegó al régimen capacitivo.
-3. No hay masa, así que no hay forma de saber si E almacena más **por
-   gramo** o simplemente hay más material en ese electrodo. Con las
-   cuatro C′ dentro de un factor diez, una diferencia de carga de
-   electrodo se las come enteras.
+1. **Ninguno llegó al régimen capacitivo**, y la causa probable es la
+   película gruesa, no el material.
+2. **La masa es la misma para los cinco por protocolo, no por pesada.**
+   Si el depósito varió entre electrodos, una diferencia de carga se come
+   un factor de tres en F/g sin que nada lo delate.
 
-**EA es la que se comporta como un carbón poroso.** De los cuatro
-precursores, el acetonitrilo es el de relación C/N más baja y el único
-cuyo nitrógeno entra como nitrilo. Que su electrodo sea el único con
-una resistencia de poro medible y la fase más capacitiva es consistente
-con una porosidad mejor desarrollada — y es consistente, no probado:
-esto es una medida de impedancia, no de área. **La prueba que lo zanja
-es fisisorción de N₂** (BET y distribución de tamaño de poro), y
-compararla con `T1.Ri` es justo el contraste que hace falta.
+**EA es la que se comporta como un carbón poroso.** El acetonitrilo es
+el precursor de relación C/N más baja y el único cuyo nitrógeno entra
+como nitrilo; que su electrodo sea el único con una resistencia de poro
+medible y la fase más capacitiva es **consistente** con una porosidad
+mejor desarrollada — consistente, no probado: esto es impedancia, no
+área. **La prueba que lo zanja es fisisorción de N₂** (BET y
+distribución de tamaño de poro), contrastada contra la `T1.Ri` de EA.
 
 **EB tiene el OCP en la región del hidrógeno, y eso apunta al hierro.**
-Su potencial mixto está 0.85 V por debajo del de EA y 190 mV por debajo
-del equilibrio del H₂, con 0.225 mA cm⁻² corriendo. En una muestra con
-alto contenido de Fe y Fe₃C, un OCP tan catódico y una corriente
-farádica a ese potencial apuntan a **hierro accesible al electrolito**
-— Fe⁰ o Fe₃C sin recubrir, catalizando HER y oxidándose. La bencilamina
-es la única amina alifática primaria del grupo y el ligando que más
-razonablemente complejaría hierro durante la síntesis; una partícula
-peor encapsulada es una explicación coherente con todo lo medido.
-**No está demostrado aquí.** Lo que lo demostraría: XPS del Fe 2p (¿hay
-Fe oxidado en superficie?), y un barrido anódico lento buscando el pico
-de disolución. Y si EB resulta ser el mejor catalizador de HER del
-grupo, eso es un experimento aparte que esta misma celda ya está
-pidiendo: un LSV, no un PEIS.
+Su potencial mixto está medio voltio por debajo del de las otras tres y
+0.19 V por debajo del equilibrio del H₂. En una muestra con alto
+contenido de Fe y Fe₃C, eso apunta a **hierro accesible al electrolito**
+— Fe⁰ o Fe₃C sin recubrir, catalizando HER. La bencilamina es la única
+amina alifática primaria del grupo y el ligando que más razonablemente
+complejaría hierro durante la síntesis; una partícula peor encapsulada
+es coherente con todo lo medido. **No está demostrado aquí.** Lo
+demostrarían XPS del Fe 2p y un barrido anódico lento buscando el pico
+de disolución.
 
-**EP tiene el codo más rápido y la capacitancia casi más baja**, que es
-la combinación de un electrodo poco poroso con una interfase pequeña.
-Su DRT da un único pico resuelto en **τ = 0.067 s**, el más rápido de
-los cuatro, con una capacitancia asociada de 3.8 µF — dos órdenes por
-debajo de las demás. Eso es una interfase pequeña, no una rápida.
+Y hay una lectura al revés que vale la pena: **si EB cataliza HER a
+0.225 mA cm⁻² con 190 mV de sobrepotencial, eso es un resultado de
+catálisis, no un problema de impedancia.** Medirlo cuesta un LSV, y esta
+misma celda ya lo está pidiendo.
+
+**EP tiene el codo más rápido y poca capacitancia**, que es la
+combinación de un electrodo poco poroso con una interfase pequeña. Su
+DRT da un único pico resuelto en τ = 0.067 s con 3.8 µF asociados — dos
+órdenes por debajo de las demás. Eso es una interfase pequeña, no una
+rápida.
 
 ---
 
@@ -246,36 +259,34 @@ debajo de las demás. Eso es una interfase pequeña, no una rápida.
   **XPS del N 1s**, y el paquete lo hace (`ramancarbon xps`).
 - **Nada cuantitativo sobre Fe/Fe₃C.** La impedancia ve una interfase,
   no fases. Eso es DRX con Rietveld, que también está aquí.
-- **Ninguna capacitancia específica.** Sin masa no hay F/g, y
-  suponerla es equivocarse exactamente en esa proporción.
-- **Ninguna comparación de R_ct entre muestras**, por los potenciales.
-- **Nada de EB y EP que venga de un circuito.**
-- **Nada que dependa de la referencia sin decir que es supuesta.** Toda
-  la columna RHE —y con ella la lectura de EB— se desplaza en bloque si
-  la referencia de esta serie no era Ag/AgCl saturado. **Confírmala.**
+- **Ninguna capacitancia específica del MATERIAL.** Los F/g de arriba
+  son de la película tal como está depositada, y la película es gruesa.
+- **Ninguna comparación de R_ct**, porque ninguna sale de los datos.
+- **Nada de EB cat. ni de EP que venga de un circuito.**
 
 ---
 
 ## Qué mediría a continuación, por orden de rendimiento
 
-1. **Confirmar la referencia** de esta serie. Cuesta cero y es de lo
-   que cuelga la conclusión más fuerte del análisis.
-2. **Repetir los cuatro PEIS al mismo potencial**, y cada uno en los dos
-   sentidos de frecuencia. Cuesta una tarde y desbloquea la mitad de
-   esta tabla.
-3. **Bajar a 1 mHz.** Convierte cuatro cotas inferiores en cuatro
-   capacitancias, y mete dentro del barrido el arco lento que ahora
-   está extrapolado en E y EA.
-4. **Pesar los electrodos.** Convierte mF en F/g.
-5. **Un LSV de HER sobre EB** (y sobre las otras tres para comparar).
-   El PEIS ya enseñó que esa muestra hace hidrógeno; medirlo es un
-   barrido.
+1. **Una tinta diez veces más diluida**, 2–5 µL, para bajar a
+   0.05–0.1 mg cm⁻². Es lo único que puede convertir estos F/g en una
+   capacitancia del material, y cuesta una tarde.
+2. **Repetir E, EA y EP al potencial de EB an.** (+0.54 V vs RHE), que
+   es donde ya hay dos medidas comparables. Y cada espectro **en los dos
+   sentidos de frecuencia**: si las dos pasadas no coinciden, ahí está la
+   deriva de EP con nombre y apellidos.
+3. **Bajar a 1 mHz.** Convierte las cotas inferiores en medidas y mete
+   dentro del barrido el arco lento que ahora está extrapolado en E y EA.
+4. **Pesar el electrodo seco**, antes y después, en vez de contar el
+   volumen de tinta.
+5. **Un LSV de HER sobre EB**, y sobre las otras tres para comparar. El
+   PEIS ya enseñó que esa muestra hace hidrógeno.
 6. **BET** sobre las cuatro, para contrastar contra la `T1.Ri` de EA.
 7. **XPS N 1s y Fe 2p**, que es lo único que contesta la pregunta que
    motivó el experimento.
 
-Con 2 y 3 hechos, este mismo script vuelve a correr sin tocar una línea
-y las tablas salen comparables.
+Con 1, 2 y 3 hechos, estos mismos scripts vuelven a correr sin tocar una
+línea y las tablas salen comparables.
 
 ---
 
@@ -283,25 +294,26 @@ y las tablas salen comparables.
 
 | archivo | qué es |
 |---|---|
-| `peis_precursores.png` / `.pdf` | la figura de seis paneles |
+| `peis_precursores.png` / `.pdf` | la figura de seis paneles, cinco espectros |
 | `tablas.md` | todas las tablas, con las unidades y los avisos |
 | `espectro_*.csv` | f, Z′, Z″, \|Z\|, fase, ajuste, residuo, C′, C″ |
 | `drt_*.csv` | τ, γ(τ), y si cae dentro del intervalo medido |
 | `comparacion.csv`, `ajustes.csv`, `capacitancias.csv` | las tablas en crudo |
-| `informe_*.txt` | el informe en prosa de cada muestra |
+| `informe_*.txt` | el informe en prosa de cada espectro |
 | `resumen.json` | todo, incluidos el ranking de circuitos y los avisos |
 | `exportar.py`, `figuras.py` | lo que lo produce |
+
+Los sufijos `_EB_cat` y `_EB_an` son los dos potenciales de EB:
+catódico (−0.19 V vs RHE) y anódico (+0.54 V).
 
 **Z″ va con su signo físico** (negativo si es capacitivo) en todos los
 CSV, no con el −Z″ del Nyquist, que es convenio de dibujo.
 
-Los seis paneles de la figura: (a) Nyquist a escala uno a uno con el
-rincón en un recuadro, (b) el rincón ampliado, (c) Bode con el codo
-marcado, (d) C′ y C″ sin ningún circuito de por medio, (e) DRT
-normalizada y (f) el residuo de cada ajuste — que es el panel donde se
-ve de un vistazo cuáles dos no hay que creerse.
+Los seis paneles: (a) Nyquist a escala uno a uno con el rincón en un
+recuadro, (b) el rincón ampliado, (c) Bode con el codo marcado, (d) C′ y
+C″ sin ningún circuito de por medio, (e) DRT normalizada y (f) el
+residuo de cada ajuste.
 
-En el panel (e) el peso se amontona contra el borde derecho en tres de
-las cuatro. **Eso no es un fallo del dibujo: es el resultado.** Falta
-barrido por debajo de 0.01 Hz, y la DRT acumula ahí todo lo que no se
-midió.
+En el panel (e) el peso se amontona contra el borde derecho. **Eso no es
+un fallo del dibujo: es el resultado.** Falta barrido por debajo de
+0.01 Hz, y la DRT acumula ahí todo lo que no se midió.

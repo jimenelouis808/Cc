@@ -16,36 +16,40 @@ EB   etanol + bencilamina          PhCH2NH2, amina primaria, N sp3
 EP   etanol + piridina             C5H5N, N aromático ya en un anillo
 ===  ============================  ==================================
 
-Lo que el usuario SÍ dio: **H2SO4 0.5 M** y el **disco de carbón vítreo
-de 3 mm** (0.0707 cm²). El electrolito no entra en ninguna impedancia
-medida, pero sí en el pH, y del pH sale la conversión a RHE — que aquí
-resulta ser la diferencia entre medir una doble capa y medir una
-reacción, porque sitúa a EB por DEBAJO del equilibrio del hidrógeno.
+Condiciones, todas dadas por el usuario: **H2SO4 0.5 M**, **disco de
+carbón vítreo de 3 mm** (0.0707 cm²), **Ag/AgCl saturado** y
+**0.909 mg** de material (20 uL de una tinta de 5 mg en 110 uL). El
+electrolito no entra en ninguna impedancia medida, pero sí en el pH, y
+del pH sale la conversión a RHE — que aquí resulta ser la diferencia
+entre medir una doble capa y medir una reacción.
 
-Lo que NO dio, y que por tanto no aparece en ninguna tabla:
+**EB está DOS veces, a dos potenciales, y esa pareja es el control
+interno de todo el análisis.** El primer espectro se midió a −0.19 V vs
+RHE, por debajo del equilibrio del hidrógeno, y no pasa Kramers-Kronig;
+el segundo, a +0.54 V, en la misma ventana que las otras tres, lo pasa.
+Misma muestra, misma celda (R_s 85.01 y 85.22 ohm), seis veces menos
+corriente y el doble de capacitancia. Eso convierte «EB no pasa KK» de
+una sospecha sobre la muestra en una medida sobre el potencial.
 
-- **La masa.** Así que no hay ni un F/g. Una capacitancia específica sin
-  masa medida es el número equivocado exactamente en la proporción que
-  se suponga.
-- **La referencia de ESTA serie.** Se usa la de su serie anterior,
-  Ag/AgCl saturado, y se dice en voz alta: toda la columna RHE depende
-  de ello.
+Lo que sigue siendo una suposición, y se dice en cada tabla:
+
+- **La masa es NOMINAL.** Sale del volumen de tinta depositado, no de
+  pesar el electrodo seco. Y son 12.9 mg/cm2, de diez a cien veces la
+  carga habitual sobre un carbón vítreo: la película es gruesa, y eso
+  explica por sí solo que ninguna muestra llegue al régimen capacitivo.
 - **El área ELECTROQUÍMICAMENTE ACTIVA.** Los 0.0707 cm² son el área
   GEOMÉTRICA del disco: la activa de un carbón poroso es de diez a mil
-  veces mayor, así que los mF/cm² sirven para comparar estas cuatro
-  muestras entre sí y para nada más.
+  veces mayor, así que los mF/cm² sirven para comparar estas muestras
+  entre sí y para nada más.
 
-**Y hay algo que sí está en los archivos y que condiciona toda
-comparación: los cuatro espectros se midieron a POTENCIALES DISTINTOS.**
-Los nombres dicen «PEIS 0 V», que en EC-Lab es 0 V *frente al potencial
-de circuito abierto*, así que el continuo de cada medida es el OCP de su
-propia muestra: +0.449, +0.311, −0.404 y +0.485 V. Una resistencia de
-transferencia de carga depende exponencialmente del sobrepotencial, así
-que entre dos muestras medidas a 0.9 V de distancia no se puede atribuir
-a la química lo que puede ser el punto de polarización. Va en el aviso
-de cada tabla y en el informe, y es la primera cosa que habría que
-rehacer: repetir los cuatro al MISMO potencial frente a la misma
-referencia.
+**Y los cuatro precursores se midieron a POTENCIALES DISTINTOS.** Los
+nombres dicen «PEIS 0 V», que en EC-Lab es 0 V *frente al potencial de
+circuito abierto*, así que el continuo de cada medida es el OCP de su
+propia muestra. Una resistencia de transferencia de carga depende
+exponencialmente del sobrepotencial, así que entre dos muestras medidas
+a 0.9 V de distancia no se puede atribuir a la química lo que puede ser
+el punto de polarización. Con el segundo EB, tres de las cuatro quedan
+ya dentro de 0.18 V entre sí.
 
 El bloque de comentarios del .mpr no se lee.
 """
@@ -71,17 +75,25 @@ OUT = Path("/home/user/Cc/packages/ramancarbon/analisis_PEIS_N")
 ELECTROLYTE = "H2SO4_0.5M"
 DISC_MM = 3.0
 
-#: El usuario no nombró la referencia en esta serie. Se usa la de su
-#: serie anterior y se dice, porque de ella depende la conversión a RHE
-#: y de la conversión depende si una muestra está por encima o por
-#: debajo del equilibrio del hidrógeno — que aquí resulta ser la
-#: diferencia entre medir una doble capa y medir una reacción.
+#: CONFIRMADA por el usuario. De ella depende la conversión a RHE, y de
+#: la conversión depende si una muestra está por encima o por debajo del
+#: equilibrio del hidrógeno — que aquí resulta ser la diferencia entre
+#: medir una doble capa y medir una reacción.
 REFERENCE = "Ag/AgCl_sat"
 
+#: La masa de material sobre el electrodo, del protocolo del usuario:
+#: tinta de 5 mg de muestra en 100 uL de isopropanol y 10 uL de Nafion,
+#: de la que se depositan 20 uL. 20/110 x 5 mg = 0.909 mg. Es NOMINAL:
+#: sale del volumen depositado, no de pesar el electrodo, y una gota
+#: que se sale del disco se lleva masa que esta cuenta no descuenta.
+MASS_MG = 0.909
+
 #: La etiqueta de cada archivo, en el orden en que se pasan. El PRECURSOR
-#: es la variable de este experimento, así que es la leyenda.
-LABELS = ("E (etanol)", "EA (+acetonitrilo)", "EB (+bencilamina)",
-          "EP (+piridina)")
+#: es la variable de este experimento, así que es la leyenda — salvo en
+#: EB, que va DOS veces porque es la misma muestra a dos potenciales, y
+#: esa pareja es el control interno de todo el análisis.
+LABELS = ("E (etanol)", "EA (+acetonitrilo)", "EB (+bencilamina) −0.19 V",
+          "EB (+bencilamina) +0.54 V", "EP (+piridina)")
 
 #: Qué aporta cada precursor, para el informe. El entorno del nitrógeno
 #: en el precursor NO es el que acaba en el carbón —la pirólisis lo
@@ -89,8 +101,23 @@ LABELS = ("E (etanol)", "EA (+acetonitrilo)", "EB (+bencilamina)",
 PRECURSORS = {
     "E (etanol)": "sin nitrógeno; el control",
     "EA (+acetonitrilo)": "CH3CN: nitrilo, N sp, relación C/N baja",
-    "EB (+bencilamina)": "PhCH2NH2: amina primaria sp3 sobre un anillo",
+    "EB (+bencilamina) −0.19 V":
+        "PhCH2NH2: amina primaria sp3 sobre un anillo. MEDIDA POR DEBAJO "
+        "DEL EQUILIBRIO DEL HIDRÓGENO",
+    "EB (+bencilamina) +0.54 V":
+        "PhCH2NH2: amina primaria sp3 sobre un anillo. La MISMA muestra, "
+        "en la ventana de las otras tres",
     "EP (+piridina)": "C5H5N: N aromático ya dentro de un anillo",
+}
+
+#: El nombre de archivo de cada muestra. No sale de la etiqueta porque
+#: las dos de EB empiezan igual y se pisarían los CSV.
+SLUGS = {
+    "E (etanol)": "E",
+    "EA (+acetonitrilo)": "EA",
+    "EB (+bencilamina) −0.19 V": "EB_cat",
+    "EB (+bencilamina) +0.54 V": "EB_an",
+    "EP (+piridina)": "EP",
 }
 
 #: El circuito con el que se ajustan TODAS, encima del que su propia
@@ -139,7 +166,7 @@ def build(paths):
     session.electrode.use_electrolyte(ELECTROLYTE)
     session.electrode.reference = REFERENCE
     session.electrode.use_disc(DISC_MM)
-    session.electrode.mass_mg = None
+    session.electrode.mass_mg = MASS_MG
     session.circuit = AUTO_CIRCUIT
     for path, label in zip(paths, LABELS):
         if not session.add_eis_to_series(path, label=label):
@@ -279,6 +306,13 @@ def main(paths):
                 "tau0_s": cap.relaxation_s,
                 "f0_hz": cap.relaxation_frequency_hz,
                 "mf_cm2": 1e3 * cap.low_frequency_capacitance / area,
+                # F/g, which the mass finally allows. It is a LOWER
+                # bound twice over: C' at 0.01 Hz has not reached the
+                # capacitive regime, and the mass is the whole deposit
+                # whether or not the ion got to all of it.
+                "f_g": cap.low_frequency_capacitance / (1e-3 * MASS_MG),
+                "f_g_elemento": (stored.farads / (1e-3 * MASS_MG)
+                                 if stored else None),
                 "elemento_mf": 1e3 * stored.farads if stored else None,
                 "elemento_metodo": stored.method if stored else None,
                 "elemento_pasos": list(stored.steps) if stored else [],
@@ -310,7 +344,7 @@ def main(paths):
             "avisos": list(analysis.warnings),
         })
 
-        slug = label.split()[0]
+        slug = SLUGS[label]
         header = ("f_hz,z_real_ohm,z_imag_ohm,modulo_ohm,fase_grados,"
                   "z_real_ajuste_ohm,z_imag_ajuste_ohm,residuo_pct,"
                   "c_prima_f,c_segunda_f")
@@ -369,7 +403,7 @@ def main(paths):
              "c_elemento_mf,c_arco_hm_mf,c_arco_brug_mf,"
              "c_arco_rapido_hm_mf,tau_arco_rapido_s,"
              "c_arco_lento_hm_mf,tau_arco_lento_s,mf_cm2_geometrica,"
-             "fase_grados,tau0_s,f0_hz,f_hz"]
+             "f_g_c_prima,f_g_elemento,fase_grados,tau0_s,f0_hz,f_hz"]
     for sample in samples:
         c = sample["capacitancia"]
         # Sorted by tau: which of the two arcs is the slow one is a
@@ -390,7 +424,9 @@ def main(paths):
                      else ",")
             + "," + (f"{slow['hm_mf']:.6g},{slow['tau_s']:.6g}" if slow
                      else ",")
-            + f",{c['mf_cm2']:.6g},{c['fase_grados']:.6g},"
+            + f",{c['mf_cm2']:.6g},{c['f_g']:.6g},"
+            + (f"{c['f_g_elemento']:.6g}" if c["f_g_elemento"] else "")
+            + f",{c['fase_grados']:.6g},"
             + (f"{c['tau0_s']:.6g}" if c["tau0_s"] else "")
             + "," + (f"{c['f0_hz']:.6g}" if c["f0_hz"] else "")
             + f",{c['c_prima_f_hz']:.6g}")
@@ -418,10 +454,19 @@ def main(paths):
                 f"disco de carbón vítreo de {DISC_MM:g} mm, dado por el "
                 "usuario. Es área GEOMÉTRICA: la electroquímicamente "
                 "activa de un carbón poroso es de diez a mil veces mayor"),
-            "masa_mg": None,
+            "masa_mg": MASS_MG,
             "masa_nota": (
-                "no dada, así que no hay F/g en ninguna tabla de este "
-                "análisis"),
+                f"{MASS_MG:g} mg, del protocolo del usuario: 20 uL de una "
+                "tinta de 5 mg de muestra en 100 uL de isopropanol y 10 uL "
+                "de Nafion, o sea 20/110 x 5 mg. Es NOMINAL: sale del "
+                "volumen depositado y no de pesar el electrodo seco"),
+            "carga_mg_cm2": MASS_MG / area,
+            "carga_nota": (
+                "de diez a cien veces la carga habitual sobre un carbón "
+                "vítreo. Una película gruesa tiene una resistencia iónica "
+                "en profundidad que el barrido no atraviesa a 0.01 Hz, y "
+                "eso explica por sí solo que ninguna muestra llegue al "
+                "régimen capacitivo"),
             "potenciales_continuos_v": biases,
             "potenciales_rhe_v": rhe,
             "potenciales_rhe_como": rhe_note,
@@ -445,6 +490,6 @@ def main(paths):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 5:
+    if len(sys.argv) != 6:
         raise SystemExit(__doc__)
     main(sys.argv[1:])

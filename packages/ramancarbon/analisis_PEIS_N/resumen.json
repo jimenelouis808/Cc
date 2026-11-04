@@ -8,18 +8,22 @@
     "referencia_nota": "el usuario no la nombró en esta serie; se usa la de su serie anterior. Toda la columna RHE depende de ello",
     "area_cm2": 0.07068583470577036,
     "area_suposicion": "disco de carbón vítreo de 3 mm, dado por el usuario. Es área GEOMÉTRICA: la electroquímicamente activa de un carbón poroso es de diez a mil veces mayor",
-    "masa_mg": null,
-    "masa_nota": "no dada, así que no hay F/g en ninguna tabla de este análisis",
+    "masa_mg": 0.909,
+    "masa_nota": "0.909 mg, del protocolo del usuario: 20 uL de una tinta de 5 mg de muestra en 100 uL de isopropanol y 10 uL de Nafion, o sea 20/110 x 5 mg. Es NOMINAL: sale del volumen depositado y no de pesar el electrodo seco",
+    "carga_mg_cm2": 12.85971940182514,
+    "carga_nota": "de diez a cien veces la carga habitual sobre un carbón vítreo. Una película gruesa tiene una resistencia iónica en profundidad que el barrido no atraviesa a 0.01 Hz, y eso explica por sí solo que ninguna muestra llegue al régimen capacitivo",
     "potenciales_continuos_v": {
       "E (etanol)": 0.44890295488889825,
       "EA (+acetonitrilo)": 0.3104578526907189,
-      "EB (+bencilamina)": -0.4043114559594975,
+      "EB (+bencilamina) −0.19 V": -0.4043114559594975,
+      "EB (+bencilamina) +0.54 V": 0.3249288679555405,
       "EP (+piridina)": 0.48527943810751273
     },
     "potenciales_rhe_v": {
       "E (etanol)": 0.6636509548888982,
       "EA (+acetonitrilo)": 0.5252058526907188,
-      "EB (+bencilamina)": -0.18956345595949753,
+      "EB (+bencilamina) −0.19 V": -0.18956345595949753,
+      "EB (+bencilamina) +0.54 V": 0.5396768679555405,
       "EP (+piridina)": 0.7000274381075127
     },
     "potenciales_rhe_como": "E(Electrodo reversible de hidrógeno a pH 0.3) = E(Ag/AgCl (KCl saturado)) +0.2147 V",
@@ -175,6 +179,8 @@
         "tau0_s": null,
         "f0_hz": null,
         "mf_cm2": 11.698589479150607,
+        "f_g": 0.9097079892342177,
+        "f_g_elemento": 1.1127732631837597,
         "elemento_mf": 1.0115108962340378,
         "elemento_metodo": "CPE en serie a 0.01001 Hz",
         "elemento_pasos": [
@@ -439,6 +445,8 @@
         "tau0_s": null,
         "f0_hz": null,
         "mf_cm2": 2.291766740033364,
+        "f_g": 0.17821281074827341,
+        "f_g_elemento": 0.18830929675426208,
         "elemento_mf": 0.17117315074962425,
         "elemento_metodo": "CPE en serie a 0.01001 Hz",
         "elemento_pasos": [
@@ -547,8 +555,8 @@
       ]
     },
     {
-      "muestra": "EB (+bencilamina)",
-      "precursor": "PhCH2NH2: amina primaria sp3 sobre un anillo",
+      "muestra": "EB (+bencilamina) −0.19 V",
+      "precursor": "PhCH2NH2: amina primaria sp3 sobre un anillo. MEDIDA POR DEBAJO DEL EQUILIBRIO DEL HIDRÓGENO",
       "archivo": "",
       "potencial_continuo_v": -0.4043114559594975,
       "potencial_rhe_v": -0.18956345595949753,
@@ -684,6 +692,8 @@
         "tau0_s": null,
         "f0_hz": null,
         "mf_cm2": 1.1944605219115398,
+        "f_g": 0.09288387130297833,
+        "f_g_elemento": null,
         "elemento_mf": null,
         "elemento_metodo": null,
         "elemento_pasos": [],
@@ -788,6 +798,239 @@
         "el espectro no pasa Kramers-Kronig. Los parámetros del circuito que salgan abajo NO son fiables, por muy bien que ajuste",
         "Q1: Q = 5.863e-05 S·sⁿ NO son faradios. Para dar una capacitancia hace falta convertir con la resistencia en paralelo (echem.eis.cpe_to_capacitance) y citar siempre la n al lado",
         "el residuo medio es 9.7 %. El circuito no describe estos datos: mira el diagrama de Nyquist y compara la forma, no el número"
+      ]
+    },
+    {
+      "muestra": "EB (+bencilamina) +0.54 V",
+      "precursor": "PhCH2NH2: amina primaria sp3 sobre un anillo. La MISMA muestra, en la ventana de las otras tres",
+      "archivo": "",
+      "potencial_continuo_v": 0.3249288679555405,
+      "potencial_rhe_v": 0.5396768679555405,
+      "n_frecuencias": 43,
+      "f_hz": [
+        100003.7109375,
+        0.010009169578552246
+      ],
+      "forma": {
+        "r_serie_ohm": 85.21988677978516,
+        "r_serie_como": "el espectro no cruza el eje real; se usa Z′ a la frecuencia más alta medida (1e+05 Hz), que es una COTA SUPERIOR de R_u. Un electrodo puramente capacitivo no cruza nunca —ahí esta cota es buena— pero si Z″ es POSITIVO arriba, lo que hay es inductancia de los cables y entonces sobra resistencia: mide más alto o réstala",
+        "inductivo_arriba": false,
+        "apice_arco_hz": null,
+        "codo_hz": 25.158794162538715,
+        "codo_como": "la fase cruza -45° entre 31.63 y 21.55 Hz (interpolado en log f)",
+        "fase_f_min_grados": -47.004033172202156,
+        "cola_capacitiva": false,
+        "decadas_45": 0.9995670902220477,
+        "notas": [
+          "−Z″ no tiene ningún máximo local: sube hasta la frecuencia más baja medida. No hay semicírculo cerrado en estos datos, así que de ellos NO sale ninguna resistencia de transferencia de carga — la que devuelva un ajuste sale del modelo, no de la medida"
+        ]
+      },
+      "candidatos": [
+        {
+          "nombre": "randles_cpe",
+          "circuito": "R0-(R1|Q1)",
+          "porque": "la forma no decide: no hay arco cerrado ni cola capacitiva dentro del barrido. Esto es un punto de partida, no una recomendación"
+        }
+      ],
+      "ranking": [
+        {
+          "circuito": "R0-(R1|Q1)-(R2|Q2)",
+          "nombre": "dos_semicirculos",
+          "chi2": 0.026075720867916277,
+          "residuo_pct": 1.8254457947831613,
+          "libres": 7,
+          "determinados": 6,
+          "bic": -665.5139908021456
+        },
+        {
+          "circuito": "R0-(R1|Q1)-Q2",
+          "nombre": "supercondensador",
+          "chi2": 0.030327360246469,
+          "residuo_pct": 1.797253497474436,
+          "libres": 6,
+          "determinados": 5,
+          "bic": -656.9784133111532
+        },
+        {
+          "circuito": "R0-(R1|Q1)-T1",
+          "nombre": "poroso_con_transferencia",
+          "chi2": 0.030327360270684896,
+          "residuo_pct": 1.7972534623811014,
+          "libres": 7,
+          "determinados": 4,
+          "bic": -652.5240659462302
+        },
+        {
+          "circuito": "L0-R0-(R1|Q1)-T1",
+          "nombre": "supercondensador_completo",
+          "chi2": 0.030784407687643043,
+          "residuo_pct": 1.847570204637412,
+          "libres": 8,
+          "determinados": 5,
+          "bic": -646.7833277619446
+        },
+        {
+          "circuito": "R0-Za1",
+          "nombre": "zarc",
+          "chi2": 0.06047110887008535,
+          "residuo_pct": 3.049931000907313,
+          "libres": 4,
+          "determinados": 4,
+          "bic": -606.5371810841134
+        },
+        {
+          "circuito": "R0-(R1|Q1)",
+          "nombre": "randles_cpe",
+          "chi2": 0.06047110887008553,
+          "residuo_pct": 3.0499310010259366,
+          "libres": 4,
+          "determinados": 4,
+          "bic": -606.5371810841131
+        },
+        {
+          "circuito": "R0-(R1-Wo1|Q1)",
+          "nombre": "randles_wo",
+          "chi2": 0.16371403610743032,
+          "residuo_pct": 4.654654661994548,
+          "libres": 6,
+          "determinados": 3,
+          "bic": -511.97631246580994
+        },
+        {
+          "circuito": "R0-Q1",
+          "nombre": "edlc_cpe",
+          "chi2": 0.25016200153118584,
+          "residuo_pct": 4.487615363058209,
+          "libres": 3,
+          "determinados": 3,
+          "bic": -488.87643016704055
+        },
+        {
+          "circuito": "R0-T1",
+          "nombre": "poroso",
+          "chi2": 0.2498243976502868,
+          "residuo_pct": 4.386434774199931,
+          "libres": 4,
+          "determinados": 3,
+          "bic": -484.5382217826348
+        }
+      ],
+      "elegido": "R0-(R1|Q1)",
+      "comun": "R0-(R1|Q1)-(R2|Q2)",
+      "kk": {
+        "pasa": true,
+        "residuo_rms_pct": 0.72795073453563,
+        "rachas": 0.7242669993761697
+      },
+      "capacitancia": {
+        "c_prima_mf": 0.2004093030513016,
+        "c_prima_f_hz": 0.010009169578552246,
+        "c_serie_mf": 0.37463292090700356,
+        "fase_grados": -47.004033172202156,
+        "tau0_s": null,
+        "f0_hz": null,
+        "mf_cm2": 2.835211664197005,
+        "f_g": 0.2204722805844902,
+        "f_g_elemento": null,
+        "elemento_mf": null,
+        "elemento_metodo": null,
+        "elemento_pasos": [],
+        "arco_mf": 0.3674864428459089,
+        "arco_metodo": "Hsu-Mansfeld",
+        "arco_pasos": [
+          "C = (T · R^(1−P))^(1/P) = T^(1/P) · R^((1−P)/P)",
+          "T^(1/P) = 0.00012237^(1/0.7300) = 4.37153e-06",
+          "R^((1−P)/P) = 159772^(0.3699) = 84.0636",
+          "C = 4.37153e-06 × 84.0636 = 0.000367486 F"
+        ],
+        "arcos_del_comun": [
+          {
+            "arco": 1,
+            "r_ohm": 19670.81947916351,
+            "hm_mf": 0.345182158188956,
+            "brug_mf": 0.024661848914298224,
+            "tau_s": 6.7900159211630156,
+            "f_apice_hz": 0.023439553741817262,
+            "pasos_hm": [
+              "C = (T · R^(1−P))^(1/P) = T^(1/P) · R^((1−P)/P)",
+              "T^(1/P) = 0.000184716^(1/0.6736) = 2.86552e-06",
+              "R^((1−P)/P) = 19670.8^(0.4846) = 120.461",
+              "C = 2.86552e-06 × 120.461 = 0.000345182 F"
+            ],
+            "pasos_brug": [
+              "C = T^(1/P) · (1/R_s + 1/R_ct)^((P−1)/P)",
+              "1/R_s + 1/R_ct = 1/85.2874 + 1/19670.8 = 0.0117759 S",
+              "  (equivale a R_s ∥ R_ct = 84.9192 Ω)",
+              "T^(1/P) = 0.000184716^(1/0.6736) = 2.86552e-06",
+              "(R_s ∥ R_ct)^((1−P)/P) = 84.9192^(0.4846) = 8.60642",
+              "C = 2.46618e-05 F"
+            ]
+          },
+          {
+            "arco": 2,
+            "r_ohm": 75338.10941115844,
+            "hm_mf": 0.3196740844226738,
+            "brug_mf": 0.2287030895433346,
+            "tau_s": 24.0836411481473,
+            "f_apice_hz": 0.006608425283904331,
+            "pasos_hm": [
+              "C = (T · R^(1−P))^(1/P) = T^(1/P) · R^((1−P)/P)",
+              "T^(1/P) = 0.000275244^(1/0.9530) = 0.000183651",
+              "R^((1−P)/P) = 75338.1^(0.0494) = 1.74066",
+              "C = 0.000183651 × 1.74066 = 0.000319674 F"
+            ],
+            "pasos_brug": [
+              "C = T^(1/P) · (1/R_s + 1/R_ct)^((P−1)/P)",
+              "1/R_s + 1/R_ct = 1/85.2874 + 1/75338.1 = 0.0117383 S",
+              "  (equivale a R_s ∥ R_ct = 85.1909 Ω)",
+              "T^(1/P) = 0.000275244^(1/0.9530) = 0.000183651",
+              "(R_s ∥ R_ct)^((1−P)/P) = 85.1909^(0.0494) = 1.24531",
+              "C = 0.000228703 F"
+            ]
+          }
+        ],
+        "arco_brug_mf": 0.024661848914298224,
+        "arco_brug_metodo": "Brug (faradaico)",
+        "arco_brug_pasos": [
+          "C = T^(1/P) · (1/R_s + 1/R_ct)^((P−1)/P)",
+          "1/R_s + 1/R_ct = 1/85.2874 + 1/19670.8 = 0.0117759 S",
+          "  (equivale a R_s ∥ R_ct = 84.9192 Ω)",
+          "T^(1/P) = 0.000184716^(1/0.6736) = 2.86552e-06",
+          "(R_s ∥ R_ct)^((1−P)/P) = 84.9192^(0.4846) = 8.60642",
+          "C = 2.46618e-05 F"
+        ],
+        "comprobacion": "",
+        "avisos": [
+          "el máximo de C″ cae en un extremo del intervalo medido, así que no está dentro de los datos: la constante de tiempo τ₀ no la determina esta medida. Amplía el barrido de frecuencias hacia las bajas",
+          "a la frecuencia más baja medida (0.01 Hz) el ángulo de fase es -47°, y un condensador está en −90°. La medida no ha llegado al régimen capacitivo, así que esta capacitancia es un límite INFERIOR: baja más la frecuencia",
+          "la capacitancia en serie (−1/ωZ″ = 0.375 mF) y la real (C′ = 0.2 mF) difieren un 87 %: la parte real de la impedancia no es despreciable a esa frecuencia y las dos fórmulas dejan de ser la misma. C′ es la que se puede entregar"
+        ]
+      },
+      "r_ion_ohm": null,
+      "r_ct_ohm": 159771.588932592,
+      "drt": {
+        "lambda": 1.8233480008684386,
+        "residuo_pct": 6.33432688490507,
+        "ohmica_ohm": 86.16635496649822,
+        "picos": [
+          {
+            "tau_s": 0.7067229260335091,
+            "r_ohm": 29787.838769618425,
+            "c_f": 2.372521657241943e-05
+          }
+        ],
+        "avisos": [
+          "la inversión es mal condicionada: la regularización no es un detalle de implementación sino una elección sobre cuánta estructura creerse. Aquí λ = 1.82",
+          "el residuo es del 6.3 %: la distribución no reproduce el espectro, así que sobra regularización o los datos no son los de un sistema lineal invariante",
+          "hay peso apreciable en el extremo lento: falta frecuencia baja, y la difusión suele estar ahí",
+          "la fase pasa 1.0 décadas cerca de −45°, que es un elemento DISTRIBUIDO —un poro, un Warburg, un Gerischer— y no tiene constante de tiempo propia. Los 1 pico(s) de arriba son esa distribución troceada en arcos: no los cuentes como procesos ni los traduzcas a ZARC en esa región"
+        ]
+      },
+      "dibujo": "  R0-(R1|Q1)-(R2|Q2)\n\n  ─[ R0 ]─┬─[ R1 ]─┬┬─[ R2 ]─┬\n          ┴─[/Q1/]─┴┴─[/Q2/]─┴\n\n  ────────────────────────────────────────────\n  Q1, Q2     CPE\n  R0, R1, R2 resistencia\n  ────────────────────────────────────────────\n  R0.R              85.2874 Ω\n  R1.R              19670.8 Ω\n  Q1.Q          0.000184716 S·sⁿ\n  Q1.n             0.673576 \n  R2.R              75338.1 Ω\n  Q2.Q          0.000275244 S·sⁿ\n  Q2.n             0.952965 ",
+      "avisos": [
+        "−Z″ no tiene ningún máximo local: sube hasta la frecuencia más baja medida. No hay semicírculo cerrado en estos datos, así que de ellos NO sale ninguna resistencia de transferencia de carga — la que devuelva un ajuste sale del modelo, no de la medida",
+        "la R de transferencia de carga (1.598e+05 Ω) sale del circuito y no de los datos: −Z″ no cierra ningún arco dentro del barrido, así que su constante de tiempo está fuera de lo medido. La capacitancia efectiva convertida con ella hereda esa dependencia",
+        "Q1: Q = 0.0001224 S·sⁿ NO son faradios. Para dar una capacitancia hace falta convertir con la resistencia en paralelo (echem.eis.cpe_to_capacitance) y citar siempre la n al lado"
       ]
     },
     {
@@ -920,6 +1163,8 @@
         "tau0_s": null,
         "f0_hz": null,
         "mf_cm2": 4.0585135487265855,
+        "f_g": 0.315598919534012,
+        "f_g_elemento": null,
         "elemento_mf": null,
         "elemento_metodo": null,
         "elemento_pasos": [],
@@ -1058,7 +1303,7 @@
       "3.181"
     ],
     [
-      "EB (+bencilamina)",
+      "EB (+bencilamina) −0.19 V",
       "85.01",
       "—",
       "46.88",
@@ -1067,6 +1312,17 @@
       "—",
       "R0-(R1|Q1)",
       "9.749"
+    ],
+    [
+      "EB (+bencilamina) +0.54 V",
+      "85.22",
+      "—",
+      "25.16",
+      "-47.0",
+      "0.2004",
+      "—",
+      "R0-(R1|Q1)",
+      "3.050"
     ],
     [
       "EP (+piridina)",

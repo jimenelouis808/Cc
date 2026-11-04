@@ -1,6 +1,7 @@
 """La figura de los cuatro PEIS, hecha con el MOTOR DE LA VENTANA.
 
-    uv run python -I analisis_PEIS_N/figuras.py E.mpr EA.mpr EB.mpr EP.mpr
+    uv run python -I analisis_PEIS_N/figuras.py \
+        E.mpr EA.mpr EB_catodico.mpr EB_anodico.mpr EP.mpr
 
 No dibuja nada por su cuenta: monta la misma `EchemSession` que usa la
 sección de electroquímica, elige paneles del mismo catálogo y llama a
@@ -16,8 +17,12 @@ from ramancarbon.gui.echem_state import EchemSession
 from ramancarbon.gui.theme import PALETTES
 
 OUT = Path("/home/user/Cc/packages/ramancarbon/analisis_PEIS_N")
-LABELS = ("E (etanol)", "EA (+acetonitrilo)", "EB (+bencilamina)",
-          "EP (+piridina)")
+#: EB va DOS veces, a dos potenciales: es la misma muestra, y la pareja
+#: es el control interno de la figura. El de −0.19 V vs RHE está por
+#: debajo del equilibrio del hidrógeno y no pasa Kramers-Kronig; el de
+#: +0.54 V está en la ventana de las otras tres y sí lo pasa.
+LABELS = ("E (etanol)", "EA (+acetonitrilo)", "EB (+bencilamina) −0.19 V",
+          "EB (+bencilamina) +0.54 V", "EP (+piridina)")
 
 #: Seis paneles, en el orden en que se leen. El rincón va aparte del
 #: Nyquist porque el Nyquist entero se dibuja a escala uno a uno —la
@@ -32,6 +37,7 @@ def main(paths):
     session.electrode.use_electrolyte("H2SO4_0.5M")
     session.electrode.reference = "Ag/AgCl_sat"
     session.electrode.use_disc(3.0)
+    session.electrode.mass_mg = 0.909
     # UN circuito para las cuatro, y el que ganó el barrido del
     # catálogo entero: dos arcos. El automático elegía uno distinto por
     # espectro —R0-(R1|Q1) en dos de ellos— y con ése la curva ajustada
@@ -58,6 +64,6 @@ def main(paths):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 5:
+    if len(sys.argv) != 6:
         raise SystemExit(__doc__)
     main(sys.argv[1:])
