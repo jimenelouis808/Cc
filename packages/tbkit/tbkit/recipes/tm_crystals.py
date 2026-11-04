@@ -1,4 +1,4 @@
-"""GPAW references of transition-metal monolayers: MoS2 (2H) and the MoCS Janus layer.
+"""GPAW references of Mo crystals for the Mo set: the MoS2 (2H) monolayer and bcc Mo.
 
 Run from packages/tbkit (resumable, one file per point)::
 
@@ -11,9 +11,7 @@ three random distortions (energies and forces, the validation of a set fitted on
 molecules), and PBE bands along Γ-M-K-Γ in the format of ``band_validation``.
 
 * ``MoS2``: 2H (trigonal prismatic), the reference sulfide.
-* ``MoCS``: the Janus layer of the user's work: C on one side of the Mo plane, S on the
-  other, trigonal prismatic like 2H; a starting geometry from MoS2 with the top S → C at
-  a shorter height. Its topology (spin-orbit, Z2) is a later stage (ESTADO.md).
+* ``Mo_bcc``: the metal (bands only on GHNGPH, energies and forces of its strains).
 
 Spin-paired, no spin-orbit. The 6-electron Mo setup, as in the molecular references.
 """
@@ -40,7 +38,7 @@ STRAINS = (0.98, 1.02)
 N_RANDOM = 3
 SIGMA = 0.05
 FMAX = 0.02
-SYSTEMS = ("MoS2", "MoCS", "Mo_bcc")
+SYSTEMS = ("MoS2", "Mo_bcc")
 #: extra strains of each layer with bands only (the band fit of the Mo set)
 BAND_STRAINS = (0.96, 0.98, 1.02, 1.04)
 
@@ -58,9 +56,6 @@ def start(name: str) -> Atoms:
     if name == "MoS2":
         positions = [[*xy[0], z0], [*xy[1], z0 + 1.56], [*xy[1], z0 - 1.56]]
         symbols = "MoS2"
-    elif name == "MoCS":
-        positions = [[*xy[0], z0], [*xy[1], z0 + 1.20], [*xy[1], z0 - 1.56]]
-        symbols = "MoCS"
     else:
         raise KeyError(name)
     # plane waves need a periodic cell: the slab repeats along z with VACUUM_C of vacuum

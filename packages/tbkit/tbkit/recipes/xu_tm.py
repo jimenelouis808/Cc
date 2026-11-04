@@ -3,15 +3,16 @@
 Run from packages/tbkit (after ``recipes/tm_references Mo``)::
 
     python -m tbkit.recipes.xu_tm Mo tbkit/parameters/references/gpaw_mo.json OUT.json \\
-        --workers 4 --onsite-window 8 --bands T/MoS2/bands*.json T/Mo_bcc/bands.json \\
-        --held-out-bands T/MoCS/bands.json T/MoCS/bands_x0.96.json T/MoCS/bands_x1.04.json \\
-        --crystals T/MoS2 T/Mo_bcc --held-out-crystals T/MoCS
+        --workers 4 --onsite-window 8 --band-edge-weight 3 \\
+        --bands T/MoS2/bands.json T/MoS2/bands_x0.96.json T/MoS2/bands_x1.04.json \\
+        T/Mo_bcc/bands.json --held-out-bands T/MoS2/bands_x0.98.json T/MoS2/bands_x1.02.json \\
+        --crystals T/MoS2 T/Mo_bcc
 
 (``T`` = ``tbkit/parameters/references/tm_crystals``, from :mod:`tbkit.recipes.tm_crystals`;
 the shipped ``xu_chnosmo.json``.)
 
 Same machinery as :mod:`tbkit.recipes.xu_bsp` (:class:`~tbkit.recipes.xu_family.XuFamily`):
-the base set is held fixed (xu_chnos, which has the C and S of MoCS and MoS₂) and the metal
+the base set is held fixed (xu_chnos, which has the S of MoS₂) and the metal
 is added with s, p and d orbitals (``d_elements``): its on-site s, p and d energies, the
 Slater-Koster integrals of every pair with it (sd, pd and dd included) and the pair
 repulsions are fitted to GPAW (PBE, LCAO dzp, the 6-electron Mo setup) on closed-shell
@@ -20,7 +21,7 @@ molecules. The Hubbard U is the free atom's dε_d/dn_d (computed, not fitted).
 Molecules alone leave the solid unconstrained (the first fit made MoS₂ metallic), so the
 GPAW bands of :mod:`tbkit.recipes.tm_crystals` join the fit with ``--bands`` (MoS₂ relaxed
 and strained, Mo bcc), the way ``c_bandas`` was fitted for carbon; ``--held-out-bands``
-(MoCS) are reported only, the test. ``--crystals`` adds their energy and force points
+(MoS₂ at ±2 %, between the fitted strains) are reported only, the test. ``--crystals`` adds their energy and force points
 (relaxed, ±2 %, rattled) to forces and energies: bands alone left the crystal repulsion
 unconstrained (MoS₂ forces 1.1 eV/Å at the GPAW minimum). ``--onsite-window`` keeps each on-site energy within
 that many eV of the free atom's level.
