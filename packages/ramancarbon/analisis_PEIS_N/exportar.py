@@ -16,17 +16,24 @@ EB   etanol + bencilamina          PhCH2NH2, amina primaria, N sp3
 EP   etanol + piridina             C5H5N, N aromático ya en un anillo
 ===  ============================  ==================================
 
-Lo que el usuario NO dio, y que por tanto no aparece en ninguna tabla:
+Lo que el usuario SÍ dio: **H2SO4 0.5 M** y el **disco de carbón vítreo
+de 3 mm** (0.0707 cm²). El electrolito no entra en ninguna impedancia
+medida, pero sí en el pH, y del pH sale la conversión a RHE — que aquí
+resulta ser la diferencia entre medir una doble capa y medir una
+reacción, porque sitúa a EB por DEBAJO del equilibrio del hidrógeno.
 
-- **El electrolito.** No se supone ninguno. Nada de lo que se mide aquí
-  depende de él salvo la interpretación, y ésta lo dice donde toca.
+Lo que NO dio, y que por tanto no aparece en ninguna tabla:
+
 - **La masa.** Así que no hay ni un F/g. Una capacitancia específica sin
   masa medida es el número equivocado exactamente en la proporción que
   se suponga.
-- **El área.** Se usa el disco de carbón vítreo de 3 mm que el usuario
-  emplea casi siempre (0.0707 cm²) y va dicho en cada tabla que es una
-  SUPOSICIÓN. Es área GEOMÉTRICA: la electroquímicamente activa de un
-  carbón poroso es de diez a mil veces mayor.
+- **La referencia de ESTA serie.** Se usa la de su serie anterior,
+  Ag/AgCl saturado, y se dice en voz alta: toda la columna RHE depende
+  de ello.
+- **El área ELECTROQUÍMICAMENTE ACTIVA.** Los 0.0707 cm² son el área
+  GEOMÉTRICA del disco: la activa de un carbón poroso es de diez a mil
+  veces mayor, así que los mF/cm² sirven para comparar estas cuatro
+  muestras entre sí y para nada más.
 
 **Y hay algo que sí está en los archivos y que condiciona toda
 comparación: los cuatro espectros se midieron a POTENCIALES DISTINTOS.**
@@ -52,12 +59,24 @@ from ramancarbon.echem.biologic import read_mpr
 from ramancarbon.echem.capacitance import complex_capacitance
 from ramancarbon.echem.eis import (AUTO_CIRCUIT, analyse_eis, brug_capacitance,
                                    compare_circuits, draw_circuit, drt,
-                                   fit_circuit, read_shape, recommend_circuits)
+                                   fit_circuit, hsu_mansfeld_capacitance,
+                                   read_shape, recommend_circuits)
 from ramancarbon.gui.echem_state import EchemSession
 
 OUT = Path("/home/user/Cc/packages/ramancarbon/analisis_PEIS_N")
 
+#: Dados por el usuario. El pH de `echem.json` es 0.3 y sale de la
+#: ACTIVIDAD, no de -log c: el primer protón del sulfúrico está
+#: disociado del todo y el segundo sólo en parte (Ka2 = 0.012).
+ELECTROLYTE = "H2SO4_0.5M"
 DISC_MM = 3.0
+
+#: El usuario no nombró la referencia en esta serie. Se usa la de su
+#: serie anterior y se dice, porque de ella depende la conversión a RHE
+#: y de la conversión depende si una muestra está por encima o por
+#: debajo del equilibrio del hidrógeno — que aquí resulta ser la
+#: diferencia entre medir una doble capa y medir una reacción.
+REFERENCE = "Ag/AgCl_sat"
 
 #: La etiqueta de cada archivo, en el orden en que se pasan. El PRECURSOR
 #: es la variable de este experimento, así que es la leyenda.
@@ -77,13 +96,28 @@ PRECURSORS = {
 #: El circuito con el que se ajustan TODAS, encima del que su propia
 #: forma pida. Dos preguntas distintas: «qué describe mejor este
 #: espectro» es por muestra, y «cómo se comparan las cuatro» necesita un
-#: modelo común o los parámetros no son los mismos parámetros.
-COMMON = "R0-(R1|Q1)-T1"
+#: modelo común o los parámetros no son los mismos parámetros. Es el que
+#: ganó el barrido del catálogo entero en las cuatro, y el que dibuja la
+#: figura: dos arcos, 0.71 / 0.54 / 5.79 / 5.11 % de residuo medio,
+#: contra el 2.4 / 3.2 / 9.7 / 17.8 % que daba el automático por
+#: espectro — que en EP deja la curva ajustada sin seguir a los puntos.
+COMMON = "R0-(R1|Q1)-(R2|Q2)"
 
-#: Y el de la muestra cuyo extremo alto se va inductivo. Dejar fuera la L
-#: no es cosmético: medido en la serie anterior, R0 se come la
-#: inductancia y la resistencia iónica del poro se vuelve inmedible.
-COMMON_WITH_L = "L0-R0-(R1|Q1)-T1"
+#: Y el mismo con la inductancia del cableado, que se ajusta ADEMÁS para
+#: la muestra cuyo extremo alto se va inductivo. No sustituye al común:
+#: con dos arcos la L no cambia el residuo de E (0.706 % con y sin) y
+#: vuelve indeterminada ahí, así que meterla en el modelo común costaría
+#: un parámetro sin medida y haría que las cuatro ya no llevaran el
+#: mismo circuito. Donde sí paga es en EA, 0.541 → 0.497 % con los ocho
+#: parámetros determinados.
+COMMON_WITH_L = "L0-R0-(R1|Q1)-(R2|Q2)"
+
+#: El circuito FÍSICO del electrodo poroso, que se ajusta además del
+#: común: es el único que devuelve la resistencia iónica del poro, que
+#: es la que limita la potencia. Donde la devuelve determinada es una
+#: medida; donde no, se dice.
+POROUS = "R0-(R1|Q1)-T1"
+POROUS_WITH_L = "L0-R0-(R1|Q1)-T1"
 
 CANDIDATES = ("edlc_cpe", "randles_cpe", "zarc", "poroso", "supercondensador",
               "dos_semicirculos", "randles_wo", "poroso_con_transferencia",
@@ -102,6 +136,8 @@ def dc_potential(path: str) -> float:
 
 def build(paths):
     session = EchemSession(name="carbones Fe/Fe3C por precursor de N")
+    session.electrode.use_electrolyte(ELECTROLYTE)
+    session.electrode.reference = REFERENCE
     session.electrode.use_disc(DISC_MM)
     session.electrode.mass_mg = None
     session.circuit = AUTO_CIRCUIT
@@ -130,6 +166,14 @@ def main(paths):
     area = session.electrode.area_cm2
     biases = {label: dc_potential(path)
               for label, path in zip(LABELS, paths)}
+    # To RHE, which is the scale on which «is this above or below the
+    # hydrogen equilibrium» is a question with an answer. The package
+    # refuses the conversion without a pH rather than guessing one.
+    rhe = {}
+    for label, value in biases.items():
+        converted, why = session.electrode.to_reference([value], "RHE")
+        rhe[label] = float(converted[0]) if converted is not None else None
+    rhe_note = why
 
     comparison = session.eis_comparison_rows()
     samples = []
@@ -141,17 +185,55 @@ def main(paths):
         analysis = analyse_eis(spectrum, circuit=AUTO_CIRCUIT)
         cap = complex_capacitance(spectrum)
         ranking = compare_circuits(spectrum, list(CANDIDATES))
-        common = fit_circuit(spectrum,
-                             COMMON_WITH_L if shape.inductive_top else COMMON)
+        common = fit_circuit(spectrum, COMMON)
         fits.append(_fit_row(label, common))
-        if analysis.fit is not None and analysis.fit.circuit != common.circuit:
-            fits.append(_fit_row(label + " (propio)", analysis.fit))
+        # The wiring inductance as an EXTRA row where the shape shows
+        # one, never in place of the common circuit: four samples
+        # compared through four circuits are not compared.
+        if shape.inductive_top:
+            fits.append(_fit_row(label + " (con L)",
+                                 fit_circuit(spectrum, COMMON_WITH_L)))
+        # And the porous model, always, because it is the only one that
+        # returns the pore's ionic resistance. Where that comes back
+        # determined it is a measurement; where it does not, the table
+        # says so rather than leaving the column empty.
+        porous = fit_circuit(spectrum,
+                             POROUS_WITH_L if shape.inductive_top else POROUS)
+        fits.append(_fit_row(label + " (poroso)", porous))
+        if analysis.fit is not None and analysis.fit.circuit not in (
+                common.circuit, porous.circuit):
+            fits.append(_fit_row(label + " (automático)", analysis.fit))
         relaxation = drt(spectrum)
 
         stored = analysis.storage_capacitance
-        arc_brug = None
+        # Both arcs of the COMMON circuit, both relations, so the whole
+        # capacitance table comes out of one model instead of mixing the
+        # auto-chosen circuit's arc with the common one's. The slow arc
+        # is the one that stores: its tau says whether the measurement
+        # ever reached it, and in two of the four it did not.
         values = common.values()
-        if "Q1.Q" in values and "R1.R" in values and "R0.R" in values:
+        arcs = []
+        for index in (1, 2):
+            q, n = f"Q{index}.Q", f"Q{index}.n"
+            r = f"R{index}.R"
+            if not {q, n, r, "R0.R"} <= set(values):
+                continue
+            hm = hsu_mansfeld_capacitance(values[q], values[n], values[r])
+            brug = brug_capacitance(values[q], values[n], values["R0.R"],
+                                    values[r])
+            arcs.append({
+                "arco": index,
+                "r_ohm": values[r],
+                "hm_mf": 1e3 * hm.farads,
+                "brug_mf": 1e3 * brug.farads,
+                "tau_s": values[r] * hm.farads,
+                "f_apice_hz": (1.0 / (2.0 * np.pi * values[r] * hm.farads)
+                               if hm.farads else None),
+                "pasos_hm": list(hm.steps),
+                "pasos_brug": list(brug.steps),
+            })
+        arc_brug = None
+        if arcs:
             arc_brug = brug_capacitance(
                 values["Q1.Q"], values["Q1.n"], values["R0.R"],
                 values["R1.R"])
@@ -160,6 +242,7 @@ def main(paths):
             "precursor": PRECURSORS[label],
             "archivo": Path(spectrum.metadata.get("archivo", "")).name,
             "potencial_continuo_v": biases[label],
+            "potencial_rhe_v": rhe.get(label),
             "n_frecuencias": spectrum.n,
             "f_hz": [float(spectrum.frequency.max()),
                      float(spectrum.frequency.min())],
@@ -205,6 +288,7 @@ def main(paths):
                                 if analysis.arc_capacitance else None),
                 "arco_pasos": (list(analysis.arc_capacitance.steps)
                                if analysis.arc_capacitance else []),
+                "arcos_del_comun": arcs,
                 "arco_brug_mf": 1e3 * arc_brug.farads if arc_brug else None,
                 "arco_brug_metodo": arc_brug.method if arc_brug else None,
                 "arco_brug_pasos": list(arc_brug.steps) if arc_brug else [],
@@ -255,7 +339,10 @@ def main(paths):
                                              encoding="utf-8")
 
         text = (f"{label} — {PRECURSORS[label]}\n"
-                f"medido a {biases[label]:+.4f} V (continuo, del archivo)\n\n"
+                f"medido a {biases[label]:+.4f} V vs {REFERENCE}"
+                + (f" = {rhe[label]:+.4f} V vs RHE" if rhe[label] is not None
+                   else "")
+                + " (continuo, del archivo)\n\n"
                 + analysis.summary() + "\n\n" + relaxation.describe() + "\n"
                 + relaxation.interpret() + "\n\n" + ranking.describe())
         (OUT / f"informe_{slug}.txt").write_text(text, encoding="utf-8")
@@ -278,17 +365,31 @@ def main(paths):
             for key in keys))
     (OUT / "ajustes.csv").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
-    lines = ["muestra,potencial_continuo_v,c_prima_mf,c_serie_mf,"
-             "c_elemento_mf,c_arco_hm_mf,c_arco_brug_mf,mf_cm2_geometrica,"
+    lines = ["muestra,potencial_continuo_v,potencial_rhe_v,c_prima_mf,c_serie_mf,"
+             "c_elemento_mf,c_arco_hm_mf,c_arco_brug_mf,"
+             "c_arco_rapido_hm_mf,tau_arco_rapido_s,"
+             "c_arco_lento_hm_mf,tau_arco_lento_s,mf_cm2_geometrica,"
              "fase_grados,tau0_s,f0_hz,f_hz"]
     for sample in samples:
         c = sample["capacitancia"]
+        # Sorted by tau: which of the two arcs is the slow one is a
+        # property of the fit, not of the order the parameters are
+        # named in, and the slow one is the one that stores.
+        arcs = sorted(c["arcos_del_comun"], key=lambda a: a["tau_s"])
+        fast = arcs[0] if arcs else None
+        slow = arcs[-1] if len(arcs) > 1 else None
         lines.append(
             f"{sample['muestra']},{sample['potencial_continuo_v']:.6g},"
+            + (f"{sample['potencial_rhe_v']:.6g}," if sample['potencial_rhe_v']
+               is not None else ",") +
             f"{c['c_prima_mf']:.6g},{c['c_serie_mf']:.6g},"
             + (f"{c['elemento_mf']:.6g}" if c["elemento_mf"] else "")
             + "," + (f"{c['arco_mf']:.6g}" if c["arco_mf"] else "")
             + "," + (f"{c['arco_brug_mf']:.6g}" if c["arco_brug_mf"] else "")
+            + "," + (f"{fast['hm_mf']:.6g},{fast['tau_s']:.6g}" if fast
+                     else ",")
+            + "," + (f"{slow['hm_mf']:.6g},{slow['tau_s']:.6g}" if slow
+                     else ",")
             + f",{c['mf_cm2']:.6g},{c['fase_grados']:.6g},"
             + (f"{c['tau0_s']:.6g}" if c["tau0_s"] else "")
             + "," + (f"{c['f0_hz']:.6g}" if c["f0_hz"] else "")
@@ -298,20 +399,32 @@ def main(paths):
 
     summary = {
         "condiciones": {
-            "electrolito": None,
+            "electrolito": session.electrode.electrolyte,
             "electrolito_nota": (
-                "no dado por el usuario; no se supone ninguno. Nada de lo "
-                "medido depende de él salvo la interpretación"),
+                "dado por el usuario. No entra en ninguna impedancia "
+                "medida; entra por el pH, y del pH sale la conversión a "
+                "RHE"),
+            "ph": session.electrode.ph,
+            "ph_nota": (
+                "de la base del paquete, y sale de la ACTIVIDAD y no de "
+                "-log c: el primer protón del sulfúrico está disociado "
+                "del todo y el segundo sólo en parte"),
             "referencia": session.electrode.reference,
+            "referencia_nota": (
+                "el usuario no la nombró en esta serie; se usa la de su "
+                "serie anterior. Toda la columna RHE depende de ello"),
             "area_cm2": area,
             "area_suposicion": (
-                f"disco de carbón vítreo de {DISC_MM:g} mm; el usuario no "
-                "dio el área para estas medidas. Es área GEOMÉTRICA"),
+                f"disco de carbón vítreo de {DISC_MM:g} mm, dado por el "
+                "usuario. Es área GEOMÉTRICA: la electroquímicamente "
+                "activa de un carbón poroso es de diez a mil veces mayor"),
             "masa_mg": None,
             "masa_nota": (
                 "no dada, así que no hay F/g en ninguna tabla de este "
                 "análisis"),
             "potenciales_continuos_v": biases,
+            "potenciales_rhe_v": rhe,
+            "potenciales_rhe_como": rhe_note,
             "potenciales_nota": (
                 "los cuatro espectros se midieron a potenciales distintos "
                 "—0 V frente al OCP de cada muestra— así que una diferencia "

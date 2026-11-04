@@ -1,5 +1,5 @@
 E (etanol) — sin nitrógeno; el control
-medido a +0.4489 V (continuo, del archivo)
+medido a +0.4489 V vs Ag/AgCl_sat = +0.6637 V vs RHE (continuo, del archivo)
 
 E (etanol): 43 frecuencias, 0.01–1e+05 Hz, |Z| 68.1–1.59e+04 Ω
 

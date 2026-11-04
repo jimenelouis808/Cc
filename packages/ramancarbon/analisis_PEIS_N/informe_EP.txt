@@ -1,5 +1,5 @@
 EP (+piridina) — C5H5N: N aromático ya dentro de un anillo
-medido a +0.4853 V (continuo, del archivo)
+medido a +0.4853 V vs Ag/AgCl_sat = +0.7000 V vs RHE (continuo, del archivo)
 
 EP (+piridina): 43 frecuencias, 0.01–1e+05 Hz, |Z| 58.8–2.09e+04 Ω
 

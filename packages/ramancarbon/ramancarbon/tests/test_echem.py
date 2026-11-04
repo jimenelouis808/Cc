@@ -2459,6 +2459,60 @@ def test_the_per_spectrum_analyses_are_cached_and_invalidated(tmp_path):
     assert len(session.eis_analyses()) == 2
 
 
+def test_the_chosen_circuit_reaches_every_spectrum_of_the_series(tmp_path):
+    """A circuit set in the window has to reach the series.
+
+    It did not: ``eis_analyses`` analysed every spectrum with a
+    hardcoded ``auto``, so each panel of a multi-sample figure drew
+    whatever `auto` had picked for that spectrum and nothing in the
+    window could change it. A control that exists and cannot be clicked
+    is worse than no control, because the figure looks deliberate.
+    """
+    from ramancarbon.gui.echem_state import EchemSession
+
+    session = EchemSession()
+    path = tmp_path / "m.csv"
+    write_eis(_blocking_porous(), path)
+    assert session.add_eis_to_series(path, label="una")
+    assert session.add_eis_to_series(path, label="otra")
+
+    session.circuit = "R0-(R1|Q1)-(R2|Q2)"
+    analyses = session.eis_analyses()
+    assert len(analyses) == 2
+    for analysis in analyses:
+        assert analysis is not None
+        assert analysis.fit is not None
+        assert analysis.fit.circuit == "R0-(R1|Q1)-(R2|Q2)", (
+            "el circuito elegido en la ventana tiene que ser el que se "
+            "ajusta a todos los espectros de la serie, que es además lo "
+            "que los hace comparables: los parámetros de dos circuitos "
+            "distintos no son los mismos parámetros"
+        )
+
+
+def test_the_comparison_table_carries_the_same_circuit_as_the_panels(tmp_path):
+    """The table and the figure beside it cannot disagree.
+
+    ``eis_comparison_rows`` re-analysed every spectrum with its own
+    hardcoded ``auto`` instead of reading the cached analyses, so the
+    circuit column could name one circuit while the residual panel drew
+    another — and it paid for a second catalogue comparison per
+    spectrum to do it.
+    """
+    from ramancarbon.gui.echem_state import EchemSession
+
+    session = EchemSession()
+    path = tmp_path / "m.csv"
+    write_eis(_blocking_porous(), path)
+    assert session.add_eis_to_series(path, label="una")
+    session.circuit = "R0-(R1|Q1)-(R2|Q2)"
+
+    rows = session.eis_comparison_rows()
+    assert len(rows) == 2
+    circuit_column = rows[0].index("circuito")
+    assert rows[1][circuit_column] == "R0-(R1|Q1)-(R2|Q2)"
+
+
 # -- choosing the circuit from the window ------------------------------
 
 

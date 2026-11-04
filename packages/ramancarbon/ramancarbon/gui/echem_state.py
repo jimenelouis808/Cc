@@ -570,21 +570,37 @@ class EchemSession:
     def eis_analyses(self) -> list:
         """One :class:`EISResult` per loaded spectrum, cached.
 
-        Each is analysed with ``circuit="auto"``, so each gets the
-        circuit its own shape asks for. Comparing several samples through
-        one forced circuit hides exactly the differences worth having —
-        on the user's three carbons, only the 900 °C spectrum needs the
-        wiring inductance, and forcing the other two to carry an L leaves
-        it undetermined in both.
+        With ``self.circuit`` left at ``"auto"`` —the default— each is
+        analysed with the circuit its own shape asks for. Comparing
+        several samples through one forced circuit hides exactly the
+        differences worth having: on the three carbons in H2SO4, only
+        the 900 °C spectrum needs the wiring inductance, and forcing the
+        other two to carry an L leaves it undetermined in both.
+
+        **But a chosen circuit has to reach the series**, and it did
+        not: this method ignored ``self.circuit`` entirely, so every
+        panel of a multi-sample figure drew whatever `auto` had picked
+        and nothing in the window could change it. Measured on the four
+        carbons by precursor, `auto` chose ``R0-(R1|Q1)`` for two of
+        them and drew a fitted curve that misses the points by **17.8 %**
+        on one, where the two-arc model that the full catalogue search
+        wins with gives 5.1 %. A control that exists and cannot be
+        clicked is the fault this package has fixed twice already.
+
+        So: ``auto`` per spectrum when nobody chose, and the chosen
+        circuit for all of them when somebody did — which is also what
+        makes the samples comparable, because parameters from different
+        circuits are not the same parameters.
         """
         if self._eis_analyses is not None:
             return self._eis_analyses
         spectra = (list(self.eis_series) if self.eis_series
                    else ([self.eis] if self.eis is not None else []))
+        chosen = circuit_for(self.circuit) if self.circuit else AUTO_CIRCUIT
         out = []
         for spectrum in spectra:
             try:
-                out.append(analyse_eis(spectrum, circuit=AUTO_CIRCUIT))
+                out.append(analyse_eis(spectrum, circuit=chosen))
             except (CircuitError, ValueError) as exc:
                 self.log("error", f"{spectrum.name}: {exc}")
                 out.append(None)
@@ -608,18 +624,19 @@ class EchemSession:
         """One row per spectrum in the series, analysed the same way.
 
         The header row comes first so the table can be written straight
-        to a file or into a tree widget. Every spectrum is analysed on
-        its own with ``circuit="auto"``, so each gets the circuit its own
-        shape asks for, and the column says which — comparing three
-        samples through one forced circuit hides exactly the differences
-        worth having.
+        to a file or into a tree widget. The rows come from
+        :meth:`eis_analyses`, so they carry the same circuit the panels
+        and the report carry: ``auto`` per spectrum when nobody chose
+        —each gets the circuit its own shape asks for, and the column
+        says which— and the chosen one for all of them when somebody
+        did. Re-analysing here with a hardcoded ``auto`` is what made
+        this table disagree with the figure beside it, and it also cost
+        a second catalogue comparison per spectrum.
         """
         rows: list[tuple[str, ...]] = [EIS_COMPARISON_COLUMNS]
-        for spectrum in self.eis_series:
-            try:
-                analysis = analyse_eis(spectrum, circuit=AUTO_CIRCUIT)
-            except (CircuitError, ValueError) as exc:
-                rows.append((spectrum.name, f"falló: {exc}", "", "", "", "",
+        for spectrum, analysis in zip(self.eis_series, self.eis_analyses()):
+            if analysis is None:
+                rows.append((spectrum.name, "falló", "", "", "", "",
                              "", "", ""))
                 continue
             shape = analysis.shape

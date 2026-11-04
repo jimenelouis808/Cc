@@ -29,7 +29,17 @@ PANELS = ("eis_nyquist", "eis_rincon", "eis_bode", "eis_capacitancia",
 
 def main(paths):
     session = EchemSession(name="carbones Fe/Fe3C por precursor de N")
+    session.electrode.use_electrolyte("H2SO4_0.5M")
+    session.electrode.reference = "Ag/AgCl_sat"
     session.electrode.use_disc(3.0)
+    # UN circuito para las cuatro, y el que ganó el barrido del
+    # catálogo entero: dos arcos. El automático elegía uno distinto por
+    # espectro —R0-(R1|Q1) en dos de ellos— y con ése la curva ajustada
+    # no seguía a los puntos: 17.8 % de residuo medio en EP. Con dos
+    # arcos baja a 5.1 % ahí y a 0.5-0.7 % en E y EA, y además las
+    # cuatro quedan comparables, que es lo que un circuito común es
+    # para.
+    session.circuit = "R0-(R1|Q1)-(R2|Q2)"
     for path, label in zip(paths, LABELS):
         if not session.add_eis_to_series(path, label=label):
             raise SystemExit(session.messages[-1][1])

@@ -1,5 +1,5 @@
 EA (+acetonitrilo) — CH3CN: nitrilo, N sp, relación C/N baja
-medido a +0.3105 V (continuo, del archivo)
+medido a +0.3105 V vs Ag/AgCl_sat = +0.5252 V vs RHE (continuo, del archivo)
 
 EA (+acetonitrilo): 43 frecuencias, 0.01–1e+05 Hz, |Z| 47.1–9.28e+04 Ω
 

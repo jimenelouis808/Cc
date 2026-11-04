@@ -1,5 +1,5 @@
 EB (+bencilamina) — PhCH2NH2: amina primaria sp3 sobre un anillo
-medido a -0.4043 V (continuo, del archivo)
+medido a -0.4043 V vs Ag/AgCl_sat = -0.1896 V vs RHE (continuo, del archivo)
 
 EB (+bencilamina): 43 frecuencias, 0.01–1e+05 Hz, |Z| 84.9–6.48e+04 Ω
 
