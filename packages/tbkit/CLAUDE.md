@@ -346,11 +346,14 @@ docs/                 # GUIA_USUARIO, METODOS, VALIDACION (generated: never edit
   `xu_chnose_d` (Se with d) and `xu_chnosmo` (Mo, `recipes/xu_tm`).
 - Crystals in a Xu fit (`--bands`, `--crystals`, `recipes/tm_crystals` references in
   `parameters/references/tm_crystals/`): molecules alone do not fix a TMD's d bands, and
-  bands alone do not fix its forces; both go in, and one crystal (MoCS) stays out as the
-  test. A metal-metal law centred on a molecular dimer dies before the crystal's
-  metal-metal distance: check the hopping at the crystal distances (the MoS₂ gap jumped
-  to metallic between ±2 % strain). `xu_chnosmo` lattice energetics are 3-10× too stiff:
-  never relax a cell with it.
+  bands alone do not fix its forces; both go in. A law centred on a molecular bond dies
+  before the crystal's distances: check every hopping at the crystal distances (Mo-Mo from
+  the dimer made MoS₂ metallic; xu_chnos S-S is 0.02 eV at 3.15 Å, hence
+  `XuFamily.long_range`, switched on past the base's bonds so molecules keep its laws).
+  MoS₂'s direct gap at K is not SOC: the joint fit from the level fit lands indirect; it
+  comes from the recorded start (`--joint-start`, `xu_chnosmo_start.json`). Its K − Γ
+  valence offset is 0.2 eV off GPAW's 0.03: the direct character is fragile. `xu_chnosmo`
+  lattice energetics are ~10× too stiff: never relax a cell with it. MoCS is out of tbkit.
 - Tests compare with closed-form results (graphene, Hückel, Lieb). A new
   feature needs such a check, not only a regression number.
 

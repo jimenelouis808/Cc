@@ -3,13 +3,16 @@
 Run from packages/tbkit (after ``recipes/tm_references Mo``)::
 
     python -m tbkit.recipes.xu_tm Mo tbkit/parameters/references/gpaw_mo.json OUT.json \\
-        --workers 4 --onsite-window 8 --band-edge-weight 3 \\
-        --bands T/MoS2/bands.json T/MoS2/bands_x0.96.json T/MoS2/bands_x1.04.json \\
-        T/Mo_bcc/bands.json --held-out-bands T/MoS2/bands_x0.98.json T/MoS2/bands_x1.02.json \\
+        --workers 4 --onsite-window 8 --band-weight 3 --band-edge-weight 3 \\
+        --joint-start tbkit/parameters/references/xu_chnosmo_start.json \\
+        --bands T/MoS2/bands.json T/MoS2/bands_x0.96.json T/MoS2/bands_x0.98.json \\
+        T/MoS2/bands_x1.02.json T/MoS2/bands_x1.04.json T/Mo_bcc/bands.json \\
         --crystals T/MoS2 T/Mo_bcc
 
 (``T`` = ``tbkit/parameters/references/tm_crystals``, from :mod:`tbkit.recipes.tm_crystals`;
-the shipped ``xu_chnosmo.json``.)
+the shipped ``xu_chnosmo.json``. The start file records how it was found: a joint fit,
+then a band-only fit of the Mo, Mo-S, Mo-Mo and long S-S parameters. From the level fit
+alone, with or without ``--band-prefit``, the joint fit lands with the MoS₂ gap indirect.)
 
 Same machinery as :mod:`tbkit.recipes.xu_bsp` (:class:`~tbkit.recipes.xu_family.XuFamily`):
 the base set is held fixed (xu_chnos, which has the S of MoS₂) and the metal
@@ -21,7 +24,7 @@ molecules. The Hubbard U is the free atom's dε_d/dn_d (computed, not fitted).
 Molecules alone leave the solid unconstrained (the first fit made MoS₂ metallic), so the
 GPAW bands of :mod:`tbkit.recipes.tm_crystals` join the fit with ``--bands`` (MoS₂ relaxed
 and strained, Mo bcc), the way ``c_bandas`` was fitted for carbon; ``--held-out-bands``
-(MoS₂ at ±2 %, between the fitted strains) are reported only, the test. ``--crystals`` adds their energy and force points
+are reported only. No crystal is held out of the shipped set (MoCS was, and left tbkit). ``--crystals`` adds their energy and force points
 (relaxed, ±2 %, rattled) to forces and energies: bands alone left the crystal repulsion
 unconstrained (MoS₂ forces 1.1 eV/Å at the GPAW minimum). ``--onsite-window`` keeps each on-site energy within
 that many eV of the free atom's level.
@@ -78,12 +81,16 @@ FAMILIES = {
         d_elements=("Mo",),
         long_range=LONG_RANGE,
         validity_notes=("Mo ajustado en moléculas de capa cerrada (Mo(VI) d0 con oxo, hidroxo, "
-                        "metilo, amido, tiolato, sulfuro e hidruro; Mo(CO)6; Mo2) y, con "
-                        "--crystals/--bands, en MoS2 2H y Mo bcc (MoCS Janus apartado como "
-                        "prueba); la energía frente a la deformación de la red sale 3-10 veces "
-                        "más rígida que GPAW (MoS2 ±2 %: 0,13/0,48 eV frente a 0,05/0,04): no "
-                        "relajar la celda; el gap de MoS2 sale indirecto (GPAW directo en K); "
-                        "sin espín-órbita; Mo junto con B, P o Se no está cubierto"),
+                        "metilo, amido, tiolato, sulfuro e hidruro; Mo(CO)6) y en bandas, "
+                        "energías y fuerzas GPAW PW de MoS2 2H (relajado, ±2 %, ±4 %) y Mo bcc, "
+                        "sin cristal apartado: MoS2 gap directo en K como GPAW (1,64 frente a "
+                        "1,66 eV), valencia K-Γ con error ~0,2 eV (GPAW 0,03 eV: el carácter "
+                        "directo es frágil bajo deformación); la red sale ~10 veces más rígida "
+                        "que GPAW (MoS2 +2 %: 0,35 eV frente a 0,04): no relajar la celda; "
+                        "fuerzas en MoS2 0,4 eV/Å en el mínimo de GPAW; el enlace múltiple "
+                        "Mo-Mo (Mo2) no está cubierto (gap 0 frente a 1,96 eV); niveles de "
+                        "sulfuros moleculares (MoS3, MoOS2) con errores de 0,8-1 eV; sin "
+                        "espín-órbita; Mo junto con B, P o Se no está cubierto"),
         system="xu_chnos más molibdeno: óxidos, sulfuros, carbonilos, carburos de Mo",
         h_tail=(0.40, 0.60),
         base="xu_chnos"),

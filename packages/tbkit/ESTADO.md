@@ -128,28 +128,14 @@ mitad de las hessianas apartada) y referencias GPAW de moléculas de Mo
 
 Sistemas objetivo, cada uno con referencias GPAW periódicas además de las moleculares:
 
-- **MoCS tipo Janus** (monocapa hexagonal, C arriba, S abajo): conjunto `xu_chnosmo`
-  publicado (ver «Mo con bandas y cristales» abajo); MoCS apartado del ajuste como prueba.
+- **MoS₂ 2H**: conjunto `xu_chnosmo` publicado (ver «Mo: el gap directo de MoS₂» abajo).
+  MoCS Janus salió de tbkit por decisión del usuario (noviembre 2026), con su comprobación
+  topológica.
 - **FeSe tetragonal** (tipo PbO, el superconductor) y **FeSe hexagonal** (tipo NiAs):
   conjunto Fe sobre el Se con d. El Fe necesita referencias con espín y ajuste con el
   SCC con espín; en PBE el FeSe tetragonal tiene órdenes magnéticos (rayas, damero) cerca
   del no magnético que el experimento ve: comparar los órdenes, no solo uno.
 - Fe en carbono: sitios Fe-N4 en grafeno, átomos sobre grafeno, cúmulos (con espín).
-
-## Pendiente: comprobación topológica de MoCS Janus
-
-El usuario encontró, por la estructura de bandas, un comportamiento de aislante
-topológico en MoCS Janus; hay comprobaciones por hacer. Lo que hace falta en tbkit:
-
-1. Acoplamiento espín-órbita en el TB: término on-site λ L·S en p y d (base con espín
-   explícito, H 2N×2N complejo); λ de cada elemento del átomo de GPAW (desdoblamiento
-   p1/2-p3/2, d3/2-d5/2), no ajustado. Prueba: desdoblamientos del átomo libre exactos.
-2. Invariante Z2: cargas de Wannier (bucles de Wilson / centros de Wannier híbridos) sobre
-   media zona de Brillouin; con simetría de inversión no sirve el criterio de paridades
-   (Janus no la tiene). Pruebas: modelo de Kane-Mele (Z2 = 1) y su fase trivial.
-3. Bordes: bandas de una cinta (zigzag/armchair) y los estados de borde helicoidales.
-4. Contrastar con GPAW con espín-órbita (no colineal) en la monocapa: gap y orden de
-   bandas en Γ/K; el invariante de GPAW (Wannier, si es viable) como referencia.
 
 ### Mo ajustado solo con moléculas (xu_tm, noviembre 2026): no sirve para las monocapas
 
@@ -163,32 +149,38 @@ extrapolan desde moléculas. Siguiente: un conjunto electrónico de Mo ajustado 
 de MoS2 (varias deformaciones) y Mo bcc, con MoCS apartado; cotas físicas en las energías
 de sitio.
 
-### Mo con bandas y cristales: `xu_chnosmo` (publicado, noviembre 2026)
+### Mo: el gap directo de MoS₂ (`xu_chnosmo`, noviembre 2026)
 
-Ajuste conjunto de `xu_tm` con las moléculas de `gpaw_mo.json` más, por primera vez,
-cristales GPAW PW (`recipes/tm_crystals`, copiados a `parameters/references/tm_crystals/`):
-bandas de MoS₂ (relajado, ±2 %, ±4 %) y Mo bcc, y los puntos de energía y fuerzas de MoS₂ y
-Mo bcc (`--bands`, `--crystals`). MoCS queda fuera en todo: es la prueba.
+Moléculas de `gpaw_mo.json` más cristales GPAW PW (`recipes/tm_crystals`, en
+`parameters/references/tm_crystals/`): bandas de MoS₂ (relajado, ±2 %, ±4 %) y Mo bcc, y
+los puntos de energía y fuerzas de ambos (`--bands`, `--crystals`). Sin cristal apartado.
 
-Dos arreglos que lo hicieron posible: (1) la ley Mo-Mo se centraba en el dímero (1,94 Å) y
-moría antes de los 3,18 Å del Mo-Mo de MoS₂: el gap saltaba de 1,49 eV a metálico entre
--2 % y +2 %; ahora se centra en el enlace bcc (2,73 Å) con cola 3,9-4,2 Å; (2) solo con
-bandas, las fuerzas en el mínimo de GPAW eran 1,1 eV/Å: los puntos del cristal entran en
-fuerzas y energías.
+Lo que hizo falta, en orden:
+1. Ley Mo-Mo centrada en el enlace bcc (2,73 Å, cola 3,9-4,2 Å): centrada en el dímero
+   (1,94 Å) moría antes de los 3,18 Å del Mo-Mo de MoS₂ y el gap saltaba a metálico.
+2. Energías y fuerzas del cristal en el ajuste: solo con bandas, 1,1 eV/Å en el mínimo.
+3. Salto S-S de largo alcance (`XuFamily.long_range`, encendido a 2,6-2,9 Å, cola 3,7-4,0):
+   el S-S de xu_chnos vale 0,02 eV a 3,15 Å, la distancia S-S de MoS₂. Con él, gap 1,63 eV
+   y su tendencia con la deformación (1,98 → 1,00 frente a 1,85 → 1,08), pero indirecto.
+4. El gap directo: SOC no es (GPAW sin SOC ya lo da directo); un campo cristalino en sitio
+   tampoco (con lo demás fijo no se mueve). Un ajuste solo a bandas de MoS₂ (energías de
+   sitio a ±8 eV del átomo libre) pone los bordes donde GPAW en 4 de 5 deformaciones (RMS
+   0,15 eV): la capacidad está; lo que falla es el mínimo del ajuste conjunto. Desde ese
+   inicio (`parameters/references/xu_chnosmo_start.json`, `--joint-start`), con pesos 3 en
+   bandas y bordes, el conjunto conserva el gap directo en K. Desde el ajuste de niveles,
+   con o sin `--band-prefit`, cae al indirecto.
 
-| | TB | GPAW |
+| MoS₂ | TB | GPAW |
 |---|---|---|
-| MoS₂ gap (relajado; −4 % → +4 %) | 1,56; 1,61 → 1,29 eV | 1,66; 1,85 → 1,08 eV |
-| MoS₂ RMS de bandas (±3 eV) | 0,33-0,38 eV | |
-| MoS₂ fuerzas en el mínimo GPAW | 0,27 eV/Å | 0 |
-| **MoCS (prueba)** gap relajado | 0,40 eV | 0,40 eV |
-| MoCS RMS de bandas (0,96; 1; 1,04) | 0,37-0,42 eV | |
-| MoCS fuerzas en el mínimo GPAW | 0,27 eV/Å | 0 |
-| MoCS ΔE a ±2 % | 0,43 / 0,27 eV | 0,06 / 0,05 eV |
+| gap relajado | 1,64 eV, directo en K | 1,66 eV, directo en K |
+| valencia K − Γ / conducción M − K | +0,19 / +0,64 eV | +0,03 / +0,52 eV |
+| bordes (−4, −2, +2, +4 %) | K/Q, K/Q, K/K, Γ/K | K/Q, K/K, Γ/K, Γ/K |
+| RMS de bandas | 0,29-0,33 eV | |
+| fuerzas en el mínimo GPAW | 0,41 eV/Å | 0 |
+| ΔE a +2 % | 0,35 eV | 0,04 eV |
 
-Lo que falla y queda escrito en `validity`: la red 3-10 veces demasiado rígida (no relajar
-la celda con este conjunto); el gap de MoS₂ sale indirecto (GPAW directo en K); la
-tendencia del gap de MoCS con la deformación va al revés (0,62 / 0,21 eV frente a 0,36 /
-0,41). Subir el peso de las energías (10 en vez de 3) no corrigió la rigidez y empeoró
-las fuerzas de MoCS (0,27 → 0,61 eV/Å): descartado. Siguiente para la rigidez: tensión
-(estrés) de la celda como objetivo, o más deformaciones con relajación interna.
+El precio, en `validity`: niveles moleculares 0,43 → 0,71 eV; Mo2 sin gap (fuera de lo
+cubierto); MoS3/MoOS2 con 0,8-1 eV; red ~10 veces más rígida (no relajar la celda); el
+error de ~0,2 eV en la valencia K − Γ hace frágil el carácter directo bajo deformación.
+Siguiente para la rigidez: el estrés de la celda como objetivo, o más deformaciones con
+relajación interna.
