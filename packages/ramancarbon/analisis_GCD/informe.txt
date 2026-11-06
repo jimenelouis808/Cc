@@ -1,7 +1,7 @@
 ======================================================================
 5 µA  —  GCD (EC-Lab)
 GCD (EC-Lab): 8565 puntos, 37102.4 s, -0.600 a +0.400 V, |I| 0.005 mA
-Electrodo: masa activa 0.02 mg, área 0.0706858 cm², referencia Ag/AgCl_sat, KOH_3M
+Electrodo: masa activa 0.02 mg, área 0.0706858 cm², referencia Ag/AgCl_sat, KOH 3 M, pH 14.51
 
 Ramas:
   carga        33.90 s   -0.209 → +0.400 V   I = +0.005 mA   q = 0.1695 mC
@@ -2035,7 +2035,7 @@ Ciclado: 1001 ciclos
 ======================================================================
 10 µA  —  GCD (EC-Lab)
 GCD (EC-Lab): 6006 puntos, 11255.5 s, -0.600 a +0.400 V, |I| 0.01 mA
-Electrodo: masa activa 0.02 mg, área 0.0706858 cm², referencia Ag/AgCl_sat, KOH_3M
+Electrodo: masa activa 0.02 mg, área 0.0706858 cm², referencia Ag/AgCl_sat, KOH 3 M, pH 14.51
 
 Ramas:
   carga         6.21 s   -0.598 → +0.400 V   I = +0.01 mA   q = 0.06207 mC
@@ -4066,7 +4066,7 @@ Ciclado: 1001 ciclos
 ======================================================================
 20 µA  —  GCD (EC-Lab)
 GCD (EC-Lab): 6006 puntos, 4517.0 s, -0.600 a +0.401 V, |I| 0.02 mA
-Electrodo: masa activa 0.02 mg, área 0.0706858 cm², referencia Ag/AgCl_sat, KOH_3M
+Electrodo: masa activa 0.02 mg, área 0.0706858 cm², referencia Ag/AgCl_sat, KOH 3 M, pH 14.51
 
 Ramas:
   carga         2.43 s   -0.597 → +0.401 V   I = +0.02 mA   q = 0.04863 mC
@@ -6095,7 +6095,7 @@ Ciclado: 1001 ciclos
 ======================================================================
 60/−20 µA  —  GCD (EC-Lab)
 GCD (EC-Lab): 6006 puntos, 2610.5 s, -0.600 a +0.402 V, |I| 0.04 mA
-Electrodo: masa activa 0.02 mg, área 0.0706858 cm², referencia Ag/AgCl_sat, KOH_3M
+Electrodo: masa activa 0.02 mg, área 0.0706858 cm², referencia Ag/AgCl_sat, KOH 3 M, pH 14.51
 
 Ramas:
   carga         0.60 s   -0.593 → +0.402 V   I = +0.06 mA   q = 0.03594 mC
@@ -8125,7 +8125,7 @@ Ciclado: 1001 ciclos
 ======================================================================
 40 µA  —  GCD (EC-Lab)
 GCD (EC-Lab): 6006 puntos, 1900.9 s, -0.601 a +0.401 V, |I| 0.04 mA
-Electrodo: masa activa 0.02 mg, área 0.0706858 cm², referencia Ag/AgCl_sat, KOH_3M
+Electrodo: masa activa 0.02 mg, área 0.0706858 cm², referencia Ag/AgCl_sat, KOH 3 M, pH 14.51
 
 Ramas:
   carga         1.02 s   -0.596 → +0.401 V   I = +0.04 mA   q = 0.04064 mC

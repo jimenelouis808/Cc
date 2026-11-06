@@ -163,21 +163,37 @@ def main(folder: Path) -> None:
     import matplotlib.pyplot as plt
 
     session.figure_technique = "gcd"
-    spec = CompositeFigure(
+    def draw(panels, stem, height_in=2.9):
+        spec = CompositeFigure(panels=list(panels), columns=2, width_in=7.2,
+                               panel_height_in=height_in, dpi=600)
+        session.composite = spec
+        figure = plt.figure(figsize=spec.figsize())
+        for problem in session.draw_figure(figure, PALETTES["claro"]):
+            print("  panel con problema:", problem)
+        for suffix in (".png", ".pdf"):
+            figure.savefig(OUT / f"{stem}{suffix}", dpi=spec.dpi,
+                           bbox_inches="tight")
+        plt.close(figure)
+        print(f"  escrita {stem}.{{png,pdf}}")
+        return spec
+
+    draw(["gcd_series", "gcd_velocidad", "gcd_ciclado",
+          "gcd_eficiencia", "gcd_fuga", "gcd_ragone"], "gcd_serie")
+
+    # And the two panels the battery and supercapacitor literature
+    # prints: the rate capability NORMALISED —which is the one that
+    # compares between samples— and capacity against cycle with the
+    # coulombic efficiency on a twin axis.
+    draw(["gcd_retencion_velocidad", "gcd_capacidad_eficiencia"],
+         "gcd_articulo", height_in=3.2)
+
+    # And the numbers behind every panel of the LAST figure drawn, plus
+    # the six-panel one, so neither set is lost.
+    session.save_figure_data(OUT / "figura_articulo")
+    session.composite = CompositeFigure(
         panels=["gcd_series", "gcd_velocidad", "gcd_ciclado",
                 "gcd_eficiencia", "gcd_fuga", "gcd_ragone"],
         columns=2, width_in=7.2, panel_height_in=2.9, dpi=600)
-    session.composite = spec
-    figure = plt.figure(figsize=spec.figsize())
-    problems = session.draw_figure(figure, PALETTES["claro"])
-    for problem in problems:
-        print("  panel con problema:", problem)
-    for suffix in (".png", ".pdf"):
-        figure.savefig(OUT / f"gcd_serie{suffix}", dpi=spec.dpi,
-                       bbox_inches="tight")
-    plt.close(figure)
-
-    # And the numbers behind every panel.
     session.save_figure_data(OUT / "figura")
 
     summary = {

@@ -134,6 +134,9 @@ LABELS: dict[str, dict[str, str]] = {
         "slope45": "45° slope",
         "slope1": "slope 1 (45° on a linear plot)",
         "log_dropped": "{n} inductive point(s) left out: log needs −Z″ > 0",
+        "rate_retention": "capacitance retention / %",
+        "retention_at_end": "{value:.1f} %",
+        "normalised_at": "100 % at {rate}",
         "rs_marker": "▼ R$_s$ from the data",
         "knee_marker": "● knee: phase = −45°",
         "tau0_marker": "■ C″ maximum → τ₀",
@@ -228,6 +231,9 @@ LABELS: dict[str, dict[str, str]] = {
         "slope45": "pendiente 45°",
         "slope1": "pendiente 1 (los 45° del plano lineal)",
         "log_dropped": "{n} punto(s) inductivo(s) fuera: el log pide −Z″ > 0",
+        "rate_retention": "retención de capacitancia / %",
+        "retention_at_end": "{value:.1f} %",
+        "normalised_at": "100 % en {rate}",
         "rs_marker": "▼ R$_s$ de los datos",
         "knee_marker": "● codo: fase = −45°",
         "tau0_marker": "■ máximo de C″ → τ₀",
@@ -1680,6 +1686,124 @@ def _panel_gcd_rate(axis, session, spec, palette) -> None:
     _tidy(axis, spec, log_x=True)
 
 
+def _panel_gcd_rate_retention(axis, session, spec, palette) -> None:
+    """The rate capability NORMALISED: % of what the slowest rate gave.
+
+    The figure the supercapacitor and battery literature prints, and a
+    different question from the absolute panel beside it. Absolute
+    capacitance answers «how much does this electrode store»;
+    normalised answers «how much of it survives going faster», which is
+    the only one of the two that can be compared between samples whose
+    capacitances differ by a factor of ten.
+
+    **The x axis is a CURRENT, never a C rate.** A C rate is defined
+    against a nominal capacity — 1C is the current that empties the
+    electrode in an hour — so it presumes a battery electrode with a
+    plateau and a stated capacity. On a capacitive carbon there is no
+    such capacity, and relabelling microamps as «C» invents one. The
+    axis is current, in A/g when the mass is known and in µA when it is
+    not.
+
+    Asymmetric pairs are left out entirely rather than drawn hollow as
+    in the absolute panel: a point that has no single current cannot be
+    placed on a rate axis at all, and here there is no second quantity
+    to compare it against.
+    """
+    from .echem_state import _discharge_current
+
+    pairs = _gcd_pairs(session)
+    mass_g = (1e-3 * session.electrode.mass_mg
+              if session.electrode.mass_mg else None)
+    currents, values = [], []
+    for curve, analysis in pairs:
+        branch = analysis.discharges[-1] if analysis.discharges else None
+        if branch is None or branch.capacitance_f is None or analysis.asymmetric:
+            continue
+        current = float(_discharge_current(curve))
+        value = (analysis.specific_f_per_g if mass_g
+                 else branch.capacitance_f)
+        if value is None or current <= 0:
+            continue
+        currents.append(current / mass_g if mass_g else 1e6 * current)
+        values.append(float(value))
+    if len(values) < 2:
+        return
+    order = np.argsort(currents)
+    x = np.asarray(currents)[order]
+    y = np.asarray(values)[order]
+    if y[0] <= 0:
+        return
+    axis.plot(x, 100.0 * y / y[0], "o-", color=INK, markersize=5,
+              linewidth=1.3, zorder=3, label=session.name or None)
+    axis.axhline(100.0, color=GREY, linewidth=0.7, linestyle=(0, (1, 2)),
+                 zorder=1)
+    axis.set_xscale("log")
+    axis.set_xlabel(spec.text("current_density_a_g") if mass_g
+                    else "i / µA")
+    axis.set_ylabel(spec.text("rate_retention"))
+    unit = "A g$^{-1}$" if mass_g else "µA"
+    axis.text(0.03, 0.06,
+              spec.text("normalised_at", rate=f"{x[0]:.3g} {unit}"),
+              transform=axis.transAxes, ha="left", va="bottom",
+              fontsize=spec.font_size - 1.5, color=GREY)
+    _tidy(axis, spec, log_x=True)
+
+
+def _panel_gcd_capacity_efficiency(axis, session, spec, palette) -> None:
+    """Capacity and coulombic efficiency against cycle, in one box.
+
+    The most printed cycling figure there is, and it earns the twin
+    axis: the two curves answer the same question from opposite sides.
+    Capacity falling with the efficiency pinned at 100 % is material
+    being lost; capacity holding while the efficiency sits off 100 % is
+    charge going somewhere else every cycle, which ends the cell later.
+    Side by side in two panels, the eye has to carry one across.
+    """
+    efficiency = axis.twinx()
+    per_gram = bool(session.electrode.mass_mg)
+    drawn = False
+    for index, (curve, cycling) in enumerate(
+            zip(session.gcd_curves(), session.gcd_cyclings())):
+        if cycling is None or not cycling.capacitance_f:
+            continue
+        values = np.asarray(cycling.capacitance_f, dtype=float)
+        if per_gram:
+            values = values / (1e-3 * session.electrode.mass_mg)
+        else:
+            values = 1e6 * values
+        axis.plot(cycling.cycles, values, "-", color=_colour(index),
+                  linewidth=1.2, zorder=3, label=session.gcd_label(curve))
+        if cycling.efficiency:
+            efficiency.plot(cycling.cycles[:len(cycling.efficiency)],
+                            100.0 * np.asarray(cycling.efficiency,
+                                               dtype=float),
+                            "--", color=_colour(index), linewidth=0.9,
+                            alpha=0.75, zorder=2)
+        drawn = True
+    if not drawn:
+        return
+    efficiency.axhline(100.0, color=GREY, linewidth=0.7, zorder=1)
+    axis.set_xlabel(spec.text("cycle"))
+    axis.set_ylabel(spec.text("capacitance_mass") if per_gram
+                    else spec.text("capacitance_uf"))
+    efficiency.set_ylabel(spec.text("coulombic"))
+    efficiency.tick_params(which="both", direction="in",
+                           labelsize=spec.font_size - 0.5)
+    if spec.legends:
+        # Room made under the capacity curves, the same trick the Bode
+        # panel needs and for the same reason: with a twin axis there
+        # is no free corner, and the one strip that is reliably empty
+        # is the bottom — an efficiency that low is the first cycles of
+        # one curve, nothing else.
+        low, high = axis.get_ylim()
+        axis.set_ylim(low - 0.28 * (high - low), high)
+        axis.legend(frameon=False, fontsize=spec.font_size - 1.0,
+                    loc="lower left", handlelength=1.4,
+                    ncol=2 if len(session.gcd_curves()) > 2 else 1,
+                    columnspacing=1.2)
+    _tidy(axis, spec)
+
+
 def _panel_gcd_cycling(axis, session, spec, palette) -> None:
     """Capacitance retention cycle by cycle, one curve per current.
 
@@ -1694,11 +1818,24 @@ def _panel_gcd_cycling(axis, session, spec, palette) -> None:
         values = np.asarray(cycling.capacitance_f, dtype=float)
         if values[0] <= 0:
             continue
-        axis.plot(cycling.cycles, 100.0 * values / values[0], "-",
+        retention = 100.0 * values / values[0]
+        axis.plot(cycling.cycles, retention, "-",
                   color=_colour(index), linewidth=1.2, zorder=3,
                   label=session.gcd_label(curve))
+        # The number at the end of the curve, which is what anyone
+        # reading this panel wants and what every published version of
+        # it carries. Reading it off the axis costs a ruler.
+        axis.annotate(spec.text("retention_at_end", value=retention[-1]),
+                      xy=(cycling.cycles[-1], retention[-1]),
+                      xytext=(4, 0), textcoords="offset points",
+                      ha="left", va="center", color=_colour(index),
+                      fontsize=spec.font_size - 1.5, zorder=4,
+                      annotation_clip=False)
     axis.axhline(100.0, color=GREY, linewidth=0.7, linestyle=(0, (1, 2)),
                  zorder=1)
+    # Room on the right for those labels, which sit outside the data.
+    low, high = axis.get_xlim()
+    axis.set_xlim(low, high + 0.12 * (high - low))
     axis.set_xlabel(spec.text("cycle"))
     axis.set_ylabel(spec.text("retention"))
     if spec.legends:
@@ -2416,6 +2553,19 @@ ECHEM_PANELS: tuple[PanelSpec, ...] = (
               _panel_gcd_rate,
               "la capacidad de velocidad, con los puntos asimétricos en "
               "símbolo hueco y fuera de la línea",
+              technique="gcd"),
+    PanelSpec("gcd_retencion_velocidad",
+              "GCD: retención contra corriente (normalizada)", "gcd",
+              _panel_gcd_rate_retention,
+              "el % de lo que dio la corriente más baja. Es la figura "
+              "que se compara entre muestras; el eje es una CORRIENTE, "
+              "nunca una «C»",
+              technique="gcd"),
+    PanelSpec("gcd_capacidad_eficiencia",
+              "GCD: capacidad y eficiencia contra ciclo", "gcd",
+              _panel_gcd_capacity_efficiency,
+              "las dos en una caja con eje gemelo: capacidad que cae "
+              "con la eficiencia clavada es material que se pierde",
               technique="gcd"),
     PanelSpec("gcd_ciclado", "GCD: retención ciclo a ciclo", "gcd",
               _panel_gcd_cycling,

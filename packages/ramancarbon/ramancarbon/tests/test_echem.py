@@ -3554,6 +3554,88 @@ def _gcd_session(currents=(5e-6, 10e-6, 20e-6, 40e-6), asymmetric=None):
     return session
 
 
+def _draw_gcd_panel(session, key):
+    from matplotlib.figure import Figure
+
+    from ramancarbon.gui.figures_echem import CompositeFigure, draw_composite
+    from ramancarbon.gui.theme import PALETTES
+
+    session.figure_technique = "gcd"
+    session.composite = CompositeFigure(panels=[key], columns=1,
+                                        width_in=3.4, panel_height_in=3.0)
+    figure = Figure(figsize=session.composite.figsize())
+    problems = draw_composite(figure, session.composite, session,
+                              PALETTES["claro"])
+    assert not problems, problems
+    return figure, figure.axes[0]
+
+
+def test_the_normalised_rate_panel_starts_at_100_percent_and_uses_a_CURRENT():
+    """Not a C rate, which a capacitive electrode does not have.
+
+    A C rate is defined against a nominal capacity — 1C empties the
+    electrode in an hour — so it presumes a battery electrode with a
+    plateau and a stated capacity. Printing microamps as «C» on a
+    carbon invents that capacity. The axis is a current: A/g when the
+    mass is known, µA when it is not.
+    """
+    import numpy as np
+
+    session = _gcd_session()
+    _, axis = _draw_gcd_panel(session, "gcd_retencion_velocidad")
+    lines = [line for line in axis.get_lines() if len(line.get_xdata()) > 2]
+    assert lines, "el panel no dibujó la serie"
+    y = np.asarray(lines[0].get_ydata(), dtype=float)
+    assert y[0] == pytest.approx(100.0), (
+        "la retención se normaliza a la corriente MÁS BAJA, que es la "
+        "referencia que hace comparable la curva entre muestras"
+    )
+    assert axis.get_xscale() == "log"
+    label = axis.get_xlabel()
+    assert "C" not in label.replace("capacitance", "")
+    assert "A g" in label or "µA" in label
+
+
+def test_the_normalised_rate_panel_leaves_out_an_asymmetric_pair():
+    """A pair with two currents cannot be placed on a rate axis at all."""
+    session = _gcd_session(asymmetric=(60e-6, 20e-6))
+    _, axis = _draw_gcd_panel(session, "gcd_retencion_velocidad")
+    lines = [line for line in axis.get_lines() if len(line.get_xdata()) > 2]
+    assert len(lines[0].get_xdata()) == 4, (
+        "los cuatro simétricos entran y el asimétrico no"
+    )
+
+
+def test_the_cycling_panel_writes_the_final_retention_on_each_curve():
+    """The number at the end of the curve, which is what it is read for.
+
+    Every published version of this panel carries it; reading it off
+    the axis costs a ruler.
+    """
+    session = _gcd_session()
+    _, axis = _draw_gcd_panel(session, "gcd_ciclado")
+    texts = [text.get_text() for text in axis.texts]
+    labelled = [t for t in texts if t.endswith("%")]
+    assert len(labelled) == len(session.gcd_curves())
+
+
+def test_the_combined_panel_puts_the_efficiency_on_a_twin_axis():
+    """Capacity and coulombic efficiency in one box, not two.
+
+    The two answer the same question from opposite sides: capacity
+    falling with the efficiency pinned at 100 % is material being lost;
+    capacity holding while the efficiency sits off 100 % is charge
+    going elsewhere every cycle.
+    """
+    session = _gcd_session()
+    figure, axis = _draw_gcd_panel(session, "gcd_capacidad_eficiencia")
+    twins = [other for other in figure.axes
+             if other is not axis and other.bbox.bounds == axis.bbox.bounds]
+    assert twins, "la eficiencia tiene que ir en un eje gemelo"
+    assert "%" in twins[0].get_ylabel()
+    assert axis.get_lines(), "la capacidad va en el eje principal"
+
+
 def test_a_rate_point_is_labelled_by_its_DISCHARGE_current():
     """The median over the whole record returns a current neither branch
     used. The user's fifth file charges at 60 µA and discharges at 20
