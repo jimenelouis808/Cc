@@ -110,6 +110,12 @@ class GCMCResult:
     void_fraction: float = 1.0
     """What the excess was computed with. 1.0 means the whole cell, so
     the excess is an upper bound on the correction."""
+    snapshots: list[np.ndarray] = field(default_factory=list)
+    """Molecule positions (Å) at evenly spaced points in production, one
+    ``(m, 3)`` array each. Empty unless ``snapshots`` was asked for. The
+    rows are **molecule centres**, one per H2, not atoms — this model
+    has one Lennard-Jones site per molecule and there is no second
+    hydrogen to place."""
     acceptance: dict[str, float] = field(default_factory=dict)
     equilibration_steps: int = 0
     production_steps: int = 0
@@ -236,6 +242,7 @@ def run_gcmc(
     blocks: int = 10,
     cutoff: float = CUTOFF,
     void_fraction: float | None = None,
+    snapshots: int = 0,
 ) -> GCMCResult:
     """One state point: insert, delete and displace until it settles.
 
@@ -277,6 +284,15 @@ def run_gcmc(
         because the framework's own volume is counted as accessible —
         an upper bound on the excess correction, and the result says
         which was used.
+    snapshots
+        How many configurations to keep, spread evenly through
+        production. 0 keeps none, which is the default because the
+        averages need none and a caller who does not want pictures
+        should not pay for them. They are what a paper's "snapshot of
+        adsorbed hydrogen" figure is made from, and they are taken
+        **during production only**: a configuration from the
+        equilibration is a cell still filling up, which looks like a
+        result and is not one.
 
     Returns
     -------
@@ -316,6 +332,13 @@ def run_gcmc(
             np.maximum(r[inside], 1e-6), H2_H2, temperature)))
 
     counts: list[int] = []
+    kept: list[np.ndarray] = []
+    # Evenly through production, and the LAST one is the final state
+    # rather than something short of it -- a figure captioned "at
+    # equilibrium" should be the most equilibrated configuration the
+    # run reached, not an arbitrary earlier one.
+    snapshot_at = ([equilibration + (production * (i + 1)) // snapshots - 1
+                    for i in range(snapshots)] if snapshots > 0 else [])
     total = equilibration + production
     for step in range(total):
         choice = rng.random()
@@ -353,6 +376,9 @@ def run_gcmc(
                     accepted["move"] += 1
         if step >= equilibration:
             counts.append(len(occupied))
+            if snapshot_at and step >= snapshot_at[0]:
+                snapshot_at.pop(0)
+                kept.append(np.asarray(occupied, dtype=float).reshape(-1, 3))
 
     sampled = np.asarray(counts, dtype=float)
     block_means = np.array([b.mean() for b in np.array_split(sampled, blocks)])
@@ -394,6 +420,7 @@ def run_gcmc(
         bulk_density_g_cm3=bulk,
         carbon_mass_g=solid.carbon_mass_g,
         void_fraction=accessible,
+        snapshots=kept,
         acceptance={k: (accepted[k] / tried[k] if tried[k] else 0.0)
                     for k in accepted},
         equilibration_steps=equilibration,

@@ -85,7 +85,8 @@ the figure, the numbers and that caveat at length.
 
 from .bulk import LEVESQUE_BULK, VirialGas, fit_virial
 from .campaign import (read_isotherm_request, read_results, run_isotherm,
-                       status, write_isotherm_request)
+                       status, write_isotherm_request, write_table)
+from .snapshot import VIEWS, adsorbed_atoms, plot_snapshot, write_snapshot
 from .bundle import (LEVESQUE_BUNDLE_ISOTHERMS, levesque_bundle,
                      zigzag_radius, zigzag_tube)
 from .gcmc import GCMCResult, run_gcmc
@@ -99,11 +100,14 @@ __all__ = [
     "H2_C",
     "H2_H2",
     "PorosityReport",
+    "VIEWS",
     "VirialGas",
+    "adsorbed_atoms",
     "analyse_porosity",
     "feynman_hibbs",
     "fit_virial",
     "levesque_bundle",
+    "plot_snapshot",
     "quantum_fraction",
     "read_isotherm_request",
     "read_results",
@@ -111,6 +115,8 @@ __all__ = [
     "run_isotherm",
     "status",
     "write_isotherm_request",
+    "write_snapshot",
+    "write_table",
     "zigzag_radius",
     "zigzag_tube",
 ]

@@ -24,6 +24,7 @@ import json
 import subprocess
 import sys
 
+import numpy as np
 import pytest
 from ase import Atoms
 
@@ -293,6 +294,132 @@ class TestTheRunnerEntryPoint:
         assert result.returncode == 1
         assert "Traceback" not in result.stderr
         assert "no se puede leer" in result.stderr.lower()
+
+
+class TestSnapshots:
+    """Configurations kept during production, and what they are."""
+
+    def test_none_are_kept_unless_asked_for(self, framework):
+        from carbonforge.adsorption import run_gcmc
+
+        result = run_gcmc(framework, temperature=293.0, pressure_mpa=5.0,
+                          equilibration=200, production=400, seed=0,
+                          blocks=4, cutoff=9.0, void_fraction=1.0)
+        assert result.snapshots == []
+
+    def test_they_come_from_production_only(self, framework):
+        """A configuration from the equilibration is a cell still
+        filling up. It looks like a result and is not one, so a figure
+        must not be able to be made from it by accident."""
+        from carbonforge.adsorption import run_gcmc
+
+        result = run_gcmc(framework, temperature=293.0, pressure_mpa=20.0,
+                          equilibration=4000, production=4000, seed=0,
+                          blocks=4, cutoff=9.0, void_fraction=1.0,
+                          snapshots=4)
+        assert len(result.snapshots) == 4
+        # The last one is the run's final state, not something short of
+        # it: a picture captioned "at equilibrium" should be the most
+        # equilibrated configuration the run reached.
+        counts = [len(frame) for frame in result.snapshots]
+        assert all(frame.ndim == 2 and frame.shape[1] == 3
+                   for frame in result.snapshots)
+        assert counts[-1] > 0
+
+    def test_a_site_is_a_molecule_and_the_file_says_so(self, framework):
+        """One Lennard-Jones centre per H2, so there is no second
+        hydrogen to place and inventing one would draw a bond length
+        the simulation never had."""
+        from carbonforge.adsorption import adsorbed_atoms
+        from carbonforge.adsorption.snapshot import (ADSORBATE_TAG,
+                                                     FRAMEWORK_TAG)
+
+        sites = np.array([[1.0, 1.0, 1.0], [5.0, 5.0, 5.0]])
+        combined = adsorbed_atoms(framework, sites)
+        assert len(combined) == len(framework) + 2
+        tags = combined.get_tags()
+        assert (tags[:len(framework)] == FRAMEWORK_TAG).all()
+        assert (tags[len(framework):] == ADSORBATE_TAG).all()
+        assert combined.info["adsorbate_sites"] == 2
+        assert "molecule" in combined.info["adsorbate_note"].lower()
+
+    def test_the_tags_survive_a_round_trip(self, framework, tmp_path):
+        """The split has to reach VESTA or OVITO without a sidecar."""
+        from ase.io import read
+
+        from carbonforge.adsorption import write_snapshot
+        from carbonforge.adsorption.snapshot import ADSORBATE_TAG
+
+        sites = np.array([[1.0, 1.0, 1.0], [5.0, 5.0, 5.0]])
+        path = write_snapshot(framework, sites, tmp_path / "s.extxyz")
+        back = read(str(path))
+        assert (back.get_tags() == ADSORBATE_TAG).sum() == 2
+
+    def test_the_views_are_named_after_the_axis_they_look_down(self):
+        """Not after what that axis means. "The tube axis" is a fact
+        about the builder, not about the file, and a schwarzite has no
+        axis — an earlier naming called the Levesque bundle's axial view
+        "lado" because it assumed z, and the tubes run along y.
+        """
+        from carbonforge.adsorption.snapshot import AXIS_VIEWS, VIEWS
+
+        assert AXIS_VIEWS == ("x", "y", "z")
+        assert set(AXIS_VIEWS) <= set(VIEWS)
+        assert "general" in VIEWS
+
+    def test_an_unknown_view_is_refused_by_name(self, framework):
+        from carbonforge.adsorption import plot_snapshot
+
+        with pytest.raises(ValueError, match="unknown view"):
+            plot_snapshot(framework, np.zeros((1, 3)), view="lado")
+
+    def test_the_runner_writes_them_and_records_their_names(
+            self, framework, tmp_path):
+        folder = _request(framework, tmp_path / "run", pressures=[5.0],
+                          snapshots=2)
+        point = run_isotherm(folder)[0]
+        assert len(point["instantaneas"]) == 2
+        for name in point["instantaneas"]:
+            assert (folder / name).exists()
+
+
+class TestTheFlatExport:
+    """`isoterma.csv`, so the folder is plottable by anything."""
+
+    def test_the_runner_writes_a_csv_beside_the_json(self, framework,
+                                                     tmp_path):
+        from carbonforge.adsorption.campaign import TABLE
+
+        folder = _request(framework, tmp_path / "run", pressures=[1.0, 5.0])
+        run_isotherm(folder)
+        text = (folder / TABLE).read_text()
+        rows = [line for line in text.splitlines()
+                if line and not line.startswith("#")]
+        assert rows[0].startswith("presion_MPa,")
+        assert len(rows) == 3  # header plus the two points
+
+    def test_the_header_names_absolute_against_excess(self, framework,
+                                                      tmp_path):
+        """A bare column called rho would be compared with a measured
+        excess by someone in a hurry."""
+        from carbonforge.adsorption.campaign import TABLE
+
+        folder = _request(framework, tmp_path / "run", pressures=[5.0])
+        run_isotherm(folder)
+        text = (folder / TABLE).read_text()
+        assert "rho_absoluta_g_cm3" in text and "rho_exceso_g_cm3" in text
+        assert "lo que mide un experimento" in text
+
+    def test_the_columns_are_ascii(self, framework, tmp_path):
+        """A spreadsheet and a gnuplot script are the point, and
+        neither enjoys an accent in a column name."""
+        from carbonforge.adsorption.campaign import TABLE
+
+        folder = _request(framework, tmp_path / "run", pressures=[5.0])
+        run_isotherm(folder)
+        header = [line for line in (folder / TABLE).read_text().splitlines()
+                  if not line.startswith("#")][0]
+        header.encode("ascii")
 
 
 class TestTheWindowIsWiredToIt:

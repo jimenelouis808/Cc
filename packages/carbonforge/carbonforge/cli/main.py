@@ -953,9 +953,30 @@ def build_parser() -> argparse.ArgumentParser:
                      help="Radio de la sonda para la porosidad, en Å.")
     iso.add_argument("--motivo", default="", dest="reason",
                      help="Texto libre: la carpeta sobrevive a la sesión.")
+    iso.add_argument("--instantaneas", type=int, default=0,
+                     dest="snapshots",
+                     help="Configuraciones guardadas por punto, de las que "
+                          "se hacen las figuras de hidrógeno adsorbido. "
+                          "Siempre de la producción, nunca del equilibrado.")
     iso.add_argument("--correr", action="store_true", dest="run_now",
                      help="Correrla aquí, en primer plano. Son horas.")
     iso.set_defaults(func=_cmd_isotherm)
+
+    vi = asub.add_parser(
+        "vista",
+        help="Dibuja una configuración guardada: el armazón y el hidrógeno "
+             "adsorbido, en tres proyecciones.",
+        description="Cada sitio dibujado es UNA MOLÉCULA, no un átomo: "
+                    "este modelo tiene un solo centro Lennard-Jones por "
+                    "H2, así que no hay un segundo hidrógeno que colocar e "
+                    "inventarlo sería dibujar una distancia de enlace que "
+                    "la simulación nunca tuvo.")
+    vi.add_argument("path", help="Fichero .extxyz de instantaneas/.")
+    vi.add_argument("--out", default=None,
+                    help="PNG a escribir (por omisión, junto al .extxyz).")
+    vi.add_argument("--vista", default="todas", dest="view",
+                    help="x, y, z, general, o todas (por omisión).")
+    vi.set_defaults(func=_cmd_snapshot_view)
 
     ae = asub.add_parser("estado",
                          help="Avance y resultados de una carpeta de isoterma.")
@@ -1030,7 +1051,8 @@ def _cmd_isotherm(args) -> int:
             atoms, args.folder, temperature=args.temperature,
             pressures=pressures, equilibration=args.equilibration,
             production=args.production, seed=args.seed,
-            probe_radius=args.probe, reason=args.reason)
+            probe_radius=args.probe, snapshots=args.snapshots,
+            reason=args.reason)
     except ValueError as exc:
         print(f"Rechazado: {exc}", file=sys.stderr)
         return 1
@@ -1057,6 +1079,41 @@ def _cmd_isotherm(args) -> int:
               f"{point['n_medio']:10.1f}")
         for warning in point["avisos"]:
             print(f"         aviso: {warning}")
+    return 0
+
+
+def _cmd_snapshot_view(args) -> int:
+    """Draw a saved configuration in three projections."""
+    from pathlib import Path as _Path
+
+    import matplotlib
+    matplotlib.use("Agg")
+    from ase.io import read
+
+    from ..adsorption.snapshot import ADSORBATE_TAG, plot_snapshot
+
+    try:
+        atoms = read(args.path)
+    except Exception as exc:  # noqa: BLE001 - a bad path is a user error
+        print(f"No se pudo leer {args.path}: {exc}", file=sys.stderr)
+        return 1
+    tags = atoms.get_tags()
+    sites = atoms[tags == ADSORBATE_TAG].get_positions()
+    if not len(sites):
+        print(f"{args.path} no lleva ningún sitio marcado como adsorbato "
+              f"(etiqueta {ADSORBATE_TAG}). ¿Es una instantánea de una "
+              "isoterma?", file=sys.stderr)
+        return 1
+    try:
+        figure = plot_snapshot(atoms[tags != ADSORBATE_TAG], sites,
+                               view=args.view)
+    except ValueError as exc:
+        print(f"Rechazado: {exc}", file=sys.stderr)
+        return 1
+    out = _Path(args.out) if args.out else _Path(args.path).with_suffix(".png")
+    figure.savefig(out, dpi=200, facecolor="#fcfcfb", bbox_inches="tight")
+    print(f"{len(sites)} moléculas sobre "
+          f"{len(atoms) - len(sites)} átomos de armazón -> {out}")
     return 0
 
 

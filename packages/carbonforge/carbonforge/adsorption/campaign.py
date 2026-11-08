@@ -60,6 +60,10 @@ REQUEST: str = "isoterma.json"
 PROGRESS: str = "progreso.json"
 RESULTS: str = "resultados.json"
 STRUCTURE: str = "estructura.extxyz"
+#: Where the configurations go, one file per pressure per snapshot.
+SNAPSHOTS: str = "instantaneas"
+#: The tidy export, for plotting anywhere else.
+TABLE: str = "isoterma.csv"
 
 #: Format tag, so a folder written by a later version can be recognised
 #: rather than half-read.
@@ -78,6 +82,7 @@ def write_isotherm_request(
     cutoff: float = CUTOFF,
     probe_radius: float | None = None,
     porosity_samples: int = 200_000,
+    snapshots: int = 0,
     reason: str = "",
 ) -> Path:
     """Write a folder the job queue can run as an isotherm.
@@ -110,6 +115,12 @@ def write_isotherm_request(
         default, half H2's kinetic diameter.
     porosity_samples
         Monte Carlo points for the void fraction.
+    snapshots
+        Configurations to keep per pressure, written under
+        ``instantaneas/`` as extxyz with the framework. 0 keeps none.
+        These are what a paper's picture of adsorbed hydrogen is made
+        from; they cost disk and nothing else, the sampling being
+        unchanged by looking at it.
     reason
         Free text. Say what the run is for; the folder outlives the
         window that made it.
@@ -185,6 +196,7 @@ def write_isotherm_request(
             "radio_sonda_a": probe_radius,
             "muestras": int(porosity_samples),
         },
+        "instantaneas": int(snapshots),
     }
     (folder / REQUEST).write_text(
         json.dumps(request, indent=2, ensure_ascii=False) + "\n",
@@ -389,6 +401,7 @@ def run_isotherm(folder: str | Path,
             continue
         _write_progress(folder, f"GCMC a {pressure:g} MPa")
         started = time.perf_counter()
+        wanted_snapshots = int(request.get("instantaneas", 0))
         result = run_gcmc(
             atoms, temperature=temperature, pressure_mpa=pressure,
             equilibration=int(sampling["equilibrado"]),
@@ -396,7 +409,9 @@ def run_isotherm(folder: str | Path,
             seed=int(sampling["semilla"]),
             cutoff=float(sampling["corte_a"]),
             void_fraction=report.helium_void_fraction,
+            snapshots=wanted_snapshots,
         )
+        written = _write_snapshots(folder, atoms, pressure, result.snapshots)
         point = {
             "presion_mpa": pressure,
             "n_medio": result.mean_count,
@@ -408,11 +423,62 @@ def run_isotherm(folder: str | Path,
             "wt_pct_por_carbono": result.weight_percent_per_carbon,
             "aceptacion": result.acceptance,
             "segundos": time.perf_counter() - started,
+            "instantaneas": written,
             "avisos": [w for w in result.warnings
                        if "void fraction was given" not in w],
         }
         _append_result(folder, request, point, porosity)
 
     points = read_results(folder)
+    write_table(folder)
     _write_progress(folder, f"{len(points)}/{len(request['presiones_mpa'])} puntos")
     return points
+
+
+def _write_snapshots(folder: Path, atoms: Atoms, pressure: float,
+                     configurations: list) -> list[str]:
+    """Write one configuration per file and return their names."""
+    from .snapshot import write_snapshot
+
+    names = []
+    for index, positions in enumerate(configurations):
+        name = f"{SNAPSHOTS}/P{pressure:g}MPa_{index + 1:02d}.extxyz"
+        write_snapshot(atoms, positions, folder / name)
+        names.append(name)
+    return names
+
+
+def write_table(folder: str | Path) -> Path:
+    """Write ``isoterma.csv``: one row per finished point, plain text.
+
+    Written on every run so that a folder is always plottable by
+    something else without anybody having to parse the JSON. The JSON
+    stays the record — it holds the acceptance rates, the warnings and
+    the porosity — and this is the flat view of it.
+
+    Column names are ASCII and unit-suffixed, because a spreadsheet or
+    a gnuplot script is the point and neither enjoys an accent.
+    """
+    folder = Path(folder)
+    request = read_isotherm_request(folder)
+    points = read_results(folder)
+    columns = ("presion_MPa", "wt_pct_total", "wt_pct_por_carbono",
+               "rho_absoluta_g_cm3", "rho_exceso_g_cm3", "rho_gas_g_cm3",
+               "N_medio", "N_error", "segundos")
+    lines = [
+        f"# {request['nombre']}, {request['temperatura_k']:g} K, "
+        f"{request['atomos']} atomos",
+        "# rho_absoluta: todas las moleculas de la celda. "
+        "rho_exceso: lo que mide un experimento.",
+        "# wt_pct_total = 100 m(H2)/(m(H2)+m(C)), que es la definicion "
+        "de los articulos.",
+        ",".join(columns),
+    ]
+    for row in points:
+        lines.append(",".join(f"{row[key]:.6g}" for key in (
+            "presion_mpa", "wt_pct_total", "wt_pct_por_carbono",
+            "densidad_absoluta_g_cm3", "densidad_exceso_g_cm3",
+            "densidad_gas_g_cm3", "n_medio", "n_error", "segundos")))
+    path = folder / TABLE
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return path

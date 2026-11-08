@@ -35,6 +35,15 @@ from ase import Atoms
 #: after the dialog had closed.
 TEMPERATURES: tuple[str, ...] = ("77", "150", "293")
 
+#: Categorical slots 1-8 of the validated palette, in fixed order. A
+#: ninth isotherm is not a generated colour: the page refuses to load
+#: it and says to remove one, because a repeated hue on a comparison
+#: plot is worse than not drawing it.
+SERIES_COLOURS: tuple[str, ...] = (
+    "#2a78d6", "#eb6834", "#1baf7a", "#eda100",
+    "#e87ba4", "#008300", "#6250d6", "#e34948",
+)
+
 #: Levesque's own pressure ladder, which is also a sensible default
 #: ladder for anything else: three decades with enough points at the
 #: knee to see it.
@@ -191,23 +200,78 @@ class AdsorptionTab:
             font=("TkDefaultFont", 8),
         ).pack(anchor="w", pady=(4, 0))
 
+        srow = ttk.Frame(iso)
+        srow.pack(fill="x", pady=(4, 0))
+        ttk.Label(srow, text="Instantáneas por punto").pack(side="left")
+        self.ads_snapshots_var = tk.StringVar(value="0")
+        # ttk.Entry and not ttk.Spinbox: nothing else in this window uses
+        # a Spinbox, and the GUI tests' ttk stub does not carry one -- the
+        # first one added here broke 43 tests that have nothing to do with
+        # adsorption, because a widget that raises in a build method takes
+        # the whole page down with it.
+        ttk.Entry(srow, textvariable=self.ads_snapshots_var,
+                  width=5).pack(side="left", padx=(6, 0))
+        ttk.Label(
+            iso,
+            text=("Configuraciones guardadas durante la producción, que es "
+                  "de lo que se hacen las figuras de hidrógeno adsorbido. "
+                  "Nunca del equilibrado: una celda que todavía se está "
+                  "llenando parece un resultado y no lo es. Cuestan disco "
+                  "y nada más; el muestreo no cambia por mirarlo."),
+            wraplength=330, justify="left", foreground="#777777",
+            font=("TkDefaultFont", 8),
+        ).pack(anchor="w", pady=(4, 0))
+
         self.ads_queue_button = ttk.Button(
             iso, text="Escribir la carpeta y encolar…", state="disabled",
             command=self._on_queue_isotherm)
         self.ads_queue_button.pack(fill="x", pady=(6, 0))
 
-        # --- reading one back -------------------------------------------
-        read = ttk.LabelFrame(left, text="3 · Leer una isoterma",
-                              padding=6)
+        # --- reading them back, and comparing ---------------------------
+        read = ttk.LabelFrame(left, text="3 · Leer y comparar", padding=6)
         read.pack(fill="x", pady=(8, 0))
-        ttk.Button(read, text="Abrir una carpeta de isoterma…",
+        ttk.Button(read, text="Añadir una carpeta de isoterma…",
                    command=self._on_open_isotherm).pack(fill="x", ipady=3)
         ttk.Label(
             read,
             text=("Terminada o a medias: cada punto se guarda en cuanto "
                   "acaba, así que hay algo que mirar mucho antes del final. "
-                  "El botón «Abrir resultados» de la página Trabajos trae "
-                  "aquí la isoterma seleccionada."),
+                  "Se AÑADEN, para poder comparar varias; «Abrir "
+                  "resultados» en Trabajos trae aquí la seleccionada."),
+            wraplength=330, justify="left", foreground="#777777",
+            font=("TkDefaultFont", 8),
+        ).pack(anchor="w", pady=(4, 0))
+
+        self.ads_loaded: dict[str, dict] = {}
+        # A one-column Treeview and not a Listbox: Treeview is what the
+        # Trabajos page already uses for a list, and a Listbox is the
+        # second widget this page tried to introduce alone -- the first
+        # took 43 unrelated tests down with it, because a widget that
+        # raises inside a build method kills the whole window.
+        self.ads_list = ttk.Treeview(read, columns=(), show="tree",
+                                     height=5, selectmode="browse")
+        self.ads_list.pack(fill="x", pady=(4, 0))
+        row = ttk.Frame(read)
+        row.pack(fill="x", pady=(4, 0))
+        ttk.Button(row, text="Quitar", command=self._on_drop_isotherm).pack(
+            side="left", expand=True, fill="x")
+        ttk.Button(row, text="Vaciar",
+                   command=self._on_clear_isotherms).pack(
+            side="left", expand=True, fill="x", padx=(4, 0))
+        ttk.Button(read, text="Exportar todo a CSV…",
+                   command=self._on_export_isotherms).pack(fill="x",
+                                                           pady=(4, 0))
+        ttk.Button(read, text="Ver el hidrógeno adsorbido…",
+                   command=self._on_show_snapshot).pack(fill="x",
+                                                        pady=(4, 0))
+        ttk.Label(
+            read,
+            text=("El CSV sale en formato largo, con una columna «serie», "
+                  "que es lo que cualquier programa de gráficas prefiere. "
+                  "Las configuraciones sólo existen si se pidieron al "
+                  "escribir la carpeta: cada sitio dibujado es UNA "
+                  "MOLÉCULA, no un átomo — este modelo tiene un solo "
+                  "centro por H₂."),
             wraplength=330, justify="left", foreground="#777777",
             font=("TkDefaultFont", 8),
         ).pack(anchor="w", pady=(4, 0))
@@ -230,7 +294,6 @@ class AdsorptionTab:
         self.ads_axis = self.ads_figure.add_subplot(111)
         self.ads_canvas = FigureCanvasTkAgg(self.ads_figure, master=plot)
         self.ads_canvas.get_tk_widget().pack(fill="both", expand=True)
-        self._plot_isotherm([], {"nombre": "", "temperatura_k": 0.0})
 
         report = ttk.LabelFrame(right, text="Informe", padding=6)
         report.pack(fill="both", expand=True, pady=(8, 0))
@@ -240,6 +303,14 @@ class AdsorptionTab:
         self.ads_text.configure(yscrollcommand=bar.set, state="disabled")
         bar.pack(side="right", fill="y")
         self.ads_text.pack(side="left", fill="both", expand=True)
+
+        # Only now: `_report_isotherms` writes into `ads_text` and
+        # `_plot_isotherms` draws on `ads_axis`, so the empty state has
+        # to be painted after BOTH exist. Calling it beside the canvas
+        # raised AttributeError on the text widget, which in a Tk build
+        # method means a half-built page and no traceback anyone sees.
+        self._plot_isotherms()
+        self._report_isotherms()
 
         session = getattr(self, "session", None)
         if session is not None:
@@ -336,7 +407,7 @@ class AdsorptionTab:
     # -- reading a finished isotherm back ------------------------------
 
     def _on_open_isotherm(self) -> None:
-        """Pick a finished (or part-finished) isotherm folder and show it."""
+        """Pick a finished (or part-finished) isotherm folder and add it."""
         from tkinter import filedialog
 
         folder = filedialog.askdirectory(
@@ -344,21 +415,142 @@ class AdsorptionTab:
         if folder:
             self._show_isotherm(Path(folder))
 
-    def _show_isotherm(self, folder: Path) -> None:
-        """Print a finished isotherm's table and plot it.
+    def _on_drop_isotherm(self) -> None:
+        """Remove the selected isotherm from the comparison."""
+        name = self._selected_isotherm()
+        if name is None:
+            return
+        del self.ads_loaded[name]
+        self._refresh_isotherm_list()
 
-        Reached from the folder picker here and from «Abrir resultados»
-        on the Trabajos page. Until this existed a run of several hours
+    def _selected_isotherm(self) -> Optional[str]:
+        """The highlighted series' name, or None."""
+        chosen = self.ads_list.selection()
+        if not chosen:
+            return None
+        name = self.ads_list.item(chosen[0], "text")
+        return name if name in self.ads_loaded else None
+
+    def _on_clear_isotherms(self) -> None:
+        self.ads_loaded.clear()
+        self._refresh_isotherm_list()
+
+    def _refresh_isotherm_list(self) -> None:
+        """Redraw the list, the plot and the report from what is loaded."""
+        for item in self.ads_list.get_children():
+            self.ads_list.delete(item)
+        for name in self.ads_loaded:
+            self.ads_list.insert("", "end", text=name)
+        self._plot_isotherms()
+        self._report_isotherms()
+
+    def _on_export_isotherms(self) -> None:
+        """Write every loaded isotherm as one tidy CSV.
+
+        One file with a ``serie`` column rather than one file each,
+        because the reason to load several is to plot them together and
+        every plotting program would rather be handed long-form data
+        than asked to join four files.
+        """
+        from tkinter import filedialog
+
+        if not self.ads_loaded:
+            self.ads_status_var.set("No hay ninguna isoterma cargada.")
+            return
+        path = filedialog.asksaveasfilename(
+            title="Guardar las isotermas cargadas",
+            defaultextension=".csv",
+            initialfile="isotermas.csv",
+            filetypes=[("CSV", "*.csv"), ("Todos", "*.*")])
+        if not path:
+            return
+        columns = ("serie", "temperatura_K", "presion_MPa", "wt_pct_total",
+                   "wt_pct_por_carbono", "rho_absoluta_g_cm3",
+                   "rho_exceso_g_cm3", "rho_gas_g_cm3", "N_medio", "N_error")
+        lines = [
+            "# rho_absoluta: todas las moleculas de la celda. "
+            "rho_exceso: lo que mide un experimento.",
+            "# wt_pct_total = 100 m(H2)/(m(H2)+m(C)), la definicion de "
+            "los articulos.",
+            ",".join(columns),
+        ]
+        for name, entry in self.ads_loaded.items():
+            temperature = entry["request"]["temperatura_k"]
+            for row in entry["points"]:
+                lines.append(",".join([
+                    name.replace(",", " "), f"{temperature:g}",
+                    f"{row['presion_mpa']:.6g}",
+                    f"{row['wt_pct_total']:.6g}",
+                    f"{row['wt_pct_por_carbono']:.6g}",
+                    f"{row['densidad_absoluta_g_cm3']:.6g}",
+                    f"{row['densidad_exceso_g_cm3']:.6g}",
+                    f"{row['densidad_gas_g_cm3']:.6g}",
+                    f"{row['n_medio']:.6g}", f"{row['n_error']:.6g}"]))
+        Path(path).write_text("\n".join(lines) + "\n", encoding="utf-8")
+        total = sum(len(e["points"]) for e in self.ads_loaded.values())
+        self.ads_status_var.set(
+            f"{total} puntos de {len(self.ads_loaded)} isotermas en {path}")
+
+    def _on_show_snapshot(self) -> None:
+        """Open the selected isotherm's saved configuration, in 3 views."""
+        from tkinter import filedialog
+
+        from ...adsorption.snapshot import ADSORBATE_TAG, plot_snapshot
+
+        name = self._selected_isotherm()
+        if name is None:
+            self.ads_status_var.set(
+                "Elige una isoterma de la lista primero.")
+            return
+        entry = self.ads_loaded[name]
+        folder = entry["folder"] / "instantaneas"
+        if not folder.is_dir() or not any(folder.iterdir()):
+            self.ads_status_var.set(
+                "Esa isoterma no guardó configuraciones. Se piden al "
+                "escribir la carpeta, en «Instantáneas por punto».")
+            return
+        path = filedialog.askopenfilename(
+            title="Configuración", initialdir=str(folder),
+            filetypes=[("extxyz", "*.extxyz"), ("Todos", "*.*")])
+        if not path:
+            return
+        from ase.io import read
+
+        atoms = read(path)
+        tags = atoms.get_tags()
+        figure = plot_snapshot(atoms[tags != ADSORBATE_TAG],
+                               atoms[tags == ADSORBATE_TAG].get_positions(),
+                               view="todas")
+        window = self.tk.Toplevel(self.root)
+        window.title(Path(path).name)
+        from matplotlib.backends.backend_tkagg import (  # noqa: WPS433
+            FigureCanvasTkAgg,
+            NavigationToolbar2Tk,
+        )
+
+        canvas = FigureCanvasTkAgg(figure, master=window)
+        canvas.get_tk_widget().pack(fill="both", expand=True)
+        NavigationToolbar2Tk(canvas, window).update()
+        canvas.draw()
+        self.ads_status_var.set(f"Configuración: {Path(path).name}")
+
+    def _show_isotherm(self, folder: Path) -> None:
+        """Add a folder to the comparison and redraw.
+
+        Adds rather than replaces, because the reason to open a second
+        one is almost always to put it beside the first. Reached from
+        the folder picker here and from «Abrir resultados» on the
+        Trabajos page. Until this existed a run of several hours
         finished and the window said it had produced nothing to show,
         which left reading a JSON by hand as the only way to see your
         own result.
 
-        It shows a **part-finished** folder too, and on purpose: the
+        It takes a **part-finished** folder too, and on purpose: the
         format appends each point as it lands, so there is something
         worth looking at long before the job is done.
         """
         from ...adsorption.campaign import (read_isotherm_request,
-                                            read_results, status)
+                                            read_results)
 
         try:
             request = read_isotherm_request(folder)
@@ -367,42 +559,70 @@ class AdsorptionTab:
             self._show_error(exc, traceback.format_exc())
             return
 
-        points = read_results(folder)
-        info = status(folder)
-        lines = [
-            f"{request['nombre']} · {request['atomos']} átomos · "
-            f"{request['temperatura_k']:g} K",
-            f"{folder}",
-            f"{info['line']} — {info['state']}",
-            "",
-        ]
-        if not points:
-            lines.append("Todavía no hay ningún punto terminado. El primero "
-                         "aparece en cuanto acaba, no al final.")
-            self._set_adsorption_report("\n".join(lines))
-            self._plot_isotherm([], request)
+        name = f"{request['nombre']} · {request['temperatura_k']:g} K"
+        if name in self.ads_loaded and self.ads_loaded[name][
+                "folder"] != folder:
+            name = f"{name} · {folder.name}"
+        if (len(self.ads_loaded) >= len(SERIES_COLOURS)
+                and name not in self.ads_loaded):
+            self.ads_status_var.set(
+                f"Ya hay {len(SERIES_COLOURS)} isotermas cargadas, que son "
+                "los colores que esta paleta distingue con seguridad. Quita "
+                "una antes de añadir otra.")
+            return
+        self.ads_loaded[name] = {
+            "folder": folder,
+            "request": request,
+            "points": read_results(folder),
+        }
+        self._refresh_isotherm_list()
+
+    def _report_isotherms(self) -> None:
+        """The table under the plot: every loaded isotherm, in order."""
+        from ...adsorption.campaign import status
+
+        if not self.ads_loaded:
+            self._set_adsorption_report(
+                "Ninguna isoterma cargada. Abre una carpeta en el paso 3, o "
+                "usa «Abrir resultados» en Calcular → Trabajos.")
             return
 
-        muestreo = request["muestreo"]
+        lines: list[str] = []
+        for name, entry in self.ads_loaded.items():
+            info = status(entry["folder"])
+            request = entry["request"]
+            lines += [
+                name,
+                f"  {entry['folder']}",
+                f"  {request['atomos']} átomos · {info['line']} — "
+                f"{info['state']}",
+            ]
+            points = entry["points"]
+            if not points:
+                lines += ["  Todavía ningún punto terminado. El primero "
+                          "aparece en cuanto acaba, no al final.", ""]
+                continue
+            muestreo = request["muestreo"]
+            lines += [
+                f"  {'P (MPa)':>8} {'wt% total':>10} {'wt% /C':>8} "
+                f"{'rho_o':>9} {'exceso':>10} {'N':>11}",
+            ]
+            for row in points:
+                lines.append(
+                    f"  {row['presion_mpa']:8.2f} {row['wt_pct_total']:10.2f} "
+                    f"{row['wt_pct_por_carbono']:8.2f} "
+                    f"{row['densidad_absoluta_g_cm3']:9.5f} "
+                    f"{row['densidad_exceso_g_cm3']:+10.5f} "
+                    f"{row['n_medio']:8.0f}±{row['n_error']:.0f}")
+                for warning in row.get("avisos", []):
+                    lines.append(f"      aviso: {warning}")
+            lines += [
+                f"  {muestreo['equilibrado']} de equilibrado y "
+                f"{muestreo['produccion']} de producción por punto, "
+                f"semilla {muestreo['semilla']}.",
+                "",
+            ]
         lines += [
-            f"{'P (MPa)':>8} {'wt% total':>10} {'wt% /C':>8} "
-            f"{'rho_o':>9} {'exceso':>10} {'N':>9}",
-        ]
-        for row in points:
-            lines.append(
-                f"{row['presion_mpa']:8.2f} {row['wt_pct_total']:10.2f} "
-                f"{row['wt_pct_por_carbono']:8.2f} "
-                f"{row['densidad_absoluta_g_cm3']:9.5f} "
-                f"{row['densidad_exceso_g_cm3']:+10.5f} "
-                f"{row['n_medio']:7.0f}±{row['n_error']:.0f}")
-            for warning in row.get("avisos", []):
-                lines.append(f"         aviso: {warning}")
-        lines += [
-            "",
-            f"{muestreo['equilibrado']} movimientos de equilibrado y "
-            f"{muestreo['produccion']} de producción por punto, "
-            f"semilla {muestreo['semilla']}.",
-            "",
             "wt% total es 100·m(H₂)/(m(H₂)+m(C)), que es la definición que "
             "usan los artículos y la que conviene citar. La de por carbono "
             "está al lado porque difieren un 5 % a 5 wt% y hay que decir "
@@ -416,11 +636,16 @@ class AdsorptionTab:
             "literatura.",
         ]
         self._set_adsorption_report("\n".join(lines))
-        self._plot_isotherm(points, request)
-        self.ads_status_var.set(f"{info['line']} — {info['state']}.")
 
-    def _plot_isotherm(self, points: list, request: dict) -> None:
-        """Draw the loading against pressure, absolute and excess."""
+    def _plot_isotherms(self) -> None:
+        """Overlay every loaded isotherm, absolute and excess.
+
+        Colour follows the series, assigned in load order from a fixed
+        palette and never recycled: removing one must not repaint the
+        others, or a reader who learned which curve was which is
+        misled. Absolute is a solid line and excess a dashed one of the
+        same colour, so the pair reads as one material rather than two.
+        """
         axis = self.ads_axis
         axis.clear()
         axis.set_facecolor("#fcfcfb")
@@ -430,23 +655,31 @@ class AdsorptionTab:
         axis.set_xlabel("presión (MPa)", fontsize=8)
         axis.set_ylabel("wt% (masa total)", fontsize=8)
         axis.tick_params(labelsize=7, colors="#898781", labelcolor="#52514e")
-        if points:
+
+        drawn = False
+        for index, (name, entry) in enumerate(self.ads_loaded.items()):
+            points = entry["points"]
+            if not points:
+                continue
+            drawn = True
+            colour = SERIES_COLOURS[index % len(SERIES_COLOURS)]
             pressures = [row["presion_mpa"] for row in points]
             absolute = [row["wt_pct_total"] for row in points]
-            # The excess in the same units as the absolute, so the gap
-            # between the two curves is the thing a measurement sees.
-            excess = [row["wt_pct_total"] * row["densidad_exceso_g_cm3"]
-                      / row["densidad_absoluta_g_cm3"]
-                      if row["densidad_absoluta_g_cm3"] else 0.0
-                      for row in points]
-            axis.plot(pressures, absolute, "-o", color="#2a78d6", lw=1.8,
-                      ms=6, label="absoluto")
-            axis.plot(pressures, excess, "-s", color="#eb6834", lw=1.8,
-                      ms=5, label="exceso (lo que se mide)")
-            axis.legend(frameon=False, fontsize=7.5, labelcolor="#52514e")
-            axis.set_title(f"{request['nombre']} · "
-                           f"{request['temperatura_k']:g} K",
-                           fontsize=9, loc="left", color="#0b0b0b")
+            excess = [
+                row["wt_pct_total"] * row["densidad_exceso_g_cm3"]
+                / row["densidad_absoluta_g_cm3"]
+                if row["densidad_absoluta_g_cm3"] else 0.0
+                for row in points]
+            axis.plot(pressures, absolute, "-o", color=colour, lw=1.8,
+                      ms=5.5, label=name)
+            axis.plot(pressures, excess, "--", color=colour, lw=1.3,
+                      alpha=0.8)
+        if drawn:
+            axis.legend(frameon=False, fontsize=7, labelcolor="#52514e")
+            axis.annotate("continuo: absoluto · discontinuo: exceso",
+                          xy=(0.99, 0.02), xycoords="axes fraction",
+                          ha="right", va="bottom", fontsize=7,
+                          color="#898781")
         self.ads_figure.tight_layout()
         self.ads_canvas.draw_idle()
 
@@ -485,6 +718,7 @@ class AdsorptionTab:
             seed = int(self.ads_seed_var.get())
             probe = float(self.ads_probe_var.get())
             samples = int(self.ads_samples_var.get())
+            snapshots = int(self.ads_snapshots_var.get())
         except ValueError as exc:
             self._show_error(exc, traceback.format_exc())
             return
@@ -499,6 +733,7 @@ class AdsorptionTab:
                 atoms, folder, temperature=temperature, pressures=pressures,
                 equilibration=equilibration, production=production, seed=seed,
                 probe_radius=probe, porosity_samples=samples,
+                snapshots=snapshots,
                 reason="Encolada desde la ventana de carbonforge.")
         except ValueError as exc:
             self.ads_status_var.set("No se escribió la carpeta.")
