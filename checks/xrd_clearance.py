@@ -58,6 +58,37 @@ def max_obstacle_height(d, two_theta_deg, R, div_deg, n=50):
     return h_min
 
 
+def allowed_height(p, d: float, two_thetas=None) -> float:
+    """Altura máxima permitida a |x| = d dentro del corredor del haz, para todo 2θ
+    desde two_theta_min hasta 40° (el peor caso suele ser el ángulo más bajo, pero
+    se toma el mínimo para no suponerlo)."""
+    x = p.XRD
+    tts = two_thetas or [x["two_theta_min"] + 2 * i for i in range(16)]
+    return min(max_obstacle_height(d, tt, x["goniometer_radius"], x["divergence_deg"])
+               for tt in tts)
+
+
+def forbidden_region(p, x_max: float = 80.0, step: float = 0.5, top: float = 60.0):
+    """Sólido que ninguna pieza puede invadir: dentro del corredor del haz (|y| ≤
+    semiancho) y por encima de la altura permitida a cada |x|. Una pieza que lo toca
+    tapa el haz incidente o el difractado a algún 2θ ≥ two_theta_min."""
+    import cadquery as cq
+
+    from modules.chamber_xrd import corridor_half
+
+    xs = [-x_max + i * step for i in range(int(2 * x_max / step) + 1)]
+    pts = [(x, allowed_height(p, abs(x))) for x in xs]
+    poly = [(-x_max, top)] + pts + [(x_max, top)]
+    cy = corridor_half(p)
+    # extrusión simétrica: cubre |y| ≤ cy
+    return cq.Workplane("XZ").polyline(poly).close().extrude(cy, both=True).val()
+
+
+def invasion(part, p) -> float:
+    """mm³ de una pieza dentro de la región prohibida."""
+    return part.val().intersect(forbidden_region(p)).Volume()
+
+
 def report(two_thetas=(10, 13.7, 20, 26, 40), distances=(10, 15, 20, 25, 30)):
     R, div = XRD["goniometer_radius"], XRD["divergence_deg"]
     print(f"R = {R} mm, divergencia = {div}°\n")

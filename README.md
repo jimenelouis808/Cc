@@ -12,7 +12,9 @@ python modules/base_flat.py                # → out/base_flat.step / .stl
 python modules/chamber_ring.py             # → out/chamber_ring.step / .stl + resumen
 python modules/lid_raman.py                # → out/lid_raman.step / .stl + resumen
 python modules/chamber_clamp.py            # → out/chamber_clamp.step / .stl (WE en pinza de Pt)
-python checks/walls.py                     # paredes, holguras, sellos e interferencias (146 checks)
+python modules/chamber_xrd.py              # → out/chamber_xrd.step / .stl (celda XRD)
+python modules/lid_xrd.py                  # → out/lid_xrd + out/xrd_pocket_cover
+python checks/walls.py                     # paredes, holguras, sellos e interferencias (200 checks)
 python checks/raman_clearance.py           # objetivo y cono de luz vs cada pieza, gap 0.1–0.5
 python checks/xrd_clearance.py             # huella y altura máxima permitida
 python sim/chladni_estimate.py             # modos de la placa-WE
@@ -26,7 +28,7 @@ python -m pytest -q
 | 2 | `modules/base_flat.py`, `modules/chamber_ring.py` | listos; checks de pared y Raman en verde |
 | 3 | `modules/lid_raman.py` | listo; falta probar con agua (y medir el objetivo) |
 | 3b | `modules/chamber_clamp.py` (WE en pinza de Pt) | listo; falta medir el portaelectrodo |
-| 4 | `modules/lid_xrd.py` + `checks/xrd_clearance.py` | check listo, tapa pendiente |
+| 4 | `modules/chamber_xrd.py` + `modules/lid_xrd.py` + `checks/xrd_clearance.py` | listos; falta medir el haz y la platina |
 | 5 | Chladni, EPD/DEP, decoración | estimación de modos lista |
 | 6 | Simulación (gmsh → FEniCSx / Elmer) | pendiente |
 
@@ -90,5 +92,30 @@ lo detecta `checks/walls.py` (prueba `test_barrel_sized_objective_tip_is_rejecte
 - **Ventana pegada:** verificar el adhesivo contra 3 M KOH y 0.5 M H2SO4 (cupón sumergido 48 h).
 - **Material de la tapa:** la nariz y las paredes del embudo son finas: PEEK o PTFE maquinado.
   PP impreso solo para pruebas de ajuste.
-- **XRD:** el anillo no sirve. Su borde supera por mucho la altura permitida en el cono del haz
-  (< 1 mm a 2θ bajos). El módulo XRD necesita su propio cuerpo de perfil bajo (paso 4).
+- **XRD:** el anillo no sirve (su borde supera la altura permitida por el haz). La celda XRD
+  es un cuerpo aparte, descrito abajo.
+
+## Celda XRD (D8 Advance θ-θ): `chamber_xrd` + `lid_xrd`
+| | |
+|---|---|
+| Haz | a lo largo de x. Nada en las caras ±x |
+| Cuerpo | 66.6 (x) × 63.8 (y) × 14 (z) mm; cara superior plana en z = 0, al ras de la muestra |
+| Muestra | 18 × 18 × 1 mm por defecto; la huella cabe en ella desde 2θ = 9.4° |
+| Película | Kapton (ácido) o PP/PE (KOH) sobre la cara superior, sellada con cordón EPDM bajo el marco |
+| Marco tensor | aluminio, 5 mm fuera del corredor del haz; dentro, biselado a 4.5° desde 0.3 mm en |x| = 13.95 |
+| Tornillos del marco | 10 × M3 en insertos, todos fuera del corredor (|y| > 8 mm) y lejos de los puertos |
+| WE | portaelectrodo con pinza de Pt por +y; toma una lengüeta (tira Pt/Ti bajo la muestra, o la muestra si es flexible) 4.5 mm bajo la cara, en un bolsillo con tapa al ras |
+| RE, CE, entrada, salida | cara −y, a z = −8, en un reservorio interno unido a la capa delgada por una ranura |
+
+**Cómo se usa.** Inflar la película con electrolito para la electroquímica; para medir, retirar
+electrolito por un puerto hasta que la película quede sobre la muestra (capa ≤ ~50 µm: el agua
+atenúa mucho Cu Kα). La cara de la muestra se lleva al plano del goniómetro con lainas bajo la
+celda o con la platina Z.
+
+**Cómo se verifica el haz.** `checks/xrd_clearance.forbidden_region` construye el volumen que
+ninguna pieza puede tocar: dentro del corredor del haz (|y| ≤ largo de la línea/2 + margen) y por
+encima de la altura permitida a cada |x| para todo 2θ ≥ `two_theta_min`. `checks/walls.py`
+intersecta con él el cuerpo, el marco, la tapa del bolsillo, la pinza y la muestra.
+
+**Medir:** `XRD["beam_length_y"]` (largo de la línea sobre la muestra, depende de la rendija),
+radio del goniómetro, divergencia, y la altura y huella libres de la platina.

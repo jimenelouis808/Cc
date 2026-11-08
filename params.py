@@ -9,6 +9,8 @@ XRD = {
     "goniometer_radius": 280.0,      # MEDIR: confirmar radio del goniómetro de tu equipo
     "divergence_deg": 0.3,           # MEDIR: ángulo de la rendija de divergencia usada
     "two_theta_min": 10.0,           # 2θ mínimo de interés (MoSe2 (002) ≈ 13.7°)
+    "beam_length_y": 12.0,           # MEDIR: largo de la línea iluminada a lo largo de y
+    "corridor_margin": 2.0,          # holgura del corredor del haz a cada lado en y
     "stage_max_height": None,        # MEDIR: altura libre máxima sobre la platina
     "stage_max_footprint": None,     # MEDIR: (ancho, largo) disponibles
 }
@@ -61,6 +63,64 @@ WE_CLAMP = {
     "pedestal_d": 4.0,       # apoyo bajo el punto de medición (0 = sin pedestal)
     "floor_clearance": 1.0,  # pinza/cuerpo ↔ piso de la cámara
 }
+
+# Celda XRD (θ-θ): el haz va a lo largo de x. La muestra queda bajo una película
+# (Kapton en ácido, PP/PE en KOH) sellada con O-ring bajo un marco tensor. La pinza
+# de Pt (WE_CLAMP) toma una lengüeta flexible en un bolsillo del lado +y, 4–5 mm
+# bajo la cara de la muestra: la propia muestra si es flexible, o una tira de
+# Pt/Ti bajo la muestra si es rígida.
+WE_XRD = {
+    "sample_x": 18.0,        # a lo largo del haz: debe cubrir la huella a 2θ_min
+    "sample_y": 18.0,        # perpendicular al haz: ≥ corredor del haz
+    "sample_t": 1.0,         # MEDIR
+    "pocket_clearance": 0.2,
+    "tab_w": 5.0,            # lengüeta de contacto (Pt/Ti, o la muestra misma)
+    "tab_t": 0.1,            # MEDIR
+    "ramp_l": 6.0,           # tramo en que la lengüeta baja hasta la pinza
+    "clip_depth": 4.5,       # eje del portaelectrodo bajo la cara de la muestra
+}
+
+CHAMBER_XRD = {
+    "slot_w": 2.0,           # ranura reservorio → capa delgada, junto a la muestra (−y)
+    "reservoir_l": 12.0,     # largo del reservorio interno en y
+    "reservoir_margin": 1.5, # el reservorio cubre las bocas de los puertos −y con este margen
+    "reservoir_z": (-12.0, -3.5),  # piso y techo: bajo el cordón quedan ≥ 2 mm de pared
+    "port_wall": 8.0,        # pared entre reservorio/bolsillo y cara lateral (rosca 7 + 1)
+    "cover_open": 3.0,       # tramo del bolsillo sin tapa junto a la muestra (la lengüeta baja)
+    "cover_t": 1.5,          # tapa del bolsillo de la pinza, al ras
+    "cover_ledge": 1.5,
+    "floor_clearance": 1.0,
+    "pocket_margin": 1.5,    # holgura lateral de la pinza en su bolsillo
+}
+
+LID_XRD = {
+    # Marco tensor de la película. Los lados que cruzan el haz (±x) van biselados:
+    # su borde interior es delgado y sube con la pendiente que permite el haz.
+    "t": 5.0,                # espesor fuera del corredor (aluminio): rígido entre tornillos
+    "edge_t": 0.3,           # espesor del borde interior biselado
+    "bevel_deg": 4.5,        # pendiente del bisel en los lados ±x (< la del límite del haz)
+    "groove_min_t": 1.0,     # el cordón va donde el marco ya tiene este espesor
+    "clearance_margin": 0.2, # holgura vertical bajo el límite del haz
+    "window_margin": 1.0,    # ventana libre alrededor de muestra, ranura y lengüeta
+    "film_cs": 1.5,          # MEDIR: cordón EPDM bajo la película
+    "screw_d": 3.0,          # M3 avellanado
+    "screw_head_d": 6.0,
+    "screw_pitch": 22.0,     # separación máxima entre tornillos del marco
+    "edge_margin": 4.0,      # tornillo ↔ borde exterior
+}
+
+# Puertos de la celda XRD: sólo en caras ±y (nada sobresale a lo largo del haz).
+XRD_PORTS = (
+    {"name": "WE", "face": "+y", "offset": 0.0, "z": -WE_XRD["clip_depth"], "kind": "fitting",
+     "through_d": WE_CLAMP["rod_d"]},
+    {"name": "CE", "face": "-y", "offset": -18.0, "z": -8.0, "kind": "fitting",
+     "through_d": ELECTRODES["CE_sleeve_d"]},
+    {"name": "RE", "face": "-y", "offset": -6.0, "z": -8.0, "kind": "radial"},
+    {"name": "inlet", "face": "-y", "offset": 6.0, "z": -8.0, "kind": "fitting",
+     "through_d": 2.0},
+    {"name": "outlet", "face": "-y", "offset": 18.0, "z": -8.0, "kind": "fitting",
+     "through_d": 2.0},
+)
 
 # --- Celda ------------------------------------------------------------------
 CELL = {

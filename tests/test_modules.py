@@ -171,3 +171,69 @@ def test_wide_clip_is_rejected():
     p = variant(WE_CLAMP={"clip_w": 4.5})
     bad = [r.name for r in walls.clamp_checks(p) if not r.ok]
     assert "pinza cerrada cabe por el puerto WE (holgura)" in bad
+
+
+# --- celda XRD -------------------------------------------------------------------
+
+@pytest.fixture(scope="module")
+def xrd_body():
+    from modules import chamber_xrd
+    return chamber_xrd.build()
+
+
+def test_xrd_parts_valid(xrd_body):
+    from modules import lid_xrd
+    for part in (xrd_body, lid_xrd.build(), lid_xrd.build_cover()):
+        s = part.val()
+        assert s.isValid() and len(s.Solids()) == 1
+
+
+def test_xrd_top_is_the_reference_plane(xrd_body):
+    from modules import chamber_xrd
+    assert xrd_body.val().BoundingBox().zmax == pytest.approx(0.0, abs=1e-6)
+    assert chamber_xrd.sample().BoundingBox().zmax == pytest.approx(0.0, abs=1e-9)
+
+
+def test_xrd_nothing_on_the_beam_faces():
+    """Ningún puerto en ±x; si alguien lo pone, el cuerpo se niega a construirse."""
+    from modules import chamber_xrd
+    bad = list(P.XRD_PORTS) + [{"name": "x", "face": "+x", "offset": 0.0, "z": -8.0,
+                                "kind": "fitting", "through_d": 2.0}]
+    with pytest.raises(ValueError):
+        chamber_xrd.features(variant(XRD_PORTS=tuple(bad)))
+
+
+def test_xrd_checks_pass():
+    bad = [str(r) for r in walls.xrd_checks() if not r.ok]
+    assert not bad, "\n".join(bad)
+
+
+def test_xrd_flat_frame_is_pushed_out_of_the_beam():
+    """Sin bisel (borde de espesor completo) el marco se aleja hasta que el haz pasa."""
+    from modules import chamber_xrd
+    flat = variant(LID_XRD={"edge_t": P.LID_XRD["t"]})
+    assert chamber_xrd.layout(flat)["lid"]["fx_in"] > chamber_xrd.layout()["lid"]["fx_in"] + 5
+
+
+def test_xrd_beam_check_catches_an_obstacle():
+    """Un bloque de 1 mm a 12 mm del centro, dentro del corredor, tapa el haz a 10°."""
+    import cadquery as cq
+    from checks.xrd_clearance import invasion
+    block = cq.Workplane("XY").add(cq.Solid.makeBox(2, 4, 1, cq.Vector(11, -2, 0)))
+    assert invasion(block, P) > 0.1
+
+
+def test_xrd_frame_profile_stays_under_the_beam_limit():
+    from checks.xrd_clearance import allowed_height
+    from modules import chamber_xrd, lid_xrd
+    lay = chamber_xrd.layout()
+    d = lay["lid"]["fx_in"]
+    while d < lay["x_half"]:
+        assert lid_xrd.frame_profile(P, d) <= allowed_height(P, d) + 1e-9
+        d += 0.5
+
+
+def test_xrd_seal_encloses_the_clip_pocket():
+    from modules import chamber_xrd
+    lay = chamber_xrd.layout()
+    assert lay["lid"]["gy1_in"] > lay["pocket_y1"] + P.CHAMBER_XRD["cover_ledge"]

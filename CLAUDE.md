@@ -83,6 +83,14 @@ Electrolitos objetivo: 0.5 M H2SO4 y 3 M KOH. EPD: etanol / IPA (y posiblemente 
 - Opción alternativa a evaluar: catalizador sobre papel de carbón como pared de la celda, con el catalizador
   hacia el electrolito (abajo) y el haz entrando por la cara trasera. Ojo: C(002) del papel ~26° 2θ.
 - Ajuste de altura (tornillo o lainas) para llevar la superficie del WE al plano del goniómetro.
+- Implementado (`modules/chamber_xrd.py`, `modules/lid_xrd.py`): cara superior plana en z = 0,
+  película sellada con cordón bajo un marco que se bisela sólo dentro del corredor del haz
+  (|y| ≤ `beam_length_y`/2 + margen). Fuera del corredor la altura no importa: tornillos,
+  pinza y marco grueso van ahí. Puertos sólo en ±y (el cuerpo se niega a construir uno en ±x).
+- WE con pinza de Pt en XRD: la pinza toma una lengüeta 4.5 mm bajo la muestra (decisión del
+  usuario). Con la pinza a la altura de la muestra el sello de la película tendría que subir
+  sobre el portaelectrodo.
+- Verificación del haz: `forbidden_region` + `invasion` en `checks/xrd_clearance.py`.
 
 ### Módulo electrodeposición Chladni (WE = placa vibrante)
 - El WE es una placa delgada excitada en modos de flexión (piezo pegado o bocina con varilla al centro).

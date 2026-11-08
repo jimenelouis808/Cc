@@ -219,7 +219,7 @@ def _ports_checks(p, f, specs, z_top, z_bottom, cavity_floor) -> list[Result]:
 
     dry = p.CELL["min_wall_dry"]
     ports = {k: v for k, v in f.items() if k.startswith("port_")}
-    others = {k: f[k] for k in ("bolts", "pins", "lid_inserts") if k in f}
+    others = {k: f[k] for k in ("bolts", "pins", "lid_inserts", "screws") if k in f}
     names = sorted(ports)
     res = []
     for i, a in enumerate(names):
@@ -286,9 +286,77 @@ def clamp_checks(p=P) -> list[Result]:
     return res
 
 
+def xrd_checks(p=P) -> list[Result]:
+    """Celda XRD: haz libre, paredes, puertos, pinza, lengüeta, tapa y marco."""
+    from checks.xrd_clearance import invasion
+    from modules import chamber_xrd as m
+    from modules import lid_xrd
+
+    f = m.features(p)
+    lay = m.layout(p)
+    k, s = p.CHAMBER_XRD, p.WE_XRD
+    wet, dry = p.CELL["min_wall"], p.CELL["min_wall_dry"]
+    body = m.build(p)
+    wp = cq.Workplane
+    res = []
+    # 1. nada tapa el haz, a ningún 2θ ≥ two_theta_min
+    for name, part in (("cuerpo", body), ("marco", lid_xrd.build(p)),
+                       ("tapa del bolsillo", lid_xrd.build_cover(p)),
+                       ("pinza", wp().add(m.clamp(p))), ("muestra", wp().add(m.sample(p)))):
+        res.append(Result(f"haz: {name} fuera de la zona prohibida (−mm³)",
+                          -invasion(part, p), -1e-3))
+    # 2. paredes
+    sides = _box_outside(p, lay)
+    top, bottom = slab(p, 0.0, True), slab(p, lay["z_bottom"], False)
+    res += [
+        Result("reservorio ↔ exterior lateral", dist(f["reservoir"], sides), wet),
+        Result("reservorio ↔ cara inferior", dist(f["reservoir"], bottom), wet),
+        Result("reservorio ↔ cara superior (techo)", dist(f["reservoir"], top), wet),
+        Result("reservorio ↔ ranura del cordón", dist(f["reservoir"], f["groove"]), wet),
+        Result("reservorio ↔ insertos del marco", dist(f["reservoir"], f["screws"]), wet),
+        Result("bolsillo de la pinza ↔ exterior lateral", dist(f["clip_pocket"], sides), wet),
+        Result("bolsillo de la pinza ↔ cara inferior", dist(f["clip_pocket"], bottom), wet),
+        Result("bolsillo de la pinza ↔ ranura del cordón",
+               dist(f["clip_pocket"], f["groove"]), dry),
+        Result("bolsillo de la pinza ↔ insertos", dist(f["clip_pocket"], f["screws"]), wet),
+        Result("alojamiento de muestra ↔ ranura del cordón",
+               dist(f["sample_pocket"], f["groove"]), dry),
+        Result("insertos ↔ exterior lateral", dist(f["screws"], sides), dry),
+        Result("insertos ↔ ranura del cordón", dist(f["screws"], f["groove"]), dry),
+    ]
+    res += _ports_checks(p, f, p.XRD_PORTS, 0.0, lay["z_bottom"], lay["z_rf"])
+    # 3. pinza, lengüeta y tapa
+    port_we = f["port_WE"]
+    res.append(Result("pinza ↔ cuerpo (fuera del puerto)",
+                      dist(m.clamp(p).cut(port_we).cut(sides), body.val()), 0.3))
+    path = m.tab_path(p)
+    (y1, z1), (y2, z2) = path[1], path[2]
+    y_cov = lay["sy"] + k["cover_open"]
+    z_at = z1 + (z2 - z1) * (y_cov - y1) / (y2 - y1)
+    res.append(Result("lengüeta bajo la tapa del bolsillo (holgura)", -k["cover_t"] - z_at, 0.3))
+    from checks.xrd_clearance import min_two_theta_for_footprint
+    x = p.XRD
+    tt = min_two_theta_for_footprint(s["sample_x"], x["goniometer_radius"], x["divergence_deg"])
+    res.append(Result("huella dentro de la muestra a 2θ_min (2θ_min − 2θ que cabe, °)",
+                      x["two_theta_min"] - tt, 0.0))
+    res.append(Result("muestra cubre el corredor del haz en y (mm)",
+                      s["sample_y"] / 2 - m.corridor_half(p) + p.XRD["corridor_margin"], 0.0))
+    return res
+
+
+def _box_outside(p, lay):
+    """Todo lo que está fuera del cuerpo rectangular de la celda XRD, a lo ancho."""
+    from modules.chamber_xrd import body_block
+    big = cq.Solid.makeBox(400, 400, 100, cq.Vector(-200, -200, lay["z_bottom"] + 0.001))
+    return big.cut(body_block(p, lay)).intersect(
+        cq.Solid.makeBox(400, 400, -lay["z_bottom"] - 0.002,
+                         cq.Vector(-200, -200, lay["z_bottom"] + 0.001)))
+
+
 def run(p=P) -> list[Result]:
     return (ring_checks(p) + base_checks(p) + seal_checks(p) + assembly_checks(p)
-            + lid_raman_checks(p) + clamp_checks(p) + lid_raman_checks(p, "clamp"))
+            + lid_raman_checks(p) + clamp_checks(p) + lid_raman_checks(p, "clamp")
+            + xrd_checks(p))
 
 
 if __name__ == "__main__":
