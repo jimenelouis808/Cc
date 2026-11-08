@@ -1,4 +1,4 @@
-"""A build process the GUI can actually kill.
+"""A worker process the GUI can actually kill.
 
 Builds used to run on a worker *thread*, which meant they could not be
 stopped. That is fine for a 60-atom cage and unacceptable for a coil:
@@ -19,6 +19,14 @@ sent as objects: a builder may raise something whose ``__reduce__`` does
 not round-trip, and a failure to unpickle the failure is a confusing way
 to lose an error message. The repr and the formatted traceback are sent
 as strings instead.
+
+**A request carries what kind of work it is**, because relaxing a
+structure needs this machinery for exactly the same reason building one
+does: :func:`~nanocarbon_lab.relax.relax_structure` spends a minute
+inside L-BFGS on tens of thousands of atoms, checking no cancel flag,
+and a window frozen for a minute is a window nobody trusts. The tag is
+on the *request* only; a result is still ``done`` or ``error``, so
+nothing that reads :meth:`BuildWorker.poll` had to change.
 """
 
 from __future__ import annotations
@@ -29,25 +37,67 @@ import traceback
 from typing import Any
 
 from ..jobs import Job, build
+from ..relax import relax_structure
 
 # Sent when a worker dies without reporting -- almost always because the
 # user cancelled it, but also covers a segfault in a native library.
 WORKER_DIED = "worker-died"
 
+#: Request kinds. ``BUILD`` carries a :class:`~nanocarbon_lab.jobs.Job`,
+#: ``RELAX`` an ``(atoms, options)`` pair.
+BUILD = "build"
+RELAX = "relax"
+
+
+def run_request(kind: str, payload: Any) -> Any:
+    """Do one request's work and return the structure.
+
+    Split out of the child's loop so that the dispatch is reachable from
+    a test by direct call. The loop around it cannot be -- it runs in
+    another process -- and when the dispatch lived inside it, the branch
+    deciding build from relax was exercised by nothing but an
+    integration test that takes seconds to spawn.
+
+    Parameters
+    ----------
+    kind
+        :data:`BUILD` or :data:`RELAX`.
+    payload
+        The job, or the ``(atoms, options)`` pair.
+
+    Returns
+    -------
+    ase.Atoms
+        The built or relaxed structure.
+
+    Raises
+    ------
+    ValueError
+        On an unknown kind. Never silently falls back to a build: a
+        typo'd tag would then return the wrong structure and look fine.
+    """
+    if kind == RELAX:
+        atoms, options = payload
+        return relax_structure(atoms, **options)
+    if kind == BUILD:
+        return build(payload)
+    raise ValueError(f"unknown request kind {kind!r}")
+
 
 def _worker_loop(requests: Any, results: Any) -> None:  # pragma: no cover
-    """Child-process main loop: build whatever arrives, report back.
+    """Child-process main loop: do whatever arrives, report back.
 
     Runs in the subprocess, so it is exercised by the integration test
-    rather than by direct call, hence the coverage exemption.
+    rather than by direct call, hence the coverage exemption. The work
+    itself is :func:`run_request`, which is not exempt.
     """
     while True:
         item = requests.get()
         if item is None:
             return
-        job_id, job = item
+        job_id, kind, payload = item
         try:
-            results.put((job_id, "done", build(job)))
+            results.put((job_id, "done", run_request(kind, payload)))
         except BaseException as exc:  # noqa: BLE001 - reported, not handled
             results.put((job_id, "error", (repr(exc), traceback.format_exc())))
 
@@ -142,25 +192,44 @@ class BuildWorker:
 
     # ----------------------------------------------------------------- work
     def submit(self, job: Job) -> int:
-        """Queue a job and return its id. Starts the worker if needed."""
+        """Queue a build and return its id. Starts the worker if needed."""
+        return self._submit(BUILD, job)
+
+    def submit_relax(self, atoms: Any, **options: Any) -> int:
+        """Queue a valence relaxation of ``atoms`` and return its id.
+
+        ``options`` are :func:`~nanocarbon_lab.relax.relax_structure`'s
+        keywords. The structure crosses to the child by pickle, which
+        carries ``info["bonds"]`` intact -- it is the *extxyz* writer
+        that cannot hold a bond list of this size, not pickle, so the
+        topology the relaxation must freeze is not lost on the way.
+
+        The relaxed structure comes back as a **copy**: the function
+        mutates in place, but in place in the child's address space, so
+        the caller's own object is untouched until it swaps in the
+        result.
+        """
+        return self._submit(RELAX, (atoms, options))
+
+    def _submit(self, kind: str, payload: Any) -> int:
         if self.busy:
-            raise RuntimeError("a build is already in flight; cancel it first.")
+            raise RuntimeError("a job is already in flight; cancel it first.")
         self.start()
         self._next_id += 1
         self._pending = self._next_id
         if self.degraded:
-            self._run_on_thread(self._next_id, job)
+            self._run_on_thread(self._next_id, kind, payload)
         else:
-            self._requests.put((self._next_id, job))
+            self._requests.put((self._next_id, kind, payload))
         return self._next_id
 
-    def _run_on_thread(self, job_id: int, job: Job) -> None:
-        """Degraded path: build here, on a daemon thread."""
+    def _run_on_thread(self, job_id: int, kind: str, payload: Any) -> None:
+        """Degraded path: do the work here, on a daemon thread."""
         import threading
 
         def run() -> None:
             try:
-                self._results.put((job_id, "done", build(job)))
+                self._results.put((job_id, "done", run_request(kind, payload)))
             except BaseException as exc:  # noqa: BLE001 - reported, not handled
                 self._results.put(
                     (job_id, "error", (repr(exc), traceback.format_exc()))

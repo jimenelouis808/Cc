@@ -1911,6 +1911,124 @@ def _cmd_validate(args):
     return 0 if report.ok else 1
 
 
+def _format_relax_report(report: dict) -> str:
+    """The before/after table `nanocarbon relax` prints.
+
+    Bonds and angles side by side, because the point of this relaxation
+    is that both move and only reading both says whether it worked: a
+    structure can reach graphitic bond lengths while folding through
+    itself, which is the failure the angle term exists to stop.
+    """
+    before, after = report["before"], report["after"]
+    lines = [
+        f"{report['bonds']} bonds ({report['bond_source']}), "
+        f"{report['angles']} angles at {report['equilibrium']:.3f} Å",
+        "",
+        f"{'':<18}{'before':>22}{'after':>22}",
+        f"{'bond length (Å)':<18}"
+        f"{before['bond_min']:>7.3f}–{before['bond_max']:<7.3f}"
+        f"{before['bond_mean']:>7.3f}"
+        f"{after['bond_min']:>7.3f}–{after['bond_max']:<7.3f}"
+        f"{after['bond_mean']:>7.3f}",
+        f"{'angle (deg)':<18}"
+        f"{before['angle_min']:>7.1f}–{before['angle_max']:<7.1f}"
+        f"{before['angle_mean']:>7.1f}"
+        f"{after['angle_min']:>7.1f}–{after['angle_max']:<7.1f}"
+        f"{after['angle_mean']:>7.1f}",
+        f"{'contacts < 2 Å':<18}{before['n_close_contacts']:>22d}"
+        f"{after['n_close_contacts']:>22d}",
+        "",
+        f"largest single atom move: {report['largest_move']:.3f} Å",
+    ]
+    if report["angles_without_target"]:
+        lines.append(
+            f"{report['angles_without_target']} angles had no ideal target "
+            "for their coordination and were left to the repulsion.")
+    for warning in report["warnings"]:
+        lines.append(f"WARNING: {warning}")
+    return "\n".join(lines)
+
+
+def _cmd_relax(args):
+    """Clean an existing structure's geometry with the valence field."""
+    from ..analyse import read_structure
+    from ..relax import relax_structure
+
+    try:
+        atoms = read_structure(args.path)
+    except (ValueError, OSError) as exc:
+        print(f"Could not read {args.path}: {exc}", file=sys.stderr)
+        return 1
+    print(f"{args.path}: {len(atoms)} atoms")
+    try:
+        relax_structure(
+            atoms,
+            equilibrium=args.bond,
+            k_bond=args.k_bond,
+            k_angle=args.k_angle,
+            k_repel=args.k_repel,
+            repel_cutoff=args.repel_cutoff,
+            outer_cycles=args.cycles,
+            max_iterations=args.iterations,
+            tolerance=args.tolerance,
+        )
+    except ValueError as exc:
+        print(f"Refused: {exc}", file=sys.stderr)
+        return 1
+    print()
+    print(_format_relax_report(atoms.info["valence_relax"]))
+    out = Path(args.out) if args.out else Path(args.path).with_name(
+        Path(args.path).stem + "_relaxed.xyz")
+    out.parent.mkdir(parents=True, exist_ok=True)
+    # The bond list is what made the relaxation meaningful and extxyz
+    # cannot carry one of this size in its comment line -- it is what
+    # breaks ASE's own reader. So the topology is dropped on the way out
+    # and `relax` says so rather than writing a file that will not
+    # reopen.
+    written = dict(atoms.info)
+    atoms.info.clear()
+    ase_io.write(str(out), atoms)
+    atoms.info.update(written)
+    print(f"\nWrote {out}")
+    if "bonds" in written:
+        print("The bond list is NOT in that file: a list this long in an "
+              "extxyz comment line is what breaks ASE's own reader. Rerun "
+              "this command on the output and the bonds are guessed again "
+              "from the distances, which on relaxed geometry is reliable.")
+    return 0
+
+
+def _cmd_relax_request(args):
+    """Write a nanocarbon-dft/1 folder asking an external code to relax."""
+    from ..analyse import read_structure
+    from ..exports import write_relaxation_request
+
+    try:
+        atoms = read_structure(args.path)
+    except (ValueError, OSError) as exc:
+        print(f"Could not read {args.path}: {exc}", file=sys.stderr)
+        return 1
+    try:
+        settings = json.loads(args.settings) if args.settings else None
+    except json.JSONDecodeError as exc:
+        print(f"--settings is not valid JSON: {exc}", file=sys.stderr)
+        return 1
+    try:
+        folder = write_relaxation_request(
+            atoms, args.folder, name=args.name, code=args.code,
+            settings=settings, fmax=args.fmax, steps=args.steps,
+            reason=args.reason,
+        )
+    except ValueError as exc:
+        print(f"Refused: {exc}", file=sys.stderr)
+        return 1
+    print(f"{args.path}: {len(atoms)} atoms -> {folder}")
+    print(f"Code: {args.code}, fmax {args.fmax} eV/Å, up to {args.steps} steps.")
+    print("This writes the request only; run it with whatever drives the "
+          "nanocarbon-dft/1 format on the machine that has the code.")
+    return 0
+
+
 def _cmd_groups(args):
     """Print the functional-group library and what each can become."""
     del args
@@ -3371,6 +3489,79 @@ def build_parser() -> argparse.ArgumentParser:
                         help="Validate an existing structure file (CIF, XYZ, POSCAR…).")
     vl.add_argument("path", help="Path to a structure file readable by ASE.")
     vl.set_defaults(func=_cmd_validate)
+
+    rx = sub.add_parser(
+        "relax",
+        help="Clean an existing structure's geometry with the valence force "
+             "field (bond + angle + non-bonded repulsion). Seconds, not hours.",
+        description="Relaxes a structure somebody else made, or one this "
+                    "package built and then bent. The topology is FROZEN: the "
+                    "bond list is held for the whole minimisation, so this "
+                    "cannot change a ring census -- it only moves atoms. It "
+                    "also cannot say which of two structures is more stable; "
+                    "a valence field has one rest length and one angle per "
+                    "coordination and no energy scale worth the name. For "
+                    "that, use `relax-request`.",
+    )
+    rx.add_argument("path", help="Structure file readable by ASE.")
+    rx.add_argument("--out", default=None,
+                    help="Where to write the relaxed structure "
+                         "(default: alongside the input, _relaxed.xyz).")
+    rx.add_argument("--bond", type=float, default=1.42,
+                    help="Rest bond length in Å (default 1.42, graphitic "
+                         "carbon). The angle targets are carbon's whatever "
+                         "this is set to, so a non-carbon structure needs an "
+                         "external code instead.")
+    rx.add_argument("--k-bond", type=float, default=40.0, dest="k_bond",
+                    help="Bond force constant (default 40).")
+    rx.add_argument("--k-angle", type=float, default=15.0, dest="k_angle",
+                    help="Angle force constant (default 15). Must stay a "
+                         "substantial fraction of --k-bond: too soft an angle "
+                         "term is what lets a wall fold through itself.")
+    rx.add_argument("--k-repel", type=float, default=25.0, dest="k_repel",
+                    help="Non-bonded repulsion constant (default 25).")
+    rx.add_argument("--repel-cutoff", type=float, default=2.2,
+                    dest="repel_cutoff",
+                    help="Non-bonded repulsion range in Å (default 2.2).")
+    rx.add_argument("--cycles", type=int, default=3,
+                    help="Neighbour-list rebuilds (default 3).")
+    rx.add_argument("--iterations", type=int, default=3000,
+                    help="L-BFGS iterations per rebuild (default 3000).")
+    rx.add_argument("--tolerance", type=float, default=0.30,
+                    help="Covalent-radius slack for guessing bonds, used only "
+                         "when the file carries none (default 0.30).")
+    rx.set_defaults(func=_cmd_relax)
+
+    rr = sub.add_parser(
+        "relax-request",
+        help="Write a nanocarbon-dft/1 folder asking an external code to "
+             "relax a structure.",
+        description="For the question a valence force field cannot answer: "
+                    "which geometry is lower in energy. Writes the request "
+                    "folder and nothing else -- running it is the job of "
+                    "whatever drives the format on the machine with the code.",
+    )
+    rr.add_argument("path", help="Structure file readable by ASE.")
+    rr.add_argument("folder", help="Directory to create and fill.")
+    rr.add_argument("--code", default="dftb+",
+                    help="Which code to ask (default dftb+).")
+    rr.add_argument("--name", default="",
+                    help="Label for the job (default: taken from the "
+                         "structure, else the folder name).")
+    rr.add_argument("--fmax", type=float, default=0.05,
+                    help="Force convergence in eV/Å (default 0.05).")
+    rr.add_argument("--steps", type=int, default=300,
+                    help="Iteration cap (default 300).")
+    rr.add_argument("--settings", default=None,
+                    help="JSON object merged into the code's settings block, "
+                         "e.g. '{\"skf_dir\": \"/opt/skf/3ob\"}'. The "
+                         "Slater-Koster path cannot be guessed here: those "
+                         "files live wherever the job runs.")
+    rr.add_argument("--reason", default="",
+                    help="Free text recorded in the request. Say what the "
+                         "valence field could not answer -- the folder "
+                         "outlives the conversation.")
+    rr.set_defaults(func=_cmd_relax_request)
 
     uc = sub.add_parser(
         "unitcell",

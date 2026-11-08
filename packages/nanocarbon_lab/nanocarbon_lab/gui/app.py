@@ -443,6 +443,12 @@ class NanocarbonGUI:
         self._shifts_for = None
         self.blender_exe: str | None = None
         self._busy = False
+        #: What the worker is doing: "build" or "relax". The poll handler
+        #: cannot tell from the result -- both come back as an `Atoms`
+        #: under kind "done" -- and reporting a relaxation as "Build
+        #: complete" would wipe the before/after numbers that are the
+        #: only reason to have pressed the button.
+        self._task = "build"
         self._estimate_job: str | None = None
         # Registry of every parameter variable, keyed by a short name.
         # Presets, the save/load file and the estimate traces all iterate
@@ -4235,8 +4241,10 @@ class NanocarbonGUI:
     def _finish_build(self, atoms: int | None = None, mode: str = "",
                       failed: bool = False) -> None:
         self._busy = False
+        self._task = "build"
         self.progress.stop()
         self.btn_build.config(state="normal")
+        self.btn_relax.config(state="normal")
         self.btn_cancel.config(state="disabled")
         if self._clock_job is not None:
             self.root.after_cancel(self._clock_job)
@@ -4296,15 +4304,22 @@ class NanocarbonGUI:
                     mode=self.var_mode_kind.get() if kind == "done" else "",
                     failed=kind != "done")
                 if kind == "done":
+                    relaxed = self._task == "relax"
                     self.atoms = payload
                     self.last_saved_stem = None
                     self._remember(payload)
                     try:
                         self._redraw()
                         self._update_info()
-                        self._set_status("Build complete.")
+                        if relaxed:
+                            self._report_relax(payload)
+                            self._set_status("Relaxation complete.")
+                        else:
+                            self._set_status("Build complete.")
                     except Exception:  # noqa: BLE001 - shown, never fatal
-                        self._set_status("Built, but the display failed.")
+                        self._set_status(
+                            "Relaxed, but the display failed." if relaxed
+                            else "Built, but the display failed.")
                         self._show_error("Display failed",
                                          traceback.format_exc())
                 else:
@@ -4318,6 +4333,11 @@ class NanocarbonGUI:
                             "If you did not cancel it, this usually means it "
                             "ran out of memory — try fewer atoms.",
                         )
+                    elif self._task == "relax":
+                        self._set_status(
+                            "Relaxation refused — see the message below.")
+                        self.lbl_relax.config(text=text, foreground=BAD_RED)
+                        self._show_error(text, f"{text}\n\n{tb}")
                     else:
                         self._set_status("Build failed — see the message below.")
                         # The refusal's own sentence first, the traceback
@@ -5394,6 +5414,137 @@ class NanocarbonGUI:
         self._set_status(f"Analysed {Path(path).name}.")
         return result
 
+    def _build_relax_panel(self, parent: ttk.Frame) -> None:
+        """Clean the current structure's geometry, or ask a real code to.
+
+        It sits under "Analyse a file" because that is where a structure
+        from somewhere else arrives, and an imported structure is the
+        main thing that needs this -- but it acts on whatever is current,
+        built here or not.
+
+        The relaxation goes through the same worker process a build does.
+        That is not symmetry for its own sake: the valence field spends a
+        minute inside L-BFGS on tens of thousands of atoms and checks no
+        cancel flag, so running it on the Tk thread would freeze the
+        window for exactly as long, with Cancel dead.
+        """
+        tk, ttk = self.tk, self.ttk
+        rlx = ttk.LabelFrame(parent, text="Relax geometry", padding=8)
+        rlx.pack(fill="x", pady=(8, 0))
+        self.btn_relax = ttk.Button(rlx, text="Relax the current structure",
+                                    command=self.on_relax)
+        self.btn_relax.pack(fill="x", ipady=3)
+        ttk.Label(rlx, text="Valence force field: bond, a real angle term and "
+                            "non-bonded repulsion. Seconds to a minute, and "
+                            "the topology is FROZEN — it moves atoms and "
+                            "cannot change a ring census. It also cannot say "
+                            "which of two structures is more stable; for that "
+                            "use the button below.",
+                  foreground=MUTED, font=("TkDefaultFont", 8), wraplength=260,
+                  justify="left").pack(anchor="w", pady=(4, 0))
+        row = ttk.Frame(rlx)
+        row.pack(fill="x", pady=(4, 0))
+        ttk.Label(row, text="Bond (Å)").pack(side="left")
+        self.var_relax_bond = tk.DoubleVar(value=1.42)
+        ttk.Spinbox(row, from_=1.0, to=3.0, increment=0.01, width=7,
+                    textvariable=self.var_relax_bond).pack(side="left",
+                                                           padx=(6, 0))
+        ttk.Button(rlx, text="Ask an external code instead…",
+                   command=self.on_relax_request).pack(fill="x", pady=(6, 0),
+                                                       ipady=3)
+        ttk.Label(rlx, text="Writes a nanocarbon-dft/1 request folder for "
+                            "DFTB+ or a DFT code. It writes the request only; "
+                            "running it is a job for the machine that has the "
+                            "code.",
+                  foreground=MUTED, font=("TkDefaultFont", 8), wraplength=260,
+                  justify="left").pack(anchor="w", pady=(4, 0))
+        self.lbl_relax = ttk.Label(rlx, text="", foreground=MUTED,
+                                   font=("TkDefaultFont", 8), wraplength=260,
+                                   justify="left")
+        self.lbl_relax.pack(anchor="w", pady=(4, 0))
+
+    def on_relax(self) -> None:
+        """Send the current structure to the worker for a valence relax."""
+        if self._busy or self.atoms is None:
+            return
+        try:
+            bond = float(self.var_relax_bond.get())
+        except (self.tk.TclError, ValueError) as exc:
+            self._show_error("Invalid bond length", str(exc))
+            return
+
+        self._busy = True
+        self._task = "relax"
+        self.btn_build.config(state="disabled")
+        self.btn_relax.config(state="disabled")
+        self.btn_cancel.config(state="normal")
+        self.progress.start(12)
+        self._clear_error()
+        self._set_status(f"Relaxing {len(self.atoms)} atoms…")
+        self._build_started = time.monotonic()
+        self._tick_clock()
+        try:
+            self.worker.submit_relax(self.atoms, equilibrium=bond)
+        except Exception as exc:  # noqa: BLE001 - reported to the user
+            self._finish_build()
+            self._show_error("Could not start the relaxation",
+                             f"{exc}\n\n{traceback.format_exc()}")
+
+    def _report_relax(self, atoms) -> None:
+        """Put the before/after numbers where the build readout goes."""
+        report = atoms.info.get("valence_relax")
+        if not report:
+            self.lbl_relax.config(text="Relaxed, but the structure carried no "
+                                       "report — nothing to compare.",
+                                  foreground=MUTED)
+            return
+        before, after = report["before"], report["after"]
+        worst = max(abs(after["bond_min"] - report["equilibrium"]),
+                    abs(after["bond_max"] - report["equilibrium"]))
+        # Green on what this relaxer can actually promise -- sp2 bond
+        # lengths and no overlaps -- and red when a wall is still folded
+        # or two atoms still sit on each other, because then the answer
+        # is an external code and not another pass of this.
+        good = worst < 0.08 and after["n_close_contacts"] == 0
+        self.lbl_relax.config(
+            text=(f"bonds {before['bond_min']:.3f}–{before['bond_max']:.3f} → "
+                  f"{after['bond_min']:.3f}–{after['bond_max']:.3f} Å,  "
+                  f"angles {before['angle_min']:.0f}–{before['angle_max']:.0f} "
+                  f"→ {after['angle_min']:.0f}–{after['angle_max']:.0f}°,  "
+                  f"contacts {before['n_close_contacts']} → "
+                  f"{after['n_close_contacts']},  largest move "
+                  f"{report['largest_move']:.2f} Å"
+                  + ("".join(f"\n⚠ {w}" for w in report["warnings"]))),
+            foreground=OK_GREEN if good and not report["warnings"] else (
+                MUTED if good else BAD_RED))
+
+    def on_relax_request(self) -> None:
+        """Write a nanocarbon-dft/1 folder for the current structure."""
+        if self.atoms is None:
+            return
+        from ..exports import write_relaxation_request
+
+        folder = filedialog.askdirectory(
+            title="Empty folder for the relaxation request")
+        if not folder:
+            return
+        try:
+            written = write_relaxation_request(
+                self.atoms, folder,
+                reason="Written from the nanocarbon_lab window: the valence "
+                       "force field cleans geometry but prices no energy.")
+        except ValueError as exc:
+            self._show_error("Could not write the request", str(exc))
+            self.lbl_relax.config(text=str(exc), foreground=BAD_RED)
+            return
+        self.lbl_relax.config(
+            text=f"Wrote {written.name}/solicitud.json for "
+                 f"{len(self.atoms)} atoms. The Slater-Koster path is not "
+                 f"set — add `skf_dir` to its `ajustes` on the machine that "
+                 f"runs it.",
+            foreground=MUTED)
+        self._set_status(f"Relaxation request written to {written}.")
+
     def _build_actions(self, parent: ttk.Frame) -> None:
         info = ttk.LabelFrame(parent, text="Structure", padding=8)
         info.pack(fill="x")
@@ -5485,6 +5636,8 @@ class NanocarbonGUI:
                                      font=("TkDefaultFont", 8), wraplength=260,
                                      justify="left")
         self.lbl_analyse.pack(anchor="w", pady=(4, 0))
+
+        self._build_relax_panel(parent)
 
         self._build_scene_panel(parent)
 

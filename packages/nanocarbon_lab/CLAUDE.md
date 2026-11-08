@@ -4662,6 +4662,60 @@ Each job gets `seed + index`, never a shared seed. The same seed across a
 sweep puts the identical defect pattern in every structure, which is the
 one property a training set must not have.
 
+## The relaxer had no door, for two releases
+
+`relax_structure` -- the valence force field on a structure that already
+exists -- and `write_relaxation_request` were written, tested and
+reachable by **nothing but their own tests**. No subcommand, no button.
+A structure somebody imported could be read, described and exported, and
+not fixed. Worth recording because the gap was invisible from inside:
+every test passed, the engine was correct, and the feature did not
+exist for anyone who was not writing Python against the package.
+
+The doors are `nanocarbon relax` / `nanocarbon relax-request` and the
+**Relax geometry** panel under *Analyse a file*, which is where an
+imported structure arrives.
+
+Three things about that wiring are load-bearing:
+
+* **The relaxation goes through the build worker, tagged.** It spends a
+  minute inside L-BFGS on tens of thousands of atoms checking no cancel
+  flag, which is the same reason `gui/worker.py` exists for builds.
+  Requests now carry a kind (`BUILD` / `RELAX`); a **result** is still
+  `done` or `error`, so nothing reading `poll()` changed. The dispatch
+  lives in `run_request`, outside the child's loop, so a test can call
+  it -- and an unknown kind **raises** rather than falling back to a
+  build, because a build returned for a relax request looks exactly like
+  a correct answer.
+* **The window has to know which it asked for.** A build and a
+  relaxation both come back as an `Atoms` under kind `done`, so
+  `_poll_worker` branches on `self._task`. Without it a relaxation
+  reported "Build complete" and wiped the before/after numbers that are
+  the only reason to have pressed the button.
+* **The angle targets are CARBON's, and now the engine says so.** Three
+  neighbours means 120 deg here. On a dichalcogenide that is false -- a
+  chalcogen with three metal neighbours sits near 82 deg and a
+  six-coordinate metal has no single angle at all, which is why
+  `tmd/curved.py` relaxes the site net and not the atoms. Pulling an
+  MX2 to carbon's targets does not raise; it deforms the sandwich and
+  leaves the bond lengths looking right, which is this package's
+  signature failure mode. `relax_structure` warns when it sees an
+  element that is not C or H and no `angle_override` was passed, and
+  both doors surface it. The warning is in the library rather than in
+  each caller, so a third door gets it for free.
+
+Measured end to end on a 540-atom capped tube shoved off its geometry by
+a parabola: bonds **1.282-1.546 -> 1.415-1.423 Å**, angles
+**98.5-127.8 -> 107.8-119.9 deg**, zero contacts throughout, largest
+single move 0.93 Å.
+
+**The relaxed file does not carry its bond list**, and the command says
+so instead of writing something that will not reopen: a list this long
+in an extxyz comment line is what breaks ASE's own reader -- the same
+fact `write_relaxation_request` already strips `info` for. Rerunning
+`relax` on the output guesses the bonds from the distances, which on
+relaxed geometry is reliable.
+
 ## GUI: one job description, one killable process
 
 `jobs.py` is the single mapping from "what to build" to builder

@@ -264,6 +264,27 @@ def relax_structure(
         # a NaN target would poison the whole gradient.
         targets = np.where(usable, targets, 0.0)
 
+    # The angle targets are CARBON's. Three-coordinate means 120 deg
+    # here, and on a dichalcogenide that is simply false: a chalcogen
+    # with three metal neighbours sits near 82 deg, and a six-coordinate
+    # metal has no single angle at all. Pulling an MX2 to carbon's
+    # targets does not fail, it returns a wrecked sandwich with
+    # excellent-looking bond lengths -- which is the whole class of
+    # failure this package's notes keep warning about. So say it, here,
+    # where every caller sees it, rather than in each caller.
+    foreign = sorted({symbol for symbol in atoms.get_chemical_symbols()
+                      if symbol not in ("C", "H")})
+    if foreign and angle_override is None:
+        warnings.append(
+            f"this structure contains {', '.join(foreign)} and the angle "
+            "targets used are carbon's (120 deg at three neighbours, "
+            "109.47 at four). For a dichalcogenide or a crystal that is "
+            "wrong and the relaxation will deform it while the bond "
+            "lengths still look right. Pass `angle_override`, or relax "
+            "the carbon part alone, or send it to an external code with "
+            "`write_relaxation_request`."
+        )
+
     positions = relax_shell(
         atoms.get_positions().astype(float),
         set(bond_list),
