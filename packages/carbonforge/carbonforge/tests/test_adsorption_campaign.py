@@ -370,6 +370,82 @@ class TestTheWindowIsWiredToIt:
 
         assert {float(t) for t in TEMPERATURES} == set(LEVESQUE_BULK)
 
+    def test_a_finished_isotherm_folder_can_be_opened(self, framework,
+                                                       tmp_path):
+        """The hole this closed: hours of compute and nothing to see.
+
+        `result_of` knew about bands, spectra, DOS and vibspec records
+        and not about a GCMC folder, so «Abrir resultados» answered that
+        the job had produced nothing to show — leaving a JSON read by
+        hand as the only way to see your own isotherm.
+        """
+        from carbonforge.jobs.queue import result_of
+
+        folder = _request(framework, tmp_path / "run", pressures=[5.0])
+        assert result_of(folder) is None, "sin resultados todavia"
+        run_isotherm(folder)
+        found = result_of(folder)
+        assert found is not None
+        kind, path = found
+        assert kind == "isoterma"
+        assert path.name == "resultados.json"
+
+    def test_the_jobs_page_routes_an_isotherm_to_the_adsorption_page(self):
+        """Every other kind goes to «Bandas y espectros»; this one must
+        not, and the branch has to call a method that exists."""
+        from pathlib import Path
+
+        import carbonforge.gui.tabs.adsorption as tab
+        import carbonforge.gui.tabs.jobs as jobs
+
+        source = Path(jobs.__file__).read_text(encoding="utf-8")
+        assert 'kind == "isoterma"' in source
+        assert "self._show_isotherm(" in source
+        assert "_show_isotherm" in Path(tab.__file__).read_text(
+            encoding="utf-8")
+
+    def test_the_page_can_open_a_folder_on_its_own(self):
+        """Not every isotherm was queued from this window: one run by
+        hand on a cluster has to be readable too."""
+        from pathlib import Path
+
+        import carbonforge.gui.tabs.adsorption as tab
+
+        source = Path(tab.__file__).read_text(encoding="utf-8")
+        assert "_on_open_isotherm" in source
+        assert "askdirectory" in source
+
+    def test_the_page_says_what_has_been_validated_and_what_has_not(self):
+        """A window that computes an isotherm has to say what the number
+        is worth. The honest pair is: the sampling is checked against
+        Levesque, the model is not — one LJ site and no quadrupole, so a
+        doped framework is not described yet."""
+        from pathlib import Path
+
+        import carbonforge.gui.tabs.adsorption as tab
+
+        source = Path(tab.__file__).read_text(encoding="utf-8")
+        assert "Levesque" in source
+        assert "cuadrupolo" in source
+        assert "ADSORCION_MODELO" in source
+
+    def test_the_page_explains_absolute_against_excess(self):
+        """The most common way this literature is compared wrongly, so
+        the readout names it rather than printing two columns and
+        leaving the reader to guess."""
+        from pathlib import Path
+
+        import carbonforge.gui.tabs.adsorption as tab
+
+        # Normalised, because the sentence is wrapped across source
+        # lines and a raw substring search would be testing the line
+        # breaks rather than the words.
+        source = " ".join(Path(tab.__file__).read_text(
+            encoding="utf-8").split())
+        assert "ABSOLUTO" in source
+        assert "El exceso " in source
+        assert "lo que mide un experimento" in source
+
     def test_the_default_pressures_are_the_published_ladder(self):
         """The page's default has to be a ladder the reference tables
         use, so a first run is comparable to something."""

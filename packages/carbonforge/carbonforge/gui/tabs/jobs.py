@@ -23,9 +23,9 @@ class JobsTab:
     """The shared job list.
 
     Uses from the host: ``tk``, ``ttk``, ``root``, ``jobs`` (the queue),
-    ``_show_error``, ``select_page``, ``_ensure_vibspec``, and the analysis
+    ``_show_error``, ``select_page``, ``_ensure_vibspec``, the analysis
     page's ``_on_open_bands`` / ``_on_open_spectrum`` / ``_on_open_dos`` /
-    ``_on_open_pdos``.
+    ``_on_open_pdos``, and the adsorption page's ``_show_isotherm``.
     """
 
     def _build_jobs_tab(self, parent) -> None:
@@ -174,6 +174,9 @@ class JobsTab:
         kind, path = found
         if kind == "ir_gpaw":
             self._ensure_vibspec().show_results(path)
+        elif kind == "isoterma":
+            self.select_page("Adsorción (H₂)")
+            self._show_isotherm(path.parent)
         elif kind == "bands":
             self.select_page("Bandas y espectros")
             self._on_open_bands(path)

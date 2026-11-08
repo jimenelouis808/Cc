@@ -462,7 +462,8 @@ class JobQueue:
 def result_of(directory: Path) -> Optional[tuple[str, Path]]:
     """What a finished directory produced that the window can show.
 
-    Returns ``(kind, path)`` with kind ``"ir_gpaw"`` (vibspec), ``"bands"``
+    Returns ``(kind, path)`` with kind ``"ir_gpaw"`` (vibspec),
+    ``"isoterma"`` (a GCMC folder's ``resultados.json``), ``"bands"``
     (QE ``bands.dat.gnu`` or SIESTA ``*.bands``), ``"spectrum"`` (QE
     ``dynmat.out``), ``"pdos"`` (``projwfc.x`` files) or ``"dos"`` (QE
     ``dos.dat``); None when there is nothing
@@ -471,6 +472,13 @@ def result_of(directory: Path) -> Optional[tuple[str, Path]]:
     directory = Path(directory)
     if (directory / "record.json").exists():
         return "ir_gpaw", directory
+    # An isotherm's results are its own file, and this is checked before
+    # the glob patterns because a GCMC folder holds nothing those would
+    # match -- leaving it out meant a run of several hours finished and
+    # the window said it had produced nothing to show.
+    isotherm = directory / "resultados.json"
+    if (directory / "isoterma.json").exists() and isotherm.exists():
+        return "isoterma", isotherm
     for kind, pattern in (("bands", "bands.dat.gnu"), ("bands", "*.bands"),
                           ("spectrum", "dynmat.out"), ("pdos", "*pdos_tot"),
                           ("dos", "*.dos"), ("dos", "dos.dat")):
