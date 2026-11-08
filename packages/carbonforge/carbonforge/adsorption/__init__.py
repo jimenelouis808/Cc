@@ -39,14 +39,48 @@ P (MPa)      paper       here        diff
 20.0         0.016 47    0.017 42    +5.8 %
 ===========  ==========  ==========  =======
 
-Eight points inside ±6 %, which is the agreement this prototype is
-entitled to: the reservoir is a two-term virial fitted to their own
-rounded table and carries 1.2 % of its own (see
+And their table 3 at 77 K, which is the case that decides it: the
+Feynman-Hibbs correction is worth 4 % at 293 K and **20 %** here, so a
+classical run would land a fifth high and still look plausible. At
+1.5 × 10⁶ equilibration and 1.5 × 10⁶ production moves a point,
+1600-2600 molecules in the cell:
+
+===========  ==========  ==========  =======
+P (MPa)      paper       here        diff
+===========  ==========  ==========  =======
+0.1          0.031 69    0.030 41    −4.0 %
+0.5          0.040 29    0.039 24    −2.6 %
+1.0          0.043 36    0.042 44    −2.1 %
+3.0          0.046 94    0.045 80    −2.4 %
+5.0          0.048 18    0.047 40    −1.6 %
+10.0         0.049 96    0.048 53    −2.9 %
+15.0         0.051 20    0.048 91    −4.5 %
+20.0         0.051 28    0.049 49    −3.5 %
+===========  ==========  ==========  =======
+
+Sixteen points over two temperatures, all inside ±6 %, mean absolute
+3.0 % at each. That is the agreement this prototype is entitled to:
+the reservoir is a two-term virial fitted to their own rounded table
+and carries 1.2 % of its own (see
 :mod:`~carbonforge.adsorption.bulk`), the molecule has no quadrupole,
 and the published densities are themselves rounded to five decimals.
-The drift that :class:`~carbonforge.adsorption.gcmc.GCMCResult` reports
-is −1 % to −2 % of the loading at the upper pressures, so the numbers
-here are if anything slight over-estimates of a longer run's.
+
+**The 77 K column is low at every pressure, and the diagnostics say
+why rather than leaving it to be explained.** The drift
+:class:`~carbonforge.adsorption.gcmc.GCMCResult` reports is positive
+there — at 20 MPa the loading was still rising by 61 molecules between
+the first production block and the last — so a longer run moves these
+up, toward the paper, not away. The 293 K points drift the other way
+and are correspondingly slight over-estimates. In both cases the
+residual is dominated by sampling length, which is a knob, rather than
+by the model, which is not.
+
+**What this validates is the sampling, not the model.** Reproducing
+Levesque means the potential, the quantum correction, the reservoir's
+activity and the move balance are all right. It does not say a
+one-site molecule with no quadrupole is true of hydrogen — it says it
+is implemented the way he implemented it. ``validacion_GCMC/`` holds
+the figure, the numbers and that caveat at length.
 """
 
 from .bulk import LEVESQUE_BULK, VirialGas, fit_virial

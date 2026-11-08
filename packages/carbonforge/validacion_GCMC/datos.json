@@ -1,0 +1,134 @@
+{
+ "77.0": [
+  {
+   "presion_mpa": 0.1,
+   "rho_publicado": 0.03169,
+   "rho_calculado": 0.03041,
+   "diferencia_pct": -4.0,
+   "n_medio": 1597.9,
+   "n_error": 5.2
+  },
+  {
+   "presion_mpa": 0.5,
+   "rho_publicado": 0.04029,
+   "rho_calculado": 0.03924,
+   "diferencia_pct": -2.6,
+   "n_medio": 2061.8,
+   "n_error": 3.1
+  },
+  {
+   "presion_mpa": 1.0,
+   "rho_publicado": 0.04336,
+   "rho_calculado": 0.04244,
+   "diferencia_pct": -2.1,
+   "n_medio": 2230.2,
+   "n_error": 4.3
+  },
+  {
+   "presion_mpa": 3.0,
+   "rho_publicado": 0.04694,
+   "rho_calculado": 0.0458,
+   "diferencia_pct": -2.4,
+   "n_medio": 2406.5,
+   "n_error": 4.0
+  },
+  {
+   "presion_mpa": 5.0,
+   "rho_publicado": 0.04818,
+   "rho_calculado": 0.0474,
+   "diferencia_pct": -1.6,
+   "n_medio": 2490.8,
+   "n_error": 6.5
+  },
+  {
+   "presion_mpa": 10.0,
+   "rho_publicado": 0.04996,
+   "rho_calculado": 0.04853,
+   "diferencia_pct": -2.9,
+   "n_medio": 2550.3,
+   "n_error": 4.0
+  },
+  {
+   "presion_mpa": 15.0,
+   "rho_publicado": 0.0512,
+   "rho_calculado": 0.04891,
+   "diferencia_pct": -4.5,
+   "n_medio": 2570.3,
+   "n_error": 2.9
+  },
+  {
+   "presion_mpa": 20.0,
+   "rho_publicado": 0.05128,
+   "rho_calculado": 0.04949,
+   "diferencia_pct": -3.5,
+   "n_medio": 2600.3,
+   "n_error": 6.8
+  }
+ ],
+ "293.0": [
+  {
+   "presion_mpa": 0.1,
+   "rho_publicado": 0.00014,
+   "rho_calculado": 0.00015,
+   "diferencia_pct": 3.7,
+   "n_medio": 7.6,
+   "n_error": 0.1
+  },
+  {
+   "presion_mpa": 0.5,
+   "rho_publicado": 0.00073,
+   "rho_calculado": 0.00072,
+   "diferencia_pct": -1.7,
+   "n_medio": 37.7,
+   "n_error": 0.3
+  },
+  {
+   "presion_mpa": 1.0,
+   "rho_publicado": 0.00145,
+   "rho_calculado": 0.0014,
+   "diferencia_pct": -3.5,
+   "n_medio": 73.6,
+   "n_error": 0.5
+  },
+  {
+   "presion_mpa": 3.0,
+   "rho_publicado": 0.00399,
+   "rho_calculado": 0.00394,
+   "diferencia_pct": -1.3,
+   "n_medio": 206.9,
+   "n_error": 1.7
+  },
+  {
+   "presion_mpa": 5.0,
+   "rho_publicado": 0.00614,
+   "rho_calculado": 0.00612,
+   "diferencia_pct": -0.3,
+   "n_medio": 321.8,
+   "n_error": 2.3
+  },
+  {
+   "presion_mpa": 10.0,
+   "rho_publicado": 0.0104,
+   "rho_calculado": 0.01067,
+   "diferencia_pct": 2.6,
+   "n_medio": 560.9,
+   "n_error": 2.2
+  },
+  {
+   "presion_mpa": 15.0,
+   "rho_publicado": 0.0138,
+   "rho_calculado": 0.01446,
+   "diferencia_pct": 4.8,
+   "n_medio": 759.9,
+   "n_error": 4.3
+  },
+  {
+   "presion_mpa": 20.0,
+   "rho_publicado": 0.01647,
+   "rho_calculado": 0.01742,
+   "diferencia_pct": 5.8,
+   "n_medio": 915.6,
+   "n_error": 3.0
+  }
+ ]
+}
