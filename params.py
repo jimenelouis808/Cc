@@ -19,6 +19,7 @@ RAMAN = {
     "working_distance": 8.0,         # MEDIR: WD del objetivo de larga distancia
     "objective_tip_diameter": 25.0,  # MEDIR: diámetro de la punta del objetivo
     "clearance_margin": 1.0,
+    "window_t": 0.5,                 # espesor de ventana (cuarzo / zafiro)
 }
 
 # --- Electrodos -------------------------------------------------------------
@@ -45,12 +46,61 @@ CELL = {
     "min_wall": 2.0,         # pared mínima mojada
     "bolt": "M3",
     "bolt_clearance_d": 3.4,
+    "min_wall_dry": 1.2,     # pared mínima seca (entre agujeros, a caras exteriores)
+    # huella común de base, anillo y tapas
+    "body_w": 54.0,
+    "corner_chamfer": 5.0,
+    # tornillería anillo → base (cabeza arriba, tuerca embebida abajo)
+    "bolt_inset": 6.0,       # centro del tornillo a la cara lateral
+    "bolt_head_d": 5.5,      # M3 cabeza cilíndrica
+    "bolt_head_h": 3.0,
+    "nut_af": 5.5,           # M3, entre caras
+    "nut_h": 2.4,
+    # pines guía Ø3 (posiciones asimétricas: el anillo solo entra en una orientación)
+    "pin_d": 3.0,
+    "pin_depth": 4.5,       # por pieza: pin Ø3×8
+    "pins": ((12.0, -22.0), (-22.0, 12.0)),
+    # insertos térmicos M3 en la cara superior del anillo, para las tapas
+    "insert_d": 4.0,         # MEDIR: Ø de agujero que pide el inserto
+    "insert_depth": 5.0,
+    "lid_insert_xy": 15.0,   # insertos en (±xy, ±xy)
 }
+
+BASE_FLAT = {
+    "t": 6.0,                # espesor (de z = -t a z = 0)
+    "pocket_clearance": 0.2, # holgura por lado del alojamiento de la muestra
+    "corner_relief_d": 1.5,  # alivios en las esquinas del alojamiento
+    "contact_w": 5.0,        # ranura para la lámina de contacto (Pt / Cu / Ni)
+    "contact_t": 0.3,        # bajo la muestra, sale por la cara -x
+    "eject_d": 3.0,          # agujero central para empujar la muestra desde abajo
+}
+
+CHAMBER_RING = {
+    "h": 13.0,               # altura (de z = 0 a z = h)
+    "floor_lip": 2.0,        # material sobre el escalón del O-ring (rigidez del piso)
+    "well_d": 28.0,          # pozo/reservorio: ≥ punta del objetivo + 2·margen
+}
+
+# Puertos del anillo. face: cara por la que entra; offset: desplazamiento sobre la
+# cara; z: altura del eje. kind 'fitting' = 1/4-28 de fondo plano (machuelar tras
+# imprimir); kind 'radial' = vástago con O-ring radial (RE).
+RING_PORTS = (
+    {"name": "inlet", "face": "-x", "offset": 0.0, "z": 5.5, "kind": "fitting", "through_d": 2.0},
+    {"name": "outlet", "face": "+x", "offset": 0.0, "z": 8.0, "kind": "fitting", "through_d": 2.0},
+    {"name": "CE", "face": "+y", "offset": 0.0, "z": 6.0, "kind": "fitting",
+     "through_d": ELECTRODES["CE_sleeve_d"]},
+    {"name": "RE", "face": "-y", "offset": 0.0, "z": 7.0, "kind": "radial"},
+)
 
 # --- Sellos -----------------------------------------------------------------
 ORING = {
     "face_cs": 1.5,          # MEDIR: sección del O-ring EPDM de cara
     "face_id": 10.0,         # MEDIR: diámetro interior del O-ring de cara
+    # O-ring que sella sobre la muestra plana: su ID = WE_FLAT["exposed_d"]
+    "sample_cs": 1.5,        # MEDIR
+    # O-ring radial sobre el cuerpo de la RE
+    "re_cs": 1.5,            # MEDIR
+    "re_groove_from_face": 4.0,
 }
 
 # --- Puertos ----------------------------------------------------------------
@@ -60,6 +110,8 @@ PORTS = {
     "thread": "1/4-28 UNF",
     "tap_drill_d": 5.5,      # broca para machuelo 1/4-28 (PTFE/PEEK maquinado)
     "flat_bottom_d": 7.0,    # MEDIR: asiento del conector
+    "thread_depth": 7.0,     # profundidad roscada + asiento
+    "fitting_pitch_min": 12.0,  # separación mínima entre conectores (llave / tuerca)
 }
 
 # --- Fabricación ------------------------------------------------------------

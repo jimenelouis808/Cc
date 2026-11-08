@@ -16,6 +16,10 @@ Electrolitos objetivo: 0.5 M H2SO4 y 3 M KOH. EPD: etanol / IPA (y posiblemente 
   El plano z = 0 es el plano del goniómetro en XRD y el plano focal en Raman.
 - Cada script de módulo exporta STEP (para simulación/maquinado) y STL (para impresión) a `out/`.
 - Cada módulo tiene una función `build(p=params) -> cq.Workplane` y un bloque `if __name__ == "__main__"` que exporta.
+  `p` es el módulo params; para variantes usar `modules._geom.variant(p, CELL={...})`, nunca editar params en pruebas.
+- Cada módulo expone además `features(p) -> {nombre: sólido}` (lo que se resta del cuerpo):
+  `checks/walls.py` mide paredes entre esos elementos. Al agregar un módulo, agregar sus checks ahí.
+- Geometría compartida (huella, tornillería, sellos, puertos) en `modules/_geom.py`.
 - Antes de dar por terminado un módulo: correr `checks/` (interferencias, espesores mínimos de pared, holgura de haz XRD)
   y `python -m pytest -q`.
 - Lecciones de celdas publicadas en `docs/referencias.md`: consultarlas antes de diseñar un módulo nuevo.
