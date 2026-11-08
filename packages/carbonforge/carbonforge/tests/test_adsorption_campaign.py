@@ -32,6 +32,8 @@ from carbonforge.adsorption.campaign import (PROGRESS, REQUEST, RESULTS,
                                              read_isotherm_request,
                                              read_results, run_isotherm,
                                              status, write_isotherm_request)
+from carbonforge.adsorption import levesque_bundle
+from carbonforge.adsorption.bundle import REFERENCE_DIAMETER
 from carbonforge.jobs.queue import GcmcAdapter, adapter_for, engine_of
 
 
@@ -354,6 +356,71 @@ class TestSnapshots:
         path = write_snapshot(framework, sites, tmp_path / "s.extxyz")
         back = read(str(path))
         assert (back.get_tags() == ADSORBATE_TAG).sum() == 2
+
+    def test_no_drawn_bond_crosses_the_cell(self):
+        """The failure this workspace keeps re-learning.
+
+        A periodic bond list names the pair and not the image, so
+        joining the two stored positions draws a line the length of the
+        cell straight through the picture. Every segment here has to be
+        a real bond length.
+        """
+        from carbonforge.adsorption.snapshot import framework_bonds
+
+        atoms = levesque_bundle(gap=6.0, diameter=REFERENCE_DIAMETER,
+                                repeats=2, periods=3)
+        segments = framework_bonds(atoms)
+        lengths = np.linalg.norm(segments[:, 1] - segments[:, 0], axis=1)
+        assert lengths.max() < 1.9
+        assert lengths.min() > 1.3
+
+    def test_a_bond_across_the_seam_is_drawn_from_both_sides(self):
+        """Two stubs, not one line and not nothing.
+
+        Dropping them, which the quick viewer in `viz` does, leaves
+        every tube in a bundle looking cut off at its ends.
+        """
+        from carbonforge.adsorption.snapshot import framework_bonds
+
+        atoms = levesque_bundle(gap=6.0, diameter=REFERENCE_DIAMETER,
+                                repeats=2, periods=3)
+        # Trivalent carbon: 3N/2 bonds, and the crossing ones add one
+        # extra segment each.
+        assert len(framework_bonds(atoms)) > 3 * len(atoms) // 2
+
+    def test_the_bonds_are_every_real_one_and_no_second_neighbour(self):
+        """1.9 Å sits between graphitic 1.42 and the 2.46 of a second
+        neighbour, so the count is exactly 3N/2 distinct pairs."""
+        from scipy.spatial import cKDTree
+
+        from carbonforge.adsorption.snapshot import BOND_CUTOFF
+
+        atoms = levesque_bundle(gap=6.0, diameter=REFERENCE_DIAMETER,
+                                repeats=2, periods=3)
+        edges = np.diag(np.asarray(atoms.cell, dtype=float))
+        tree = cKDTree(np.asarray(atoms.get_positions()) % edges,
+                       boxsize=edges)
+        assert len(tree.query_pairs(BOND_CUTOFF)) == 3 * len(atoms) // 2
+
+    def test_a_structure_with_no_cell_draws_no_bonds_rather_than_raising(
+            self):
+        """A finite cluster has no boxsize for the tree, and a picture
+        of it should come out bondless rather than not at all."""
+        from carbonforge.adsorption.snapshot import framework_bonds
+
+        loose = Atoms("C2", positions=[(0.0, 0.0, 0.0), (1.42, 0.0, 0.0)])
+        assert len(framework_bonds(loose)) == 0
+
+    def test_each_adsorbate_has_its_own_colour(self):
+        """A second adsorbate must not get the next hue somebody liked:
+        the set is checked for colour-vision separation as a set."""
+        from carbonforge.adsorption.snapshot import (ADSORBATE_COLOURS,
+                                                     DEFAULT_COLOUR)
+
+        assert len(set(ADSORBATE_COLOURS.values())) == len(ADSORBATE_COLOURS)
+        assert DEFAULT_COLOUR == ADSORBATE_COLOURS["H2"]
+        assert all(value.startswith("#") and len(value) == 7
+                   for value in ADSORBATE_COLOURS.values())
 
     def test_the_views_are_named_after_the_axis_they_look_down(self):
         """Not after what that axis means. "The tube axis" is a fact

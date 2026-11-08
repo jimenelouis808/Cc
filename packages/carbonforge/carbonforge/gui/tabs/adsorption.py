@@ -261,7 +261,24 @@ class AdsorptionTab:
         ttk.Button(read, text="Exportar todo a CSV…",
                    command=self._on_export_isotherms).pack(fill="x",
                                                            pady=(4, 0))
-        ttk.Button(read, text="Ver el hidrógeno adsorbido…",
+        from ...adsorption.snapshot import ADSORBATE_COLOURS  # noqa: WPS433
+
+        srow2 = ttk.Frame(read)
+        srow2.pack(fill="x", pady=(4, 0))
+        ttk.Label(srow2, text="Adsorbato").pack(side="left")
+        self.ads_species_var = tk.StringVar(value="H2")
+        ttk.Combobox(srow2, textvariable=self.ads_species_var, width=6,
+                     values=tuple(ADSORBATE_COLOURS)).pack(side="left",
+                                                           padx=(6, 0))
+        ttk.Label(srow2, text="color").pack(side="left", padx=(10, 0))
+        self.ads_colour_var = tk.StringVar(value="")
+        ttk.Entry(srow2, textvariable=self.ads_colour_var,
+                  width=9).pack(side="left", padx=(6, 0))
+        self.ads_bonds_var = tk.BooleanVar(value=True)
+        ttk.Checkbutton(read, text="Dibujar los enlaces del armazón",
+                        variable=self.ads_bonds_var).pack(anchor="w",
+                                                          pady=(4, 0))
+        ttk.Button(read, text="Ver el adsorbato…",
                    command=self._on_show_snapshot).pack(fill="x",
                                                         pady=(4, 0))
         ttk.Label(
@@ -271,7 +288,10 @@ class AdsorptionTab:
                   "Las configuraciones sólo existen si se pidieron al "
                   "escribir la carpeta: cada sitio dibujado es UNA "
                   "MOLÉCULA, no un átomo — este modelo tiene un solo "
-                  "centro por H₂."),
+                  "centro por H₂. El color sale del catálogo de la "
+                  "especie (rosa para H₂) y el campo de al lado lo "
+                  "sobreescribe con cualquiera que entienda matplotlib: "
+                  "un nombre, «#rrggbb», lo que sea."),
             wraplength=330, justify="left", foreground="#777777",
             font=("TkDefaultFont", 8),
         ).pack(anchor="w", pady=(4, 0))
@@ -518,9 +538,19 @@ class AdsorptionTab:
 
         atoms = read(path)
         tags = atoms.get_tags()
-        figure = plot_snapshot(atoms[tags != ADSORBATE_TAG],
-                               atoms[tags == ADSORBATE_TAG].get_positions(),
-                               view="todas")
+        species = self.ads_species_var.get().strip() or "H2"
+        colour = self.ads_colour_var.get().strip() or None
+        try:
+            figure = plot_snapshot(
+                atoms[tags != ADSORBATE_TAG],
+                atoms[tags == ADSORBATE_TAG].get_positions(),
+                view="todas", species=species, colour=colour,
+                bonds=bool(self.ads_bonds_var.get()))
+        except ValueError as exc:
+            # An unknown matplotlib colour is a typo, not a crash.
+            self.ads_status_var.set(f"Color no reconocido: {colour}")
+            self._show_error(exc, traceback.format_exc())
+            return
         window = self.tk.Toplevel(self.root)
         window.title(Path(path).name)
         from matplotlib.backends.backend_tkagg import (  # noqa: WPS433

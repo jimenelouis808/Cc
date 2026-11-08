@@ -976,6 +976,17 @@ def build_parser() -> argparse.ArgumentParser:
                     help="PNG a escribir (por omisión, junto al .extxyz).")
     vi.add_argument("--vista", default="todas", dest="view",
                     help="x, y, z, general, o todas (por omisión).")
+    vi.add_argument("--especie", default="H2", dest="species",
+                    help="Nombre del adsorbato. Elige su color del "
+                         "catálogo y lo nombra en la figura.")
+    vi.add_argument("--color", default=None,
+                    help="Color del adsorbato, cualquiera que entienda "
+                         "matplotlib. Por omisión, el de la especie "
+                         "(rosa para H2).")
+    vi.add_argument("--sin-enlaces", action="store_true", dest="no_bonds",
+                    help="Dibujar el armazón como nube de puntos en vez "
+                         "de como red enlazada. Más rápido en una celda "
+                         "muy grande y bastante más difícil de leer.")
     vi.set_defaults(func=_cmd_snapshot_view)
 
     ae = asub.add_parser("estado",
@@ -1106,9 +1117,15 @@ def _cmd_snapshot_view(args) -> int:
         return 1
     try:
         figure = plot_snapshot(atoms[tags != ADSORBATE_TAG], sites,
-                               view=args.view)
+                               view=args.view, species=args.species,
+                               colour=args.color, bonds=not args.no_bonds)
     except ValueError as exc:
-        print(f"Rechazado: {exc}", file=sys.stderr)
+        if args.color and "color" in str(exc):
+            print(f"matplotlib no reconoce el color {args.color!r}. Vale un "
+                  f"nombre ('hotpink', 'crimson'), un '#rrggbb' o un "
+                  f"'#rgb'.", file=sys.stderr)
+        else:
+            print(f"Rechazado: {exc}", file=sys.stderr)
         return 1
     out = _Path(args.out) if args.out else _Path(args.path).with_suffix(".png")
     figure.savefig(out, dpi=200, facecolor="#fcfcfb", bbox_inches="tight")

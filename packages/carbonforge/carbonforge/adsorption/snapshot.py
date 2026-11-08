@@ -33,6 +33,78 @@ from ase import Atoms
 FRAMEWORK_TAG: int = 0
 ADSORBATE_TAG: int = 1
 
+#: Colour per adsorbate, from the validated categorical order. Keyed by
+#: the name a caller uses, so a second adsorbate gets its own slot
+#: rather than the next hue somebody liked: these are checked for
+#: colour-vision separation as a set, and inventing a sixth by eye
+#: would break that for everyone who reads the figure.
+#:
+#: Pink for H2 because the framework is grey and the question the
+#: figure answers is *where the hydrogen went* — the adsorbate has to
+#: be the thing the eye lands on. It sits at 2.62:1 against the page,
+#: under the 3:1 a thin mark would need, so the figure always carries a
+#: label naming the species and the count: the marks are large filled
+#: circles rather than hairlines, and the label is the relief.
+ADSORBATE_COLOURS: dict[str, str] = {
+    "H2": "#e87ba4",
+    "CH4": "#2a78d6",
+    "CO2": "#1baf7a",
+    "N2": "#eda100",
+    "O2": "#6250d6",
+}
+
+#: What an adsorbate with no entry above gets.
+DEFAULT_COLOUR: str = ADSORBATE_COLOURS["H2"]
+
+#: The framework is context, so muted ink and thin.
+FRAMEWORK_COLOUR: str = "#898781"
+
+#: Longest distance drawn as a bond, in Å. Graphitic C-C is 1.42 and
+#: this workspace's relaxers accept up to 1.80, so 1.9 draws every real
+#: bond and no second neighbour -- the nearest of those is 2.46.
+BOND_CUTOFF: float = 1.9
+
+
+def framework_bonds(atoms: Atoms, cutoff: float = BOND_CUTOFF) -> np.ndarray:
+    """Bond segments to draw, as ``(n, 2, 3)``, none crossing the cell.
+
+    A bond whose partner lies in the next image is drawn as **two
+    stubs**, one leaving each side, rather than as a single straight
+    line between the two stored positions -- which would slice a
+    cell-length line through the picture. This is the fact that bit the
+    structure builders in this workspace again and again: a periodic
+    bond list names the pair and not the image, so anything that draws
+    one has to take the minimum image itself.
+
+    Dropping boundary bonds instead, which is what the quick viewer in
+    :mod:`carbonforge.viz` does, leaves every tube in a bundle looking
+    cut off at its ends. The stubs say "this continues", which is true.
+    """
+    from scipy.spatial import cKDTree
+
+    edges = np.diag(np.asarray(atoms.cell, dtype=float))
+    if len(atoms) < 2 or not np.all(edges > 0):
+        return np.empty((0, 2, 3))
+    positions = np.asarray(atoms.get_positions(), dtype=float) % edges
+    tree = cKDTree(positions, boxsize=edges)
+    pairs = tree.query_pairs(cutoff, output_type="ndarray")
+    if not len(pairs):
+        return np.empty((0, 2, 3))
+
+    first = positions[pairs[:, 0]]
+    second = positions[pairs[:, 1]]
+    delta = second - first
+    delta -= edges * np.round(delta / edges)
+    crossing = np.any(np.abs(second - first - delta) > 1e-9, axis=1)
+
+    segments = [np.stack([first, first + delta], axis=1)]
+    if crossing.any():
+        segments.append(np.stack([second[crossing],
+                                  second[crossing] - delta[crossing]],
+                                 axis=1))
+    return np.concatenate(segments, axis=0)
+
+
 #: Projections, as (azimuth, elevation) in degrees for
 #: ``Axes3D.view_init``. Named after the **axis looked down**, not after
 #: what that axis means: "the tube axis" is a fact about the builder and
@@ -121,16 +193,19 @@ def write_snapshot(
 
 
 def plot_snapshot(
-    framework: Atoms, positions: np.ndarray, view: str = "esquina",
+    framework: Atoms, positions: np.ndarray, view: str = "todas",
     figsize: tuple[float, float] = (5.0, 5.0),
+    species: str = "H2", colour: str | None = None,
+    bonds: bool = True, bond_cutoff: float = BOND_CUTOFF,
 ):
-    """Draw one configuration: framework as a mesh, molecules as spheres.
+    """Draw one configuration: the framework bonded, the adsorbate on top.
 
-    The framework is drawn small and pale and the adsorbate large and
-    saturated, which is the opposite of how a structure viewer weights
-    them by default and is what makes the picture legible: the question
-    the figure answers is *where the hydrogen went*, and a 2600-molecule
-    cloud inside 8704 carbons is invisible if both are drawn alike.
+    The framework is drawn as a thin bonded mesh in muted ink and the
+    adsorbate as large saturated spheres. That is the opposite of how a
+    structure viewer weights them by default, and it is what makes the
+    picture legible: the question the figure answers is *where the
+    adsorbate went*, and a 2600-molecule cloud inside 8704 carbons is
+    invisible if both are drawn alike.
 
     Parameters
     ----------
@@ -144,12 +219,23 @@ def plot_snapshot(
         tubes run along y.
     figsize
         Of a single panel; the three-view figure is three times wide.
+    species
+        What the adsorbate is called. Picks the colour from
+        :data:`ADSORBATE_COLOURS` and names it on the figure.
+    colour
+        Overrides that. Any matplotlib colour.
+    bonds
+        Draw the framework's bonds. Off gives the bare point cloud,
+        which is faster on a very large cell and much harder to read.
+    bond_cutoff
+        Longest distance drawn as a bond, in Å.
 
     Returns
     -------
     matplotlib.figure.Figure
     """
     import matplotlib.pyplot as plt
+    from mpl_toolkits.mplot3d.art3d import Line3DCollection
 
     sites = np.asarray(positions, dtype=float).reshape(-1, 3)
     wanted = list(AXIS_VIEWS) if view == "todas" else [view]
@@ -158,24 +244,34 @@ def plot_snapshot(
             raise ValueError(
                 f"unknown view {name!r}; this module offers "
                 f"{', '.join(VIEWS)} or 'todas'.")
+    paint = colour or ADSORBATE_COLOURS.get(species, DEFAULT_COLOUR)
+    segments = framework_bonds(framework, bond_cutoff) if bonds else None
 
     width = figsize[0] * len(wanted)
     figure = plt.figure(figsize=(width, figsize[1]), facecolor="#fcfcfb")
     # mplot3d reserves a wide margin for axes nobody is drawing here,
     # which left the structure occupying about a third of each panel.
-    figure.subplots_adjust(left=0.0, right=1.0, bottom=0.0, top=0.94,
+    figure.subplots_adjust(left=0.0, right=1.0, bottom=0.0, top=0.90,
                            wspace=0.0)
     carbon = framework.get_positions()
     for index, name in enumerate(wanted):
         axis = figure.add_subplot(1, len(wanted), index + 1,
                                   projection="3d")
         axis.set_facecolor("#fcfcfb")
-        axis.scatter(carbon[:, 0], carbon[:, 1], carbon[:, 2],
-                     s=3, c="#898781", alpha=0.35, linewidths=0,
-                     depthshade=False)
+        if segments is not None and len(segments):
+            # One collection rather than a call per bond: for the
+            # thirteen thousand of a validation bundle that is the
+            # difference between a redraw and a coffee.
+            axis.add_collection3d(Line3DCollection(
+                segments, colors=FRAMEWORK_COLOUR, linewidths=0.5,
+                alpha=0.55))
+        else:
+            axis.scatter(carbon[:, 0], carbon[:, 1], carbon[:, 2],
+                         s=3, c=FRAMEWORK_COLOUR, alpha=0.35,
+                         linewidths=0, depthshade=False)
         if len(sites):
             axis.scatter(sites[:, 0], sites[:, 1], sites[:, 2],
-                         s=26, c="#2a78d6", alpha=0.9, linewidths=0,
+                         s=26, c=paint, alpha=0.9, linewidths=0,
                          depthshade=True)
         azimuth, elevation = VIEWS[name]
         axis.view_init(elev=elevation, azim=azimuth)
@@ -191,4 +287,16 @@ def plot_snapshot(
             setter(centre - span, centre + span)
         axis.set_title(f"por {name}" if name in AXIS_VIEWS else name,
                        fontsize=9, color="#52514e", pad=-4)
+
+    # The label is not decoration: the adsorbate colour sits under 3:1
+    # against the page, and a visible label naming what it is is the
+    # relief that makes that legible rather than merely pretty.
+    figure.text(0.5, 0.975,
+                f"{len(sites)} moléculas de {species} sobre "
+                f"{len(framework)} átomos de armazón",
+                ha="center", va="top", fontsize=9, color="#52514e")
+    figure.text(0.5, 0.012,
+                f"cada punto {'rosa' if paint == DEFAULT_COLOUR else 'de color'}"
+                f" es UNA MOLÉCULA, no un átomo",
+                ha="center", va="bottom", fontsize=7.5, color="#898781")
     return figure
