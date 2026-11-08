@@ -16,10 +16,17 @@ XRD = {
 RAMAN = {
     "model": "Renishaw inVia confocal",
     "objective": "50x LWD",          # MEDIR: leer grabado del objetivo
-    "working_distance": 8.0,         # MEDIR: WD del objetivo de larga distancia
-    "objective_tip_diameter": 25.0,  # MEDIR: diámetro de la punta del objetivo
+    "working_distance": 8.0,         # MEDIR: WD en aire (grabado)
+    "numerical_aperture": 0.5,       # MEDIR: NA (grabado)
+    # El objetivo se modela como cara frontal + nariz cónica + barril.
+    "objective_tip_diameter": 12.0,  # MEDIR: Ø de la CARA FRONTAL (no del barril)
+    "objective_nose_angle_deg": 35.0,  # MEDIR: semiángulo de la nariz, desde el eje
+    "objective_barrel_d": 25.0,      # MEDIR: Ø del barril
     "clearance_margin": 1.0,
+    "optical_margin": 0.2,           # holgura radial alrededor del cono de luz
     "window_t": 0.5,                 # espesor de ventana (cuarzo / zafiro)
+    "n_window": 1.46,                # cuarzo (zafiro 1.77): el menor es el caso conservador
+    "n_electrolyte": 1.33,
 }
 
 # --- Electrodos -------------------------------------------------------------
@@ -34,12 +41,15 @@ ELECTRODES = {
 WE_FLAT = {
     "sample_w": 15.0,        # lado del sustrato cuadrado
     "sample_t": 1.0,         # espesor del sustrato
-    "exposed_d": 6.0,        # diámetro expuesto = ID del O-ring de cara
+    "exposed_d": 9.5,        # diámetro expuesto = ID del O-ring sobre la muestra.
+                             # ≥ 9.5 para que la nariz de lid_raman deje pasar NA 0.5
+                             # con pared de 2 mm (ver checks/walls.py: lid_checks)
 }
 
 # --- Celda ------------------------------------------------------------------
 CELL = {
-    "thin_gap_raman": 0.3,   # capa de electrolito entre WE y ventana (Raman)
+    "thin_gap_raman": 0.3,   # capa de electrolito entre WE y ventana (Raman), nominal
+    "gap_range_raman": (0.1, 0.5),  # alcanzable con lainas bajo la tapa
     "thin_gap_xrd": 0.05,    # capa durante medición XRD
     "reservoir_depth": 8.0,  # profundidad del reservorio lateral (RE/CE)
     "luggin_to_we": 2.0,     # distancia punta Luggin – borde del área expuesta
@@ -63,7 +73,7 @@ CELL = {
     # insertos térmicos M3 en la cara superior del anillo, para las tapas
     "insert_d": 4.0,         # MEDIR: Ø de agujero que pide el inserto
     "insert_depth": 5.0,
-    "lid_insert_xy": 15.0,   # insertos en (±xy, ±xy)
+    "lid_insert_xy": 16.0,   # insertos en (±xy, ±xy)
 }
 
 BASE_FLAT = {
@@ -78,7 +88,26 @@ BASE_FLAT = {
 CHAMBER_RING = {
     "h": 13.0,               # altura (de z = 0 a z = h)
     "floor_lip": 2.0,        # material sobre el escalón del O-ring (rigidez del piso)
-    "well_d": 28.0,          # pozo/reservorio: ≥ punta del objetivo + 2·margen
+    "well_d": 30.0,          # pozo/reservorio: aloja el émbolo de lid_raman con holgura
+}
+
+LID_RAMAN = {
+    # Tapa de una pieza: placa sobre el anillo + émbolo cónico hueco + nariz con
+    # ventana pegada al ras. La placa apoya sobre lainas (arandelas DIN 988 3×6
+    # en los 4 tornillos): gap = thin_gap_raman + (laina − shim_nominal).
+    "plate_t": 5.0,
+    "shim_nominal": 0.2,     # lainas con las que gap = thin_gap_raman
+    "nose_clearance": 0.25,  # holgura radial nariz–agujero del piso
+    "shoulder_clearance": 0.5,  # hombro de la nariz sobre el piso, a gap nominal
+    "well_clearance": 0.5,   # holgura radial mínima émbolo–pozo
+    "window_d": 6.0,         # MEDIR: ventana Ø6 × window_t, pegada al ras
+    "window_recess_wall_min": 0.5,
+    "window_land_min": 0.5,  # apoyo de la ventana fuera de la apertura
+    "gland_width_factor": 1.7,  # ranura más ancha: la profundidad se reduce por la laina
+    "oring_compression": (0.10, 0.40),  # rango aceptable en todo el recorrido de lainas
+    "gland_fill_max": 0.85,
+    "port_clearance": 1.0,   # émbolo ↔ bocas de los puertos del anillo
+    "bolt_engagement_min": 3.0,
 }
 
 # Puertos del anillo. face: cara por la que entra; offset: desplazamiento sobre la
@@ -86,7 +115,7 @@ CHAMBER_RING = {
 # imprimir); kind 'radial' = vástago con O-ring radial (RE).
 RING_PORTS = (
     {"name": "inlet", "face": "-x", "offset": 0.0, "z": 5.5, "kind": "fitting", "through_d": 2.0},
-    {"name": "outlet", "face": "+x", "offset": 0.0, "z": 8.0, "kind": "fitting", "through_d": 2.0},
+    {"name": "outlet", "face": "+x", "offset": 0.0, "z": 9.0, "kind": "fitting", "through_d": 2.0},
     {"name": "CE", "face": "+y", "offset": 0.0, "z": 6.0, "kind": "fitting",
      "through_d": ELECTRODES["CE_sleeve_d"]},
     {"name": "RE", "face": "-y", "offset": 0.0, "z": 7.0, "kind": "radial"},
@@ -97,10 +126,13 @@ ORING = {
     "face_cs": 1.5,          # MEDIR: sección del O-ring EPDM de cara
     "face_id": 10.0,         # MEDIR: diámetro interior del O-ring de cara
     # O-ring que sella sobre la muestra plana: su ID = WE_FLAT["exposed_d"]
-    "sample_cs": 1.5,        # MEDIR
+    "sample_cs": 1.0,        # MEDIR (9.5 × 1.0 EPDM: cabe en la muestra de 15 mm)
     # O-ring radial sobre el cuerpo de la RE
     "re_cs": 1.5,            # MEDIR
     "re_groove_from_face": 4.0,
+    # O-ring de cara de la tapa Raman (sella contra la cara superior del anillo)
+    "lid_id": 33.0,          # MEDIR
+    "lid_cs": 1.5,           # MEDIR
 }
 
 # --- Puertos ----------------------------------------------------------------

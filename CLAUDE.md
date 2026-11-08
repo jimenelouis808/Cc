@@ -62,6 +62,13 @@ Electrolitos objetivo: 0.5 M H2SO4 y 3 M KOH. EPD: etanol / IPA (y posiblemente 
 - Restricción: altura de todo lo que rodea la ventana < distancia de trabajo del objetivo (WD), con margen ≥1 mm.
 - La cara superior alrededor de la ventana debe dejar libre el diámetro de la punta del objetivo.
 - Ventanas delgadas (≤0.5 mm) para minimizar aberración esférica en confocal.
+- El objetivo se modela como cara frontal + nariz cónica + barril (no como cilindro de Ø barril).
+  Punta en `z_tip = WD + Σ tᵢ(1 − 1/nᵢ)` sobre el WE (ventana y electrolito alargan el foco).
+  Código en `modules/_optics.py`; checks en `checks/raman_clearance.py` y `checks/walls.py`.
+- Implementado (`modules/lid_raman.py`): tapa de una pieza (placa + émbolo hueco + nariz con
+  ventana pegada al ras). La placa apoya sobre lainas en los tornillos; el hueco cubre el objetivo
+  y el cono de luz en todo el rango `gap_range_raman`. `exposed_d` ≥ 9.5 para que la nariz tenga
+  pared de 2 mm alrededor del cono de NA 0.5.
 
 ### Módulo XRD (D8 Advance)
 - θ-θ: la muestra queda horizontal (el electrolito no se derrama).

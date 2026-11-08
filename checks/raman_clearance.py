@@ -1,8 +1,9 @@
-"""Holgura del objetivo Raman sobre el anillo (y, después, sobre cada tapa).
+"""Holgura óptica del Raman sobre el ensamble base + anillo + tapa.
 
-La punta del objetivo (cilindro de Ø objective_tip_diameter) queda a
-z_tip = gap + window_t + WD sobre el WE. Nada dentro de ese cilindro (más el
-margen radial) puede estar por encima de z_tip − margen.
+El objetivo se modela como cara frontal + nariz cónica + barril (params.RAMAN),
+con su punta en z_tip = WD + window_t·(1 − 1/n_w) + gap·(1 − 1/n_e). Ninguna pieza
+puede invadir su envolvente (más clearance_margin) ni el cono de luz de la NA
+(más optical_margin), en todo el rango de gap que permiten las lainas.
 """
 import os
 import sys
@@ -11,28 +12,37 @@ import cadquery as cq
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 import params as P  # noqa: E402
+from modules._optics import light_cone, objective_envelope, z_tip  # noqa: E402
+
+TOL = 1e-3  # mm³: residuo numérico de cortes coincidentes
 
 
-def z_tip(p=P) -> float:
-    r = p.RAMAN
-    return p.CELL["thin_gap_raman"] + r["window_t"] + r["working_distance"]
+def collision_volume(part: cq.Workplane, p=P, gap=None) -> float:
+    s = part.val()
+    return (s.intersect(objective_envelope(p, gap)).Volume()
+            + s.intersect(light_cone(p, gap, margin=0.0)).Volume())
 
 
-def objective_envelope(p=P, height: float = 100.0) -> cq.Solid:
-    r = p.RAMAN
-    rad = r["objective_tip_diameter"] / 2 + r["clearance_margin"]
-    z0 = z_tip(p) - r["clearance_margin"]
-    return cq.Solid.makeCylinder(rad, height, cq.Vector(0, 0, z0))
+def run(p=P) -> list[tuple[str, float]]:
+    from modules import lid_raman
+    from modules.base_flat import build as base
+    from modules.chamber_ring import build as ring
 
-
-def collision_volume(part: cq.Workplane, p=P) -> float:
-    return part.val().intersect(objective_envelope(p)).Volume()
+    out = []
+    for shim in lid_raman.shim_range(p):
+        g = lid_raman.gap_for_shim(p, shim)
+        # la envolvente se calcula para el gap real: la tapa sube o baja con la laina
+        for name, part in (("base", base(p)), ("anillo", ring(p)),
+                           ("tapa", lid_raman.build(p, shim=shim))):
+            out.append((f"gap {g:.2f}: {name}", collision_volume(part, p, g)))
+    return out
 
 
 if __name__ == "__main__":
-    from modules.chamber_ring import build
-
-    v = collision_volume(build())
-    print(f"punta del objetivo en z = {z_tip():.2f} mm; "
-          f"choque con el anillo: {v:.3f} mm³ {'OK' if v < 1e-6 else 'FALLA'}")
-    sys.exit(0 if v < 1e-6 else 1)
+    print(f"punta del objetivo a gap nominal: z = {z_tip(P):.3f} mm")
+    bad = 0
+    for name, v in run():
+        ok = v < TOL
+        bad += not ok
+        print(f"[{'OK ' if ok else 'FALLA'}] {name:20s} invasión {v:.4f} mm³")
+    sys.exit(1 if bad else 0)

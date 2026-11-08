@@ -12,7 +12,7 @@ import cadquery as cq
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 import params as P  # noqa: E402
-from modules._geom import body  # noqa: E402
+from modules._geom import body, compound, cyl  # noqa: E402
 
 
 @dataclass
@@ -133,8 +133,79 @@ def assembly_checks(p=P) -> list[Result]:
     return [Result("interferencia base/anillo (−volumen)", -v, -1e-6)]
 
 
+def lid_raman_checks(p=P) -> list[Result]:
+    from modules import lid_raman as L
+    from modules.chamber_ring import build as ring_build
+    from modules.chamber_ring import features as ring_features
+
+    c, lp = p.CELL, p.LID_RAMAN
+    dry, wet = c["min_wall_dry"], c["min_wall"]
+    f = L.features(p)
+    zp = L.z_plate(p)
+    g = c["thin_gap_raman"]
+    res = []
+
+    # pared del émbolo: hueco óptico ↔ electrolito (todo lo que rodea al émbolo bajo la placa)
+    blank = L.plunger_blank(p)
+    z_wt = g + p.RAMAN["window_t"]   # bajo z_wt está la ventana (rebaje: check aparte)
+    around = cyl(p.CHAMBER_RING["well_d"] + 10, z_wt, zp).cut(blank)
+    hollow = f["interior"].intersect(cyl(200, z_wt, zp))
+    res.append(Result("émbolo: pared hueco ↔ electrolito", dist(hollow, around), wet))
+    # rebaje de la ventana ↔ exterior de la nariz, y apoyo de la ventana
+    res.append(Result("rebaje de ventana ↔ exterior de la nariz",
+                      (L.nose_d(p) - p.hole(lp["window_d"])) / 2, lp["window_recess_wall_min"]))
+    from modules._optics import light_radius
+    aperture = light_radius(p, g + p.RAMAN["window_t"]) + p.RAMAN["optical_margin"]
+    res.append(Result("apoyo de la ventana fuera de la apertura",
+                      lp["window_d"] / 2 - aperture, lp["window_land_min"]))
+
+    # holguras contra el anillo en todo el recorrido de lainas
+    ring = ring_build(p).val()
+    rf = ring_features(p)
+    # bocas reales: la parte del sólido del puerto que cae dentro del pozo no existe
+    ports = compound(v for k, v in rf.items() if k.startswith("port_")).cut(rf["well"])
+    plate_cut = cq.Solid.makeBox(200, 200, 100, cq.Vector(-100, -100, zp - 0.05))
+    for s in L.shim_range(p) + (lp["shim_nominal"],):
+        lid = L.build(p, shim=s).val()
+        plunger = lid.cut(plate_cut.translate(cq.Vector(0, 0, s - lp["shim_nominal"])))
+        tag = f"laina {s:.2f} (gap {L.gap_for_shim(p, s):.2f})"
+        res.append(Result(f"{tag}: émbolo ↔ anillo",
+                          dist(plunger, ring), min(lp["nose_clearance"], lp["well_clearance"])))
+        res.append(Result(f"{tag}: émbolo ↔ bocas de puertos", dist(plunger, ports),
+                          lp["port_clearance"]))
+        res.append(Result(f"{tag}: gap", L.gap_for_shim(p, s), 0.05))
+        v = lid.intersect(ring).Volume()
+        res.append(Result(f"{tag}: interferencia tapa/anillo (−volumen)", -v, -1e-6))
+
+    # O-ring de la tapa: compresión en todo el recorrido y llenado de la ranura
+    gl = L.lid_gland(p)
+    lo, hi = lp["oring_compression"]
+    for s in L.shim_range(p):
+        comp = (gl["cs"] - gl["depth"] - s) / gl["cs"]
+        res.append(Result(f"O-ring tapa, laina {s:.2f}: compresión ≥ {lo:.0%}", comp, lo))
+        res.append(Result(f"O-ring tapa, laina {s:.2f}: compresión ≤ {hi:.0%} (−)", -comp, -hi))
+    import math
+    fill = math.pi * gl["cs"] ** 2 / 4 / (gl["width"] * gl["depth"])
+    res.append(Result("O-ring tapa: llenado de ranura (−)", -fill, -lp["gland_fill_max"]))
+    res.append(Result("O-ring tapa apoya sobre el anillo, fuera del pozo",
+                      (p.ORING["lid_id"] - p.CHAMBER_RING["well_d"]) / 2, dry))
+
+    # placa
+    out = lateral_outside(p, zp, zp + lp["plate_t"])
+    res += [
+        Result("placa: ranura ↔ tornillos", dist(f["gland"], f["bolts"]), dry),
+        Result("placa: ranura ↔ hueco óptico", dist(f["gland"], f["interior"]), dry),
+        Result("placa: tornillos ↔ hueco óptico", dist(f["bolts"], f["interior"]), dry),
+        Result("placa: tornillos ↔ exterior lateral", dist(f["bolts"], out), dry),
+        Result("tornillo de tapa: engrane mínimo en el inserto",
+               L.lid_bolt(p)["engagement_min"], lp["bolt_engagement_min"]),
+    ]
+    return res
+
+
 def run(p=P) -> list[Result]:
-    return ring_checks(p) + base_checks(p) + seal_checks(p) + assembly_checks(p)
+    return (ring_checks(p) + base_checks(p) + seal_checks(p) + assembly_checks(p)
+            + lid_raman_checks(p))
 
 
 if __name__ == "__main__":
