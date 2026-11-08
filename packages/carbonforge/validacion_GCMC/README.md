@@ -9,8 +9,10 @@ d = 6 Å, abiertos, 8704 carbonos en 175 900 Å³.
 Nada de esto está ajustado. La geometría del haz, el reservorio y
 el muestreo salen de parámetros publicados, y lo que se compara es
 la columna `rho_o`: cinco decimales y ninguna convención. La
-columna `wt%` del artículo **no** sirve de objetivo, porque está en
-base por carbono y no de masa total — ver `bundle.py`.
+columna `wt%` del artículo **no** sirve de objetivo, porque no
+concuerda con su propia `rho_o`: convertida en base de masa total, que
+es la definición que escribe Kowalczyk (su ec. 5) citando a Levesque,
+discrepa de la columna impresa un 3 % a 77 K — ver `bundle.py`.
 
 ## Resultado
 
