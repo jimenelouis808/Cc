@@ -647,9 +647,9 @@ def _vff_energy_gradient(
     repel_arr: np.ndarray,
     n_atoms: int,
     r0: float,
-    theta0: float,
+    theta0: float | np.ndarray,
     k_bond: float,
-    k_angle: float,
+    k_angle: float | np.ndarray,
     k_repel: float,
     repel_cutoff: float,
     anchors: np.ndarray | None,
@@ -703,7 +703,13 @@ def _vff_energy_gradient(
     theta = np.arccos(cos_t)
     sin_t = np.sqrt(1.0 - cos_t**2)
     dtheta = theta - theta0
-    energy += 0.5 * k_angle * float(np.sum(dtheta**2))
+    # The sum goes INSIDE, so that `theta0` and `k_angle` may be arrays
+    # with one entry per angle: a structure with both three- and
+    # four-coordinate centres has two ideal angles, and a centre with no
+    # usable target gets its own `k_angle` of zero rather than being
+    # pulled to an average no such centre has. With scalars this is the
+    # same number it always was.
+    energy += 0.5 * float(np.sum(k_angle * dtheta**2))
     pref = k_angle * dtheta / sin_t
     gu = -(pref / lu)[:, None] * (vh - cos_t[:, None] * uh)
     gv2 = -(pref / lv)[:, None] * (uh - cos_t[:, None] * vh)
@@ -776,9 +782,9 @@ def relax_shell(
     positions: np.ndarray,
     bonds: set[tuple[int, int]],
     equilibrium: float | Mapping[tuple[int, int], float] = 1.42,
-    angle_deg: float = 120.0,
+    angle_deg: float | np.ndarray = 120.0,
     k_bond: float = 40.0,
-    k_angle: float = 15.0,
+    k_angle: float | np.ndarray = 15.0,
     k_repel: float = 25.0,
     repel_cutoff: float = 2.2,
     repel_skin: float = 2.0,
@@ -837,6 +843,16 @@ def relax_shell(
         Force constants (arbitrary consistent units). ``k_angle`` must be
         a substantial fraction of ``k_bond``; too soft an angle term is
         what allows the fold-through failure described above.
+
+        ``angle_deg`` and ``k_angle`` also accept an **array with one
+        entry per angle triplet**, in the sorted order
+        :func:`_valence_terms` builds. That is what a structure with
+        more than one kind of centre needs: a graphitic wall welded to a
+        diamond-like node has 120° angles and 109.47° ones in the same
+        bond list, and a single target bends both toward something
+        neither is. A centre with no usable target at all takes
+        ``k_angle = 0`` on its angles and is held open by the non-bonded
+        repulsion instead.
     repel_cutoff
         Non-bonded pairs closer than this (Å) repel. Kept below the ideal
         1-3 distance (2.46 Å) so it never fights the angle term.

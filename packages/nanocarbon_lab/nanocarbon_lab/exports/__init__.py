@@ -2,6 +2,7 @@
 
 from .lammps import write_lammps
 from .qe import infer_qe_settings, write_qe_input
+from .relax_request import write_relaxation_request
 from .xyz import write_cif, write_render_bundle, write_xyz
 
 __all__ = [
@@ -9,6 +10,7 @@ __all__ = [
     "write_cif",
     "write_lammps",
     "write_qe_input",
+    "write_relaxation_request",
     "write_render_bundle",
     "write_xyz",
 ]
