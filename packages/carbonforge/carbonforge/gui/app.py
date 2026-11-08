@@ -23,6 +23,7 @@ from .params import ADVANCED_KEY, ParamSpec
 from .session import Session
 from ..jobs.queue import JobQueue
 from .tabs import (
+    AdsorptionTab,
     AnalysisTab,
     BuilderTab,
     EdlcTab,
@@ -50,7 +51,7 @@ Tkinter:
 
 
 class CarbonForgeApp(BuilderTab, PreviewPanel, ImportTab, PrepareTab, EdlcTab, JobsTab,
-                     AnalysisTab):
+                     AdsorptionTab, AnalysisTab):
     """Main application window: the notebook, and what its tabs share."""
 
     def __init__(self, root, vibspec_workdir: Optional[Path] = None) -> None:
@@ -102,7 +103,7 @@ class CarbonForgeApp(BuilderTab, PreviewPanel, ImportTab, PrepareTab, EdlcTab, J
     SECTIONS: dict[str, tuple[str, ...]] = {
         "Estructura": ("Construir", "Importar", "Modelo finito (IR)"),
         "Preparar": ("Cálculo (QE, SIESTA, LAMMPS)", "Celda EDLC (LAMMPS)"),
-        "Calcular": ("Trabajos", "IR y Raman (GPAW)"),
+        "Calcular": ("Trabajos", "Adsorción (H₂)", "IR y Raman (GPAW)"),
         "Resultados": ("Bandas y espectros", "Frente al experimento"),
     }
     #: vibspec's pages and where they live in the window.
@@ -157,6 +158,9 @@ class CarbonForgeApp(BuilderTab, PreviewPanel, ImportTab, PrepareTab, EdlcTab, J
         self._build_edlc_tab(self.pages["Celda EDLC (LAMMPS)"])
         self._build_analysis_tab(self.pages["Bandas y espectros"])
         self._build_jobs_tab(self.pages["Trabajos"])
+        # After the jobs page: the adsorption page queues isotherms through
+        # `submit_job`, and its own `_build` reaches for the queue.
+        self._build_adsorption_tab(self.pages["Adsorción (H₂)"])
         self.session.subscribe(self._on_session_change)
 
     def select_page(self, page: str) -> None:

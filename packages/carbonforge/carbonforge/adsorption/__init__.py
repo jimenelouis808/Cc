@@ -50,6 +50,8 @@ here are if anything slight over-estimates of a longer run's.
 """
 
 from .bulk import LEVESQUE_BULK, VirialGas, fit_virial
+from .campaign import (read_isotherm_request, read_results, run_isotherm,
+                       status, write_isotherm_request)
 from .bundle import (LEVESQUE_BUNDLE_ISOTHERMS, levesque_bundle,
                      zigzag_radius, zigzag_tube)
 from .gcmc import GCMCResult, run_gcmc
@@ -69,7 +71,12 @@ __all__ = [
     "fit_virial",
     "levesque_bundle",
     "quantum_fraction",
+    "read_isotherm_request",
+    "read_results",
     "run_gcmc",
+    "run_isotherm",
+    "status",
+    "write_isotherm_request",
     "zigzag_radius",
     "zigzag_tube",
 ]

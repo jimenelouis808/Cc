@@ -891,7 +891,198 @@ def build_parser() -> argparse.ArgumentParser:
     ps_.add_argument("folder")
     ps_.set_defaults(func=_cmd_dft_status)
 
+    ads = sub.add_parser(
+        "adsorcion",
+        help="Adsorción de H2: porosidad geométrica e isotermas GCMC.",
+        description="La porosidad corre aquí, en segundos. La isoterma no: "
+                    "un punto GCMC son 30-45 minutos en un haz de tamaño de "
+                    "validación, así que se escribe una carpeta y se corre "
+                    "aparte, reanudable.")
+    asub = ads.add_subparsers(dest="ads_command", required=True)
+
+    po = asub.add_parser(
+        "porosidad",
+        help="Mide la porosidad de una estructura: vacío geométrico y de "
+             "helio, área accesible, cavidad y canal mayores.",
+        description="Es el filtro que va ANTES de simular: un armazón cuyo "
+                    "canal mayor no admite la molécula no adsorbe nada, por "
+                    "grandes que sean sus cavidades, y decirlo cuesta "
+                    "segundos frente a las horas que tardaría el muestreo "
+                    "en estar de acuerdo.")
+    po.add_argument("path", help="Fichero de estructura que lea ASE.")
+    po.add_argument("--sonda", type=float, default=None, dest="probe",
+                    help="Radio de la sonda en Å (por omisión, medio "
+                         "diámetro cinético de H2, 1.45).")
+    po.add_argument("--radio-atomo", type=float, default=None,
+                    dest="atom_radius",
+                    help="Radio del átomo del armazón en Å. Por omisión "
+                         "medio σ de H2-C, así que «entra» significa lo "
+                         "mismo que para el GCMC; 1.70 es el de van der "
+                         "Waals del carbono, que usa parte de la "
+                         "literatura de Zeo++ y da un vacío menor.")
+    po.add_argument("--muestras", type=int, default=200_000, dest="samples",
+                    help="Puntos Monte Carlo (por omisión 200000). El error "
+                         "va como 1/sqrt(muestras).")
+    po.add_argument("--semilla", type=int, default=0, dest="seed")
+    po.set_defaults(func=_cmd_porosity)
+
+    iso = asub.add_parser(
+        "isoterma",
+        help="Escribe una carpeta de isoterma GCMC (carbonforge-isoterma/1) "
+             "y opcionalmente la corre.",
+        description="Con --correr la corre aquí mismo, en primer plano, lo "
+                    "que son horas. Sin él escribe la carpeta y la deja "
+                    "para la cola de la ventana o para "
+                    "`python -m carbonforge.adsorption.run`. En los dos "
+                    "casos reanuda: un punto que ya esté no se recalcula.")
+    iso.add_argument("path", help="Fichero de estructura que lea ASE.")
+    iso.add_argument("folder", help="Carpeta a crear y llenar.")
+    iso.add_argument("--temperatura", type=float, default=77.0,
+                     dest="temperature",
+                     help="En K. Sólo 77, 150 y 293: el reservorio es un "
+                          "virial ajustado a densidades publicadas.")
+    iso.add_argument("--presiones", default="0.1,0.5,1,3,5,10,15,20",
+                     dest="pressures",
+                     help="Separadas por comas, en MPa.")
+    iso.add_argument("--equilibrado", type=int, default=150_000,
+                     dest="equilibration")
+    iso.add_argument("--produccion", type=int, default=300_000,
+                     dest="production")
+    iso.add_argument("--semilla", type=int, default=0, dest="seed")
+    iso.add_argument("--sonda", type=float, default=None, dest="probe",
+                     help="Radio de la sonda para la porosidad, en Å.")
+    iso.add_argument("--motivo", default="", dest="reason",
+                     help="Texto libre: la carpeta sobrevive a la sesión.")
+    iso.add_argument("--correr", action="store_true", dest="run_now",
+                     help="Correrla aquí, en primer plano. Son horas.")
+    iso.set_defaults(func=_cmd_isotherm)
+
+    ae = asub.add_parser("estado",
+                         help="Avance y resultados de una carpeta de isoterma.")
+    ae.add_argument("folder")
+    ae.set_defaults(func=_cmd_isotherm_status)
+
     return parser
+
+
+def _cmd_porosity(args) -> int:
+    """Measure a structure's porosity and print it with its caveats."""
+    from ase.io import read
+
+    from ..adsorption import analyse_porosity
+
+    try:
+        atoms = read(args.path)
+    except Exception as exc:  # noqa: BLE001 - a bad path is a user error
+        print(f"No se pudo leer {args.path}: {exc}", file=sys.stderr)
+        return 1
+
+    kwargs = {"samples": args.samples, "seed": args.seed}
+    if args.probe is not None:
+        kwargs["probe_radius"] = args.probe
+    if args.atom_radius is not None:
+        kwargs["atom_radius"] = args.atom_radius
+    try:
+        report = analyse_porosity(atoms, **kwargs)
+    except ValueError as exc:
+        print(f"Rechazado: {exc}", file=sys.stderr)
+        return 1
+
+    print(f"{args.path}: {atoms.get_chemical_formula()}, {len(atoms)} átomos")
+    print(report.summary())
+    crosses = report.largest_free_sphere >= 2.0 * report.probe_radius
+    print()
+    if crosses:
+        print("La sonda cruza la celda: tiene sentido simular.")
+    else:
+        print("La sonda NO cruza la celda. Este armazón está cerrado a esta "
+              "molécula y adsorberá esencialmente nada, por grandes que sean "
+              "sus cavidades.")
+    print("El área es geométrica, no BET: BET es un modelo ajustado a una "
+          "isoterma de nitrógeno medida. Decenas por ciento de diferencia "
+          "entre las dos es normal.")
+    # The exit code is the verdict, so this is usable in a script that
+    # screens a directory of candidate frameworks.
+    return 0 if crosses else 2
+
+
+def _cmd_isotherm(args) -> int:
+    """Write an isotherm folder, and run it when asked."""
+    from ase.io import read
+
+    from ..adsorption import run_isotherm, write_isotherm_request
+    from ..adsorption.campaign import status
+
+    try:
+        atoms = read(args.path)
+    except Exception as exc:  # noqa: BLE001 - a bad path is a user error
+        print(f"No se pudo leer {args.path}: {exc}", file=sys.stderr)
+        return 1
+    try:
+        pressures = [float(p) for p in args.pressures.replace(",", " ").split()]
+    except ValueError:
+        print(f"--presiones no son números: {args.pressures!r}",
+              file=sys.stderr)
+        return 1
+
+    try:
+        folder = write_isotherm_request(
+            atoms, args.folder, temperature=args.temperature,
+            pressures=pressures, equilibration=args.equilibration,
+            production=args.production, seed=args.seed,
+            probe_radius=args.probe, reason=args.reason)
+    except ValueError as exc:
+        print(f"Rechazado: {exc}", file=sys.stderr)
+        return 1
+
+    info = status(folder)
+    print(f"{folder}: {len(atoms)} átomos, {args.temperature:g} K, "
+          f"{info['total']} presiones")
+    if not args.run_now:
+        print("Carpeta escrita. Córrela con:")
+        print(f"  python -m carbonforge.adsorption.run {folder}")
+        print("o encólala en la ventana, en Calcular → Adsorción (H2). "
+              "Reanuda en los dos casos.")
+        return 0
+
+    points = run_isotherm(folder)
+    print(f"\n{'P (MPa)':>8} {'rho_o':>10} {'exceso':>10} {'wt% tot':>8} "
+          f"{'wt% /C':>8} {'N':>10}")
+    for point in points:
+        print(f"{point['presion_mpa']:8.2f} "
+              f"{point['densidad_absoluta_g_cm3']:10.5f} "
+              f"{point['densidad_exceso_g_cm3']:+10.5f} "
+              f"{point['wt_pct_total']:8.2f} "
+              f"{point['wt_pct_por_carbono']:8.2f} "
+              f"{point['n_medio']:10.1f}")
+        for warning in point["avisos"]:
+            print(f"         aviso: {warning}")
+    return 0
+
+
+def _cmd_isotherm_status(args) -> int:
+    """Progress and results of an isotherm folder."""
+    from ..adsorption.campaign import read_results, status
+
+    info = status(args.folder)
+    print(f"{args.folder}: {info['line']} — {info['state']}")
+    if info["state"] == "sin salida":
+        return 1
+    points = read_results(args.folder)
+    if not points:
+        return 0
+    print(f"\n{'P (MPa)':>8} {'rho_o':>10} {'exceso':>10} {'wt% tot':>8} "
+          f"{'wt% /C':>8} {'N':>10}")
+    for point in points:
+        print(f"{point['presion_mpa']:8.2f} "
+              f"{point['densidad_absoluta_g_cm3']:10.5f} "
+              f"{point['densidad_exceso_g_cm3']:+10.5f} "
+              f"{point['wt_pct_total']:8.2f} "
+              f"{point['wt_pct_por_carbono']:8.2f} "
+              f"{point['n_medio']:10.1f}")
+        for warning in point["avisos"]:
+            print(f"         aviso: {warning}")
+    return 0
 
 
 def _cmd_dft_prepare(args) -> int:

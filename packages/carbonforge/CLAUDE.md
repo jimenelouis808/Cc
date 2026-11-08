@@ -193,6 +193,28 @@ published and all reproduced in `tests/test_adsorption.py`.
   hard spheres. Tens of per cent apart is normal and three figures of
   agreement would be suspicious. Say which is which wherever the
   number appears.
+- **The area's sphere quadrature is deterministic, and one shared
+  random draw is the bug it replaced.** The directions were sampled
+  once and reused for every atom, reasoning that one quadrature keeps
+  the atoms comparable — which it does, and which also makes every
+  atom's error *the same error*, so nothing averages out over the
+  structure however large it is. Measured on the validation bundle:
+  1903 m²/g at 200 points against 2547 at 500, and three seeds at 200
+  giving 2966, 2330 and 2693. `area_points` has to be a convergence
+  knob, not a dial. The golden-spiral lattice reads 2616/2581/2605 at
+  200/500/2000 and independent per-atom draws agree, so **≈2590 m²/g**
+  is the bundle's answer. Three tests pin it: stable in the point
+  count, independent of the seed, and unchanged by tiling the cell —
+  and note the tiling one **passed while the area was wrong**, to every
+  digit, which is what gave the bug away. Keep all three.
+- **A cell edge under twice the cutoff is refused.** The minimum image
+  is only the nearest image below L/2; above it, `_minimum_image`
+  returns one displacement per pair while the true sum has two images
+  of that neighbour inside the cutoff. So the energy is wrong on the
+  steep part of the wall where an insertion is decided, and the
+  isotherm comes back looking entirely reasonable — the same reason a
+  triclinic cell is refused. This caught a test in this repository
+  running a 20 Å cell at the default 12 Å cutoff.
 - **ħ²/k_B is 48.5089 amu Å² K**, and it is derived in the source
   rather than quoted, because the first version of it was wrong by a
   factor of three. A Feynman-Hibbs correction three times too small
@@ -230,6 +252,25 @@ published and all reproduced in `tests/test_adsorption.py`.
   printed to too few digits to settle it. So **validate against
   `rho_o`**, which has five decimals and no convention, and quote both
   weight percentages — `GCMCResult` returns both and names them.
+- **An isotherm is a FOLDER, not a function call.** One state point on
+  a validation-sized bundle runs 31 to 46 minutes, so eight of them is
+  most of a day. `adsorption/campaign.py` writes a
+  `carbonforge-isoterma/1` folder and `jobs.queue.GcmcAdapter` runs it
+  through the same queue as Quantum ESPRESSO, SIESTA and LAMMPS. Three
+  properties are the reason the format exists, and each only matters
+  when something goes wrong: every finished point is appended the
+  moment it lands and **a rerun skips it**, so a cancel costs the point
+  in flight and nothing before it; every refusal that can be made from
+  the request is made when the folder is **written**, not an hour later
+  inside a subprocess nobody is watching; and progress is readable from
+  the directory alone, because that is how the queue reports a job.
+  `GcmcAdapter` must stay **before** `StepsAdapter` in `ADAPTERS`,
+  which claims any folder holding a manifest.
+- **The isotherm's `nprocs` is ignored on purpose.** The sampling is
+  one Markov chain, so there is nothing to split across ranks; running
+  it on four processes would compute one answer four times. Several
+  *pressures* are independent, and the queue's own parallelism is
+  where that belongs.
 - **A triclinic cell is refused**, in the porosity and in the GCMC
   both. Every neighbour search here is a `cKDTree` with `boxsize`,
   which is orthorhombic-only; a triclinic cell would be sampled

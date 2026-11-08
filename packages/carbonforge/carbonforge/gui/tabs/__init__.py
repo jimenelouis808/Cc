@@ -8,6 +8,7 @@ Keeping them apart is the first step towards one window for carbonforge and
 vibspec (docs/PLAN_SUITE.md, phase B).
 """
 
+from .adsorption import AdsorptionTab
 from .analysis import AnalysisTab
 from .builder import BuilderTab
 from .edlc import EdlcTab
@@ -16,4 +17,4 @@ from .jobs import JobsTab
 from .prepare import PrepareTab
 from .preview import PreviewPanel
 
-__all__ = ["AnalysisTab", "BuilderTab", "EdlcTab", "ImportTab", "JobsTab", "PrepareTab", "PreviewPanel"]
+__all__ = ["AdsorptionTab", "AnalysisTab", "BuilderTab", "EdlcTab", "ImportTab", "JobsTab", "PrepareTab", "PreviewPanel"]

@@ -274,6 +274,72 @@ class TestPorosity:
             samples=8000, area_points=60, seed=1)
         assert 500.0 < report.accessible_area_m2_g < 4000.0
 
+    def test_the_area_does_not_move_with_the_point_count(self):
+        """``area_points`` has to be a convergence knob, not a dial.
+
+        It was not. The directions were one random draw reused for every
+        atom, so every atom carried the SAME error and nothing averaged
+        out over the structure: the bundle read 1903 m2/g at 200 points
+        and 2547 at 500, and three seeds at 200 gave 2966, 2330 and
+        2693. A deterministic golden-spiral quadrature converges
+        instead. 6 % is loose enough for the real 1/n convergence and
+        far tighter than the 34 % the bug produced.
+        """
+        atoms = levesque_bundle(gap=6.0, diameter=REFERENCE_DIAMETER,
+                                repeats=2, periods=3)
+        coarse = analyse_porosity(atoms, samples=4000, area_points=200,
+                                  seed=0).accessible_area_m2_g
+        fine = analyse_porosity(atoms, samples=4000, area_points=2000,
+                                seed=0).accessible_area_m2_g
+        assert abs(fine - coarse) < 0.06 * fine
+
+    def test_the_area_does_not_depend_on_the_seed(self):
+        """The quadrature is deterministic; only the void fraction is
+        sampled. A seed-dependent area was the symptom that the error
+        was systematic rather than random."""
+        atoms = levesque_bundle(gap=6.0, diameter=REFERENCE_DIAMETER,
+                                repeats=2, periods=3)
+        first = analyse_porosity(atoms, samples=4000, area_points=200,
+                                 seed=0)
+        again = analyse_porosity(atoms, samples=4000, area_points=200,
+                                 seed=11)
+        assert first.accessible_area_m2_g == again.accessible_area_m2_g
+
+    def test_tiling_the_cell_does_not_change_the_area_per_gram(self):
+        """A quarter cell and the full cell are the same material.
+
+        This one PASSED while the area was wrong -- exactly, to every
+        digit -- which is what gave the bug away: errors that identical
+        across cell sizes are one shared error, not sampling noise. It
+        is kept as the necessary condition it is, beside the two above
+        that are the sufficient ones.
+        """
+        quarter = analyse_porosity(
+            levesque_bundle(gap=6.0, diameter=REFERENCE_DIAMETER,
+                            repeats=2, periods=3),
+            samples=4000, area_points=500, seed=0)
+        full = analyse_porosity(
+            levesque_bundle(gap=6.0, diameter=REFERENCE_DIAMETER,
+                            repeats=4, periods=8),
+            samples=4000, area_points=500, seed=0)
+        assert full.accessible_area_m2_g == pytest.approx(
+            quarter.accessible_area_m2_g, rel=0.01)
+
+    def test_the_quadrature_covers_the_sphere_evenly(self):
+        """The directions themselves, checked without a structure.
+
+        Unit length, a centroid at the origin (a lattice biased toward a
+        pole would inflate or deflate every atom's accessible fraction
+        in the same direction), and an inertia tensor near isotropic.
+        """
+        from carbonforge.adsorption.porosity import _sphere_directions
+
+        directions = _sphere_directions(1000)
+        assert np.allclose(np.linalg.norm(directions, axis=1), 1.0)
+        assert np.linalg.norm(directions.mean(axis=0)) < 0.01
+        # Each axis carries a third of the total spread on a sphere.
+        assert np.allclose((directions**2).mean(axis=0), 1 / 3, atol=0.02)
+
     def test_the_largest_cavity_is_the_tube_interior(self):
         """13.3 Å of tube minus a carbon radius each side."""
         report = analyse_porosity(
@@ -361,10 +427,39 @@ class TestGCMC:
                      equilibration=10, production=10, seed=0, blocks=2)
 
     def test_the_same_seed_gives_the_same_answer(self):
+        # 25 Å, not the 20 this once used: the default cutoff is 12, and
+        # an edge under 24 makes the minimum image not the nearest one.
+        # The refusal below caught this test computing a wrong energy.
         atoms = Atoms("C", positions=[(0.0, 0.0, 0.0)],
-                      cell=[20.0] * 3, pbc=True)
+                      cell=[25.0] * 3, pbc=True)
         shared = dict(temperature=293.0, pressure_mpa=5.0,
                       equilibration=500, production=500, blocks=4)
         first = run_gcmc(atoms, seed=7, **shared)
         again = run_gcmc(atoms, seed=7, **shared)
         assert first.mean_count == again.mean_count
+
+    def test_a_cell_shorter_than_twice_the_cutoff_is_refused(self):
+        """The minimum image is only the nearest image below L/2.
+
+        Above it, `_minimum_image` still returns one displacement per
+        pair while the real sum has two images of that neighbour inside
+        the cutoff — so the energy is wrong on the steep part of the wall
+        where an insertion is decided, and the isotherm comes back
+        looking entirely reasonable. Refused for the same reason the
+        triclinic cell is. This caught a test in this very file.
+        """
+        atoms = Atoms("C", positions=[(0.0, 0.0, 0.0)],
+                      cell=[20.0] * 3, pbc=True)
+        with pytest.raises(ValueError, match="shortest cell edge"):
+            run_gcmc(atoms, temperature=293.0, pressure_mpa=1.0,
+                     equilibration=10, production=10, seed=0, blocks=2)
+
+    def test_a_smaller_cutoff_makes_the_same_cell_legal(self):
+        """It is the ratio that is refused, not the cell. A tight cell
+        with a cutoff that fits inside half of it is sound."""
+        atoms = Atoms("C", positions=[(0.0, 0.0, 0.0)],
+                      cell=[20.0] * 3, pbc=True)
+        result = run_gcmc(atoms, temperature=293.0, pressure_mpa=1.0,
+                          equilibration=200, production=200, seed=0,
+                          blocks=4, cutoff=9.0, void_fraction=1.0)
+        assert result.mean_count >= 0.0

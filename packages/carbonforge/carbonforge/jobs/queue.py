@@ -239,7 +239,60 @@ class ExchangeAdapter(Adapter):
         return True, ""
 
 
-ADAPTERS: tuple[Adapter, ...] = (VibspecAdapter(), StepsAdapter(), ExchangeAdapter())
+class GcmcAdapter(Adapter):
+    """A ``carbonforge-isoterma/1`` folder (:mod:`carbonforge.adsorption.campaign`):
+    ``isoterma.json`` plus the structure. Finished when every pressure it names is
+    in ``resultados.json``; progress is how many are.
+
+    It is in this queue for the reason the queue exists. One GCMC state point on
+    a validation-sized bundle runs 31 to 46 minutes, so an eight-point isotherm
+    is most of a day — far past what a window can wait for, and far past what
+    anyone wants to lose to a cancel. The runner appends each point as it lands
+    and skips what is already there, so cancelling costs the point in flight and
+    nothing before it.
+    """
+
+    engine = "gcmc"
+
+    def matches(self, directory: Path) -> bool:
+        from ..adsorption.campaign import REQUEST
+
+        return (directory / REQUEST).exists()
+
+    def check(self, directory: Path) -> None:
+        from ..adsorption.campaign import read_isotherm_request
+
+        read_isotherm_request(directory)
+
+    def command(self, directory: Path, nprocs: int) -> list[str]:
+        # nprocs is ignored on purpose: the sampling is a single Markov
+        # chain, so there is nothing to split across ranks. Running the
+        # same chain on four processes would compute one answer four
+        # times. Several PRESSURES are independent and the queue's own
+        # parallelism is where that belongs.
+        del nprocs
+        return [sys.executable, "-m", "carbonforge.adsorption.run", str(directory)]
+
+    def succeeded(self, directory: Path) -> bool:
+        from ..adsorption.campaign import status
+
+        return status(directory)["state"] == "terminado"
+
+    def progress(self, directory: Path) -> str:
+        from ..adsorption.campaign import status
+
+        info = status(directory)
+        return info["line"] or info["state"]
+
+    def available(self, directory: Path) -> tuple[bool, str]:
+        del directory
+        return True, ""
+
+
+# Order matters: GcmcAdapter must come before StepsAdapter, which claims any
+# folder holding a manifest, and an isotherm folder could grow one.
+ADAPTERS: tuple[Adapter, ...] = (VibspecAdapter(), GcmcAdapter(), StepsAdapter(),
+                                 ExchangeAdapter())
 
 
 def adapter_for(directory: Path) -> Adapter:

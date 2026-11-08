@@ -177,6 +177,23 @@ class _Framework:
                 "neighbour search (cKDTree with boxsize) cannot do a "
                 "triclinic one, and the minimum image would be wrong."
             )
+        # The minimum image is only the nearest image when the cutoff
+        # reaches less than half the cell. Past that, `_minimum_image`
+        # still returns one displacement per pair while the true sum has
+        # two or more images of that neighbour inside the cutoff, so the
+        # energy is wrong by whatever those contribute -- silently, and
+        # on the steep part of the wall where an insertion is decided.
+        # Refused rather than warned for the same reason the triclinic
+        # cell is: the result would look entirely plausible.
+        if edges.min() < 2.0 * cutoff:
+            raise ValueError(
+                f"the shortest cell edge is {edges.min():.2f} Å and the pair "
+                f"cutoff is {cutoff:.2f} Å. The minimum image needs an edge "
+                f"of at least twice the cutoff ({2 * cutoff:.2f} Å), or a "
+                "molecule interacts with two images of the same neighbour "
+                "and the energy is wrong without looking it. Build a larger "
+                "supercell, or pass a smaller `cutoff`."
+            )
         positions = np.asarray(atoms.get_positions(), dtype=float) % edges
         self.edges = edges
         self.volume = float(np.prod(edges))
