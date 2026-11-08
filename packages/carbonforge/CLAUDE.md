@@ -160,6 +160,81 @@ carbonforge/
 - Result parsers are validated against synthetic fixtures only; say so in
   user-facing docs rather than implying they are battle-tested.
 
+## Adsorption: porosity first, then the reservoir, then the sampling
+
+`adsorption/` computes hydrogen uptake in a rigid framework by grand
+canonical Monte Carlo. It is pointed at a closed case before anything
+else: `bundle.levesque_bundle` rebuilds the adsorbent of Levesque et
+al., *J. Phys.: Condens. Matter* **14** (2002) 9285, whose cell edges,
+carbon count, adsorbent density, bulk densities and isotherms are all
+published and all reproduced in `tests/test_adsorption.py`.
+
+- **Porosity runs BEFORE the simulation, not after.** A framework with
+  no channel wider than the molecule adsorbs nothing, and
+  `analyse_porosity` says so in seconds against hours of Monte Carlo.
+  Its `largest_free_sphere` is the number that decides it, and it is
+  **not** `largest_included_sphere`: a cavity big enough to hold the
+  probe is not a path for it to arrive by. A sealed cage has a large
+  one and a zero other, and there is a test for exactly that.
+- **Absolute is not excess, and the difference is not small.** A
+  simulation counts every molecule in the cell; an experiment measures
+  what is there beyond what the same volume would hold as bulk gas. At
+  77 K and 20 MPa the bulk alone is 0.059 g/cm³. `GCMCResult` carries
+  both and records which void fraction the excess used; called without
+  one it uses the whole cell, **overstates** the correction, and says
+  so in its warnings.
+- **The void fraction that converts the two is the HELIUM one**, the
+  Widom average `<exp(-βU)>`, not the hard-sphere geometric one. It is
+  larger, because helium is attracted as well as excluded, and it is
+  what the experimental literature means. Both are reported and they
+  are not interchangeable.
+- **A geometric surface area is not a BET area.** BET is a model
+  fitted to a measured nitrogen isotherm; this is a probe rolled over
+  hard spheres. Tens of per cent apart is normal and three figures of
+  agreement would be suspicious. Say which is which wherever the
+  number appears.
+- **ħ²/k_B is 48.5089 amu Å² K**, and it is derived in the source
+  rather than quoted, because the first version of it was wrong by a
+  factor of three. A Feynman-Hibbs correction three times too small
+  changes no output's shape and every output's value; what caught it
+  was `quantum_fraction` against the 0.07 at 70 K that Levesque
+  prints. Keep that check as a test.
+- **The Feynman-Hibbs term is repulsive at short range and slightly
+  attractive beyond the inflection point.** That is the physics of
+  smearing a potential, not a bug, and a test that asserts repulsion
+  everywhere is wrong — one did.
+- **The quantum correction is not optional below room temperature.**
+  Levesque measures what it buys: about 4 % at 293 K and **20 % at
+  77 K**. A classical 77 K isotherm is a fifth too high, and an energy
+  grid cached at one temperature is wrong at another because the
+  potential itself depends on T.
+- **Equilibration is separated from production**, as everywhere else
+  in this repository. Starting from an empty cell, the first thousands
+  of moves are the cell filling, and averaging over them drags every
+  number toward zero. `run_gcmc` reports both counts, splits
+  production into blocks for a standard error, and warns when the
+  loading is still drifting between the first block and the last.
+- **The reservoir enters only as `βf`.** A virial fitted to measured
+  bulk densities gives the fugacity, and the fit is **weighted by the
+  published table's own rounding**: its lowest-pressure entries have
+  one significant figure, and unweighted they dominate the fit and
+  return a negative third virial coefficient hydrogen does not have.
+- **`wt%` has two definitions and the papers do not say which.**
+  `100 m(H2)/(m(H2)+m(C))` is the storage-target convention;
+  `100 m(H2)/m(C)` is hydrogen per adsorbent. They differ by
+  `1 + m(H2)/m(C)`: 0.3 % at 1 wt%, **5 % at 5 wt%** — the size of the
+  quantum correction at 77 K, so the wrong one hides a real error.
+  Levesque's column matches his own `rho_o` on the per-carbon basis
+  (1.3 % over the 77 K isotherm against 3.2 %, and it lands on his
+  printed 3.2 and 5.2 at the two ends); his 293 and 150 K columns are
+  printed to too few digits to settle it. So **validate against
+  `rho_o`**, which has five decimals and no convention, and quote both
+  weight percentages — `GCMCResult` returns both and names them.
+- **A triclinic cell is refused**, in the porosity and in the GCMC
+  both. Every neighbour search here is a `cKDTree` with `boxsize`,
+  which is orthorhombic-only; a triclinic cell would be sampled
+  against the wrong minimum images and come back plausible.
+
 ## Scientific guardrails
 - Carbon bond length: default 1.42 Å (sp2). Accept anything in `[1.20, 1.80]` Å as bonded; anything in `(0, 0.9]` Å is a hard error.
 - Expected C coordination: **2 (edge)**, **3 (sp2 bulk)**. Coordination >= 5 or == 1 in the bulk is rejected by validation.
