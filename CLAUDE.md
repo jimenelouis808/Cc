@@ -116,6 +116,10 @@ Electrolitos objetivo: 0.5 M H2SO4 y 3 M KOH. EPD: etanol / IPA (y posiblemente 
   modo objetivo, altura de electrolito (carga de masa: baja las frecuencias respecto a placa seca).
 - Modo fijo → depósito patronado. Barrido de frecuencia (chirp) → homogeneización.
 - Calibrar modos primero en seco (arena/sal) y luego en líquido con trazadores.
+- Implementado (`modules/chladni.py`, `sim/chladni_estimate.py`). El WE se contacta por una
+  lengüeta de la placa que sale de los marcos; la pinza de Pt la toma en seco.
+- Acoplamiento del piezo = ∫∇²w sobre su disco (modos de Warburton). En L/4 de cada borde el
+  fundamental casi no se excita (−0.04); revisar `mode_table()` antes de mover el piezo.
 
 ### Requisitos para depósitos homogéneos y reproducibles (todos los módulos de deposición)
 - Distribución primaria uniforme: WE y CE paralelos en un canal cuyas paredes aislantes coinciden

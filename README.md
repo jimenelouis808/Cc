@@ -14,7 +14,9 @@ python modules/lid_raman.py                # → out/lid_raman.step / .stl + res
 python modules/chamber_clamp.py            # → out/chamber_clamp.step / .stl (WE en pinza de Pt)
 python modules/chamber_xrd.py              # → out/chamber_xrd.step / .stl (celda XRD)
 python modules/lid_xrd.py                  # → out/lid_xrd + out/xrd_pocket_cover
-python checks/walls.py                     # paredes, holguras, sellos e interferencias (200 checks)
+python modules/chladni.py                  # → out/chladni_{wall,bottom,lid,plate,ce}
+python sim/chladni_estimate.py             # modos de la placa y acoplamiento del piezo
+python checks/walls.py                     # paredes, holguras, sellos e interferencias (231 checks)
 python checks/raman_clearance.py           # objetivo y cono de luz vs cada pieza, gap 0.1–0.5
 python checks/xrd_clearance.py             # huella y altura máxima permitida
 python sim/chladni_estimate.py             # modos de la placa-WE
@@ -29,7 +31,8 @@ python -m pytest -q
 | 3 | `modules/lid_raman.py` | listo; falta probar con agua (y medir el objetivo) |
 | 3b | `modules/chamber_clamp.py` (WE en pinza de Pt) | listo; falta medir el portaelectrodo |
 | 4 | `modules/chamber_xrd.py` + `modules/lid_xrd.py` + `checks/xrd_clearance.py` | listos; falta medir el haz y la platina |
-| 5 | Chladni, EPD/DEP, decoración | estimación de modos lista |
+| 5a | `modules/chladni.py` (electrodeposición acústica) | lista; falta medir piezo y placa |
+| 5b | EPD/DEP, decoración | pendiente |
 | 6 | Simulación (gmsh → FEniCSx / Elmer) | pendiente |
 
 ## Dos formas de montar el WE para Raman
@@ -119,3 +122,35 @@ intersecta con él el cuerpo, el marco, la tapa del bolsillo, la pinza y la mues
 
 **Medir:** `XRD["beam_length_y"]` (largo de la línea sobre la muestra, depende de la rendija),
 radio del goniómetro, divergencia, y la altura y huella libres de la platina.
+
+## Celda de electrodeposición acústica (Chladni): `chladni.py`
+| | |
+|---|---|
+| WE | placa Ti grado 2 de 47 × 47 × 0.3 mm, empotrada con 35 mm libres; lengüeta de 8 × 12 mm que sale por +x y que la pinza de Pt toma en seco |
+| Empotramiento | marco inferior (borde interior = línea de empotramiento) y pared superior; la cara del marco inferior queda 0.05 mm bajo la placa, así que los 12 tornillos M3×16 aprietan sólo la placa |
+| Sello | cordón EPDM cs 1.5 a 0.5 mm dentro del empotramiento; dentro de esa línea la pared no toca la placa (0.3 mm de alivio) |
+| Área expuesta | 29.5 × 29.5 mm (868 mm²); sólo la cara superior |
+| Piezo | Ø15 × 0.6 mm pegado bajo la placa en (−8.75, −8.75), con Kapton/epoxi entre ambos |
+| CE | malla de Pt o placa de grafito paralela, a 6 mm, sobre un escalón; el alambre sale por −x con conector y funda |
+| RE | vertical desde la tapa hasta 1.5 mm de la placa, en una esquina; el CE lleva ese recorte |
+| Tapa | llenado y venteo 1/4-28 |
+
+**Modos y acoplamiento del piezo** (`sim/chladni_estimate.py`, Ti 0.3 mm, L = 35 mm):
+
+| Modo | Seco | Con líquido (cota) | Acoplamiento |
+|---|---|---|---|
+| (1,1) | 2.1 kHz | ~0.65 kHz | −0.04 |
+| (2,1)+(1,2) | 4.2 kHz | ~1.3 kHz | −0.20 |
+| (2,2) | 6.3 kHz | ~2.0 kHz | −0.36 |
+| (3,1)+(1,3) | 7.6 kHz | ~2.4 kHz | −0.13 |
+
+El acoplamiento es ∫∇²w sobre el disco del piezo, normalizado. **En ≈ L/4 de cada borde el piezo
+casi no excita el fundamental**: la curvatura de (1,1) cambia de signo cerca de 0.22·L y el disco
+la promedia a casi cero. Para el fundamental, piezo al centro (que a su vez no excita (2,1): tiene
+línea nodal ahí). Sobre la diagonal, (2,1) y (1,2) acoplan igual y sólo se excita su combinación;
+para separarlas, sacar el piezo de la diagonal. Las frecuencias reales se miden con un barrido de
+impedancia del piezo con la celda llena.
+
+**Material:** pared y tapa de PEEK o PTFE maquinado; marco inferior de aluminio con Kapton en la
+cara de apoyo (la placa es el WE y no debe tocar metal a tierra) o de PEEK. El empotramiento debe
+ser rígido: un marco impreso amortigua y corre los modos.

@@ -237,3 +237,45 @@ def test_xrd_seal_encloses_the_clip_pocket():
     from modules import chamber_xrd
     lay = chamber_xrd.layout()
     assert lay["lid"]["gy1_in"] > lay["pocket_y1"] + P.CHAMBER_XRD["cover_ledge"]
+
+
+# --- celda Chladni ---------------------------------------------------------------
+
+def test_chladni_parts_valid():
+    from modules import chladni
+    for part in (chladni.build_wall(), chladni.build_bottom(), chladni.build_lid()):
+        s = part.val()
+        assert s.isValid() and len(s.Solids()) == 1
+
+
+def test_chladni_plate_face_is_reference_plane():
+    from modules import chladni
+    bb = chladni.plate().BoundingBox()
+    assert bb.zmax == pytest.approx(0.0, abs=1e-9)
+    assert bb.zmin == pytest.approx(-P.CHLADNI["plate_h"], abs=1e-9)
+
+
+def test_chladni_checks_pass():
+    bad = [str(r) for r in walls.chladni_checks() if not r.ok]
+    assert not bad, "\n".join(bad)
+
+
+def test_piezo_coupling_physics():
+    """∫∇²w del modo fundamental sobre toda la placa es 0 (pendiente nula en el borde
+    empotrado): un piezo centrado acopla fuerte; uno en ≈ L/4 casi nada."""
+    from sim.chladni_estimate import coupling
+    L, d = P.CHLADNI["plate_L"], P.CHLADNI["piezo_d"]
+    centred = abs(coupling(1, 1, (0.0, 0.0), d, L))
+    quarter = abs(coupling(1, 1, (-L / 4, -L / 4), d, L))
+    assert centred > 0.3 and quarter < 0.1
+    # (2,1) tiene línea nodal en x = 0: un piezo centrado no lo excita
+    assert abs(coupling(2, 1, (0.0, 0.0), d, L)) < 0.02
+    # en la diagonal, (2,1) y (1,2) acoplan igual: sólo su combinación simétrica
+    c = P.CHLADNI["piezo_center"]
+    assert coupling(2, 1, c, d, L) == pytest.approx(coupling(1, 2, c, d, L), rel=1e-6)
+
+
+def test_wet_modes_are_below_dry_ones():
+    from sim.chladni_estimate import mode_table
+    for row in mode_table():
+        assert row["f_liquido_hz"] < row["f_seco_hz"]

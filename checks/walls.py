@@ -344,6 +344,75 @@ def xrd_checks(p=P) -> list[Result]:
     return res
 
 
+def chladni_checks(p=P) -> list[Result]:
+    """Celda Chladni: empotramiento, sello, piezo, lengüeta, CE, RE, tapa y puertos."""
+    from modules import chladni as m
+
+    lay, c = m.layout(p), p.CHLADNI
+    wet, dry = p.CELL["min_wall"], p.CELL["min_wall_dry"]
+    wall, bottom, lid = m.build_wall(p).val(), m.build_bottom(p).val(), m.build_lid(p).val()
+    plate, piezo, ce = m.plate(p), m.piezo(p), m.ce_plate(p)
+    wf = m.wall_features(p)
+    big = cq.Solid.makeBox(400, 400, 100, cq.Vector(-200, -200, -50))
+    outside = big.cut(cq.Workplane("XY").add(m.box(-lay["outer"], lay["outer"], -lay["outer"],
+                                                   lay["outer"], -50, 50))
+                      .edges("|Z").chamfer(p.CELL["corner_chamfer"]).val())
+    bolts = m._bolt_holes(p, lay["z_bottom"] - 1, lay["z_wall_top"] + 1)
+    # a más de relief_gap dentro de la línea, la pared debe quedar ≥ relief_gap sobre la
+    # placa (sobre la línea misma la pared sí apoya: es el empotramiento)
+    e = lay["a"] - c["relief_gap"]
+    inner = plate.intersect(m.box(-e, e, -e, e, -5, 5))
+    res = [
+        # empotramiento y sello
+        Result("pared ↔ placa dentro del empotramiento (alivio)", dist(wall, inner),
+               c["relief_gap"] - 1e-3),
+        Result("cordón dentro de la línea de empotramiento",
+               lay["a"] - lay["seal_out"], c["seal_inset"] - 1e-6),
+        Result("marcos sin contacto entre sí (toda la fuerza a la placa)", dist(wall, bottom),
+               c["plate_preload"] - 1e-3),
+        Result("interferencia placa/marco inferior (−mm³)",
+               -plate.intersect(bottom).Volume(), -1e-3),
+        Result("interferencia placa/pared (−mm³)", -plate.intersect(wall).Volume(), -1e-3),
+        Result("placa ↔ tornillos", dist(plate, bolts), 1.0),
+        # piezo
+        Result("piezo ↔ marco inferior", dist(piezo, bottom), c["piezo_margin"]),
+        Result("lengüeta afuera: largo libre para la pinza",
+               c["tab_out"] - p.WE_CLAMP["jaw_l"], 2.0),
+        # cámara
+        Result("cámara ↔ exterior lateral", dist(wf["cavity"], outside), wet),
+        Result("cámara ↔ tornillos", dist(wf["cavity"].fuse(wf["ce_seat"]), bolts), wet),
+        Result("asiento del CE ↔ insertos de la tapa", dist(wf["ce_seat"], wf["lid_inserts"]), wet),
+        Result("ranura del cordón ↔ tornillos", dist(wf["groove"], bolts), dry),
+        Result("insertos de la tapa ↔ tornillos", dist(wf["lid_inserts"], bolts), dry),
+        Result("puerto CE ↔ tornillos", dist(wf["port_CE"], bolts), dry),
+        Result("puerto CE ↔ insertos de la tapa", dist(wf["port_CE"], wf["lid_inserts"]), dry),
+        Result("puerto CE ↔ cara superior",
+               dist(wf["port_CE"], slab(p, lay["z_wall_top"], True)), dry),
+        # CE y RE
+        Result("CE bajo el nivel del electrolito",
+               c["electrolyte_h"] - (lay["z_ce"] + c["ce_t"]), 0.5),
+        Result("interferencia CE/pared (−mm³)", -ce.intersect(wall).Volume(), -1e-3),
+    ]
+    rx, ry = m.re_xy(p)
+    re_body = cyl(p.ELECTRODES["RE_body_d"], c["luggin_h"], lay["z_wall_top"] + 10, rx, ry)
+    res += [
+        Result("RE ↔ CE (pasa por el recorte)", dist(re_body, ce), 0.5),
+        Result("RE ↔ pared de la cámara", dist(re_body, wall), 0.5),
+        Result("punta de la RE sobre la placa", c["luggin_h"], 0.5),
+    ]
+    lf = m.lid_features(p)
+    names = [k for k in lf if k.startswith("port_")] + ["re"]
+    for i, a in enumerate(names):
+        for b in names[i + 1:]:
+            res.append(Result(f"tapa: {a} ↔ {b}", dist(lf[a], lf[b]), dry))
+        res.append(Result(f"tapa: {a} ↔ tornillos",
+                          dist(lf[a], lf["screws"].fuse(lf["bolt_heads"])), dry))
+        res.append(Result(f"tapa: {a} ↔ pared (cae en la cámara)",
+                          dist(lf[a].intersect(slab(p, lay["z_wall_top"], False)), wall), 0.3))
+    res.append(Result("interferencia tapa/pared (−mm³)", -lid.intersect(wall).Volume(), -1e-3))
+    return res
+
+
 def _box_outside(p, lay):
     """Todo lo que está fuera del cuerpo rectangular de la celda XRD, a lo ancho."""
     from modules.chamber_xrd import body_block
@@ -356,7 +425,7 @@ def _box_outside(p, lay):
 def run(p=P) -> list[Result]:
     return (ring_checks(p) + base_checks(p) + seal_checks(p) + assembly_checks(p)
             + lid_raman_checks(p) + clamp_checks(p) + lid_raman_checks(p, "clamp")
-            + xrd_checks(p))
+            + xrd_checks(p) + chladni_checks(p))
 
 
 if __name__ == "__main__":

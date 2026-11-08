@@ -122,6 +122,49 @@ XRD_PORTS = (
      "through_d": 2.0},
 )
 
+# Electrodeposición acústica (Chladni): el WE es una placa cuadrada empotrada entre
+# dos marcos atornillados, excitada por un piezo pegado por debajo fuera del centro.
+# Plano z = 0 = cara superior de la placa (el WE).
+CHLADNI = {
+    "plate_material": "Ti grado 2",  # clave de sim/chladni_estimate.MATERIALS
+    "plate_L": 35.0,         # lado libre entre líneas de empotramiento
+    "plate_h": 0.3,          # MEDIR: espesor de la placa
+    "clamp_w": 6.0,          # ancho de la franja empotrada
+    "plate_preload": 0.05,   # el alojamiento de la placa es así de menos profundo que ella
+    "tab_w": 8.0,            # lengüeta de contacto del WE (la toma la pinza de Pt, en seco)
+    "tab_out": 12.0,         # cuánto sale la lengüeta del borde de los marcos
+    "piezo_d": 15.0,         # MEDIR: disco piezo
+    "piezo_t": 0.6,          # MEDIR
+    "piezo_center": (-8.75, -8.75),  # centro del piezo (≈ L/4 de cada borde, fuera de los ejes)
+    "piezo_margin": 1.0,     # piezo ↔ línea de empotramiento
+    "seal_cs": 1.5,          # MEDIR: cordón EPDM sobre la placa
+    "seal_inset": 0.5,       # cordón ↔ línea de empotramiento (zona casi sin desplazamiento)
+    "seal_corner_r": 4.0,
+    "relief_gap": 0.3,       # el marco superior no toca la placa dentro del empotramiento
+    "bottom_t": 8.0,         # marco inferior (aluminio con Kapton, o PEEK): deja libre el piezo
+    "electrolyte_h": 8.0,    # altura de electrolito sobre la placa (carga de masa: baja los modos)
+    "headspace": 4.0,
+    "ce_gap": 6.0,           # WE ↔ CE paralelo
+    "ce_t": 1.0,             # MEDIR: malla de Pt o placa de grafito
+    "ce_ledge": 1.5,         # escalón de la pared que sostiene el CE
+    "re_corner": (1, 1),     # esquina (signos x, y) donde baja la RE con Luggin
+    "re_inset": 4.0,         # punta de la RE ↔ esquina del área expuesta
+    "luggin_h": 1.5,         # punta de la RE sobre la placa
+    "bolts_per_side": 4,
+    "bolt_margin": 4.0,      # tornillo ↔ borde de la placa
+    "lid_t": 6.0,
+}
+
+# CE de la celda Chladni: el alambre de la malla sale por la pared −x con conector y funda.
+CHLADNI_CE_PORT = {"name": "CE", "face": "-x", "offset": 0.0, "z": None, "kind": "fitting",
+                   "through_d": ELECTRODES["CE_sleeve_d"]}   # z = plano medio del CE
+
+# Puertos de la tapa de la celda Chladni (verticales, desde arriba).
+CHLADNI_LID_PORTS = (
+    {"name": "inlet", "xy": (-9.0, 13.0), "kind": "fitting", "through_d": 2.0},
+    {"name": "vent", "xy": (3.0, 13.0), "kind": "fitting", "through_d": 2.0},
+)
+
 # --- Celda ------------------------------------------------------------------
 CELL = {
     "thin_gap_raman": 0.3,   # capa de electrolito entre WE y ventana (Raman), nominal
