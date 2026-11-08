@@ -23,18 +23,30 @@ def collision_volume(part: cq.Workplane, p=P, gap=None) -> float:
             + s.intersect(light_cone(p, gap, margin=0.0)).Volume())
 
 
-def run(p=P) -> list[tuple[str, float]]:
-    from modules import lid_raman
+def _parts(p, chamber):
     from modules.base_flat import build as base
     from modules.chamber_ring import build as ring
 
+    if chamber == "ring":
+        return [("base", base(p)), ("anillo", ring(p))]
+    from modules import chamber_clamp as m
+
+    wp = cq.Workplane
+    return [("cámara pinza", m.build(p)), ("pinza", wp().add(m.clamp(p))),
+            ("muestra", wp().add(m.sample(p)))]
+
+
+def run(p=P, chambers=("ring", "clamp")) -> list[tuple[str, float]]:
+    from modules import lid_raman
+
     out = []
-    for shim in lid_raman.shim_range(p):
-        g = lid_raman.gap_for_shim(p, shim)
-        # la envolvente se calcula para el gap real: la tapa sube o baja con la laina
-        for name, part in (("base", base(p)), ("anillo", ring(p)),
-                           ("tapa", lid_raman.build(p, shim=shim))):
-            out.append((f"gap {g:.2f}: {name}", collision_volume(part, p, g)))
+    for chamber in chambers:
+        fixed = _parts(p, chamber)
+        for shim in lid_raman.shim_range(p):
+            g = lid_raman.gap_for_shim(p, shim)
+            # la envolvente se calcula para el gap real: la tapa sube o baja con la laina
+            for name, part in fixed + [("tapa", lid_raman.build(p, shim=shim))]:
+                out.append((f"{chamber}, gap {g:.2f}: {name}", collision_volume(part, p, g)))
     return out
 
 
@@ -44,5 +56,5 @@ if __name__ == "__main__":
     for name, v in run():
         ok = v < TOL
         bad += not ok
-        print(f"[{'OK ' if ok else 'FALLA'}] {name:20s} invasión {v:.4f} mm³")
+        print(f"[{'OK ' if ok else 'FALLA'}] {name:34s} invasión {v:.4f} mm³")
     sys.exit(1 if bad else 0)

@@ -133,10 +133,17 @@ def assembly_checks(p=P) -> list[Result]:
     return [Result("interferencia base/anillo (−volumen)", -v, -1e-6)]
 
 
-def lid_raman_checks(p=P) -> list[Result]:
+def _chamber(p, name):
+    """(sólido, features, obstáculos internos) de la cámara sobre la que va la tapa."""
+    if name == "ring":
+        from modules import chamber_ring as m
+        return m.build(p).val(), m.features(p), {}
+    from modules import chamber_clamp as m
+    return m.build(p).val(), m.features(p), {"pinza": m.clamp(p)}
+
+
+def lid_raman_checks(p=P, chamber: str = "ring") -> list[Result]:
     from modules import lid_raman as L
-    from modules.chamber_ring import build as ring_build
-    from modules.chamber_ring import features as ring_features
 
     c, lp = p.CELL, p.LID_RAMAN
     dry, wet = c["min_wall_dry"], c["min_wall"]
@@ -159,9 +166,8 @@ def lid_raman_checks(p=P) -> list[Result]:
     res.append(Result("apoyo de la ventana fuera de la apertura",
                       lp["window_d"] / 2 - aperture, lp["window_land_min"]))
 
-    # holguras contra el anillo en todo el recorrido de lainas
-    ring = ring_build(p).val()
-    rf = ring_features(p)
+    # holguras contra la cámara en todo el recorrido de lainas
+    ring, rf, obstacles = _chamber(p, chamber)
     # bocas reales: la parte del sólido del puerto que cae dentro del pozo no existe
     ports = compound(v for k, v in rf.items() if k.startswith("port_")).cut(rf["well"])
     plate_cut = cq.Solid.makeBox(200, 200, 100, cq.Vector(-100, -100, zp - 0.05))
@@ -169,13 +175,16 @@ def lid_raman_checks(p=P) -> list[Result]:
         lid = L.build(p, shim=s).val()
         plunger = lid.cut(plate_cut.translate(cq.Vector(0, 0, s - lp["shim_nominal"])))
         tag = f"laina {s:.2f} (gap {L.gap_for_shim(p, s):.2f})"
-        res.append(Result(f"{tag}: émbolo ↔ anillo",
+        res.append(Result(f"{tag}: émbolo ↔ cámara",
                           dist(plunger, ring), min(lp["nose_clearance"], lp["well_clearance"])))
         res.append(Result(f"{tag}: émbolo ↔ bocas de puertos", dist(plunger, ports),
                           lp["port_clearance"]))
+        for oname, obst in obstacles.items():
+            res.append(Result(f"{tag}: émbolo ↔ {oname}", dist(plunger, obst),
+                              p.WE_CLAMP["clip_clearance"]))
         res.append(Result(f"{tag}: gap", L.gap_for_shim(p, s), 0.05))
         v = lid.intersect(ring).Volume()
-        res.append(Result(f"{tag}: interferencia tapa/anillo (−volumen)", -v, -1e-6))
+        res.append(Result(f"{tag}: interferencia tapa/cámara (−volumen)", -v, -1e-6))
 
     # O-ring de la tapa: compresión en todo el recorrido y llenado de la ranura
     gl = L.lid_gland(p)
@@ -203,9 +212,83 @@ def lid_raman_checks(p=P) -> list[Result]:
     return res
 
 
+def _ports_checks(p, f, specs, z_top, z_bottom, cavity_floor) -> list[Result]:
+    """Puertos: entre sí, contra caras, insertos y tornillos; boca sobre el piso;
+    paso entre conectores de una misma cara."""
+    import math
+
+    dry = p.CELL["min_wall_dry"]
+    ports = {k: v for k, v in f.items() if k.startswith("port_")}
+    others = {k: f[k] for k in ("bolts", "pins", "lid_inserts") if k in f}
+    names = sorted(ports)
+    res = []
+    for i, a in enumerate(names):
+        pa = ports[a]
+        res += [Result(f"{a} ↔ cara superior", dist(pa, slab(p, z_top, True)), dry),
+                Result(f"{a} ↔ cara inferior", dist(pa, slab(p, z_bottom, False)), dry)]
+        res += [Result(f"{a} ↔ {k}", dist(pa, v), dry) for k, v in others.items()]
+        res += [Result(f"{a} ↔ {b}", dist(pa, ports[b]), dry) for b in names[i + 1:]]
+    for s in specs:
+        bottom = s["z"] - _port_r(p, s)
+        res.append(Result(f"port_{s['name']}: boca sobre el piso", bottom - cavity_floor, 0.0))
+    fittings = [s for s in specs if s["kind"] == "fitting"]
+    for i, a in enumerate(fittings):
+        for b in fittings[i + 1:]:
+            if a["face"] == b["face"]:
+                d = math.hypot(a["offset"] - b["offset"], a["z"] - b["z"])
+                res.append(Result(f"conectores {a['name']}/{b['name']}: paso",
+                                  d, p.PORTS["fitting_pitch_min"]))
+    return res
+
+
+def clamp_checks(p=P) -> list[Result]:
+    """Cámara para pinza de Pt: paredes, puertos, pinza, muestra y pedestal."""
+    import math
+
+    from modules import chamber_clamp as m
+
+    f = m.features(p)
+    lay = m.layout(p)
+    h = p.CHAMBER_RING["h"]
+    c = p.WE_CLAMP
+    wet, dry = p.CELL["min_wall"], p.CELL["min_wall_dry"]
+    out = lateral_outside(p, lay["z_bottom"], h)
+    res = [
+        Result("cámara: pozo ↔ exterior lateral", dist(f["well"], out), wet),
+        Result("cámara: pozo ↔ cara inferior",
+               dist(f["well"], slab(p, lay["z_bottom"], False)), wet),
+        Result("cámara: pozo ↔ insertos de tapa", dist(f["well"], f["lid_inserts"]), wet),
+        Result("cámara: insertos ↔ exterior lateral", dist(f["lid_inserts"], out), dry),
+    ]
+    res += _ports_checks(p, f, p.CLAMP_PORTS, h, lay["z_bottom"], lay["z_floor"])
+
+    # la pinza cerrada pasa por el agujero del puerto WE
+    we = next(s for s in p.CLAMP_PORTS if s["name"] == "WE")
+    diag = math.hypot(c["clip_w"], 2 * c["jaw_t"])
+    res.append(Result("pinza cerrada cabe por el puerto WE (holgura)",
+                      p.hole(we["through_d"]) - diag, 0.0))
+    res.append(Result("cuerpo del portaelectrodo coincide con el puerto WE",
+                      -abs(we["through_d"] - c["rod_d"]), 0.0))
+    # pinza y muestra dentro del pozo, sin tocar la cámara
+    chamber = m.build(p).val()
+    holder = m.clamp(p).cut(lateral_outside(p, lay["z_bottom"] - 1, h + 1))
+    port_we = f["port_WE"]
+    res.append(Result("pinza ↔ cámara (fuera del puerto)",
+                      dist(holder.cut(port_we), chamber), 0.3))
+    smp = m.sample(p)
+    ped = m.pedestal(p)
+    walls_only = chamber.cut(ped) if ped is not None else chamber
+    res.append(Result("muestra ↔ paredes y piso de la cámara", dist(smp, walls_only), 0.5))
+    if ped is not None:
+        res.append(Result("pedestal ↔ pinza", dist(ped, m.clamp(p)), 0.5))
+        res.append(Result("pedestal bajo la muestra (margen al borde)",
+                          min(lay["x1"], c["sample_w"] / 2) - c["pedestal_d"] / 2, 0.5))
+    return res
+
+
 def run(p=P) -> list[Result]:
     return (ring_checks(p) + base_checks(p) + seal_checks(p) + assembly_checks(p)
-            + lid_raman_checks(p))
+            + lid_raman_checks(p) + clamp_checks(p) + lid_raman_checks(p, "clamp"))
 
 
 if __name__ == "__main__":

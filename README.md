@@ -11,8 +11,9 @@ python coupons/tolerance_coupon.py         # → out/tolerance_coupon.step / .st
 python modules/base_flat.py                # → out/base_flat.step / .stl
 python modules/chamber_ring.py             # → out/chamber_ring.step / .stl + resumen
 python modules/lid_raman.py                # → out/lid_raman.step / .stl + resumen
-python checks/walls.py                     # paredes, holguras, sellos e interferencias (76 checks)
-python checks/raman_clearance.py           # objetivo y cono de luz vs base/anillo/tapa, gap 0.1–0.5
+python modules/chamber_clamp.py            # → out/chamber_clamp.step / .stl (WE en pinza de Pt)
+python checks/walls.py                     # paredes, holguras, sellos e interferencias (146 checks)
+python checks/raman_clearance.py           # objetivo y cono de luz vs cada pieza, gap 0.1–0.5
 python checks/xrd_clearance.py             # huella y altura máxima permitida
 python sim/chladni_estimate.py             # modos de la placa-WE
 python -m pytest -q
@@ -24,11 +25,36 @@ python -m pytest -q
 | 1 | `coupons/tolerance_coupon.py` | listo para imprimir en PP |
 | 2 | `modules/base_flat.py`, `modules/chamber_ring.py` | listos; checks de pared y Raman en verde |
 | 3 | `modules/lid_raman.py` | listo; falta probar con agua (y medir el objetivo) |
+| 3b | `modules/chamber_clamp.py` (WE en pinza de Pt) | listo; falta medir el portaelectrodo |
 | 4 | `modules/lid_xrd.py` + `checks/xrd_clearance.py` | check listo, tapa pendiente |
 | 5 | Chladni, EPD/DEP, decoración | estimación de modos lista |
 | 6 | Simulación (gmsh → FEniCSx / Elmer) | pendiente |
 
-## Ensamble Raman: base + anillo + tapa (valores por defecto)
+## Dos formas de montar el WE para Raman
+La tapa Raman es la misma; cambia lo que va debajo.
+
+| | Muestra plana sellada (`base_flat` + `chamber_ring`) | Pinza de Pt (`chamber_clamp`) |
+|---|---|---|
+| Cómo se sujeta | O-ring sobre la muestra; contacto por debajo con lámina | Portaelectrodo con pinza por la cara −x (1/4-28), muestra sobre un pedestal |
+| Área | Definida: Ø9.5 = 70.9 mm² (solo cara superior) | Toda la tira fuera del agarre: 72 mm² arriba, 170 mm² en total; enmascarar reverso y bordes si se necesita un área definida |
+| Pt en el electrolito | No | Sí: la pinza se moja (suma su propia corriente; en HER el Pt puede disolverse y redepositarse en el WE) |
+| Piezas | 2 + tapa | 1 + tapa |
+
+### Electrodos en la cámara para pinza
+| Electrodo | Cara | Altura del eje | Sello |
+|---|---|---|---|
+| WE (portaelectrodo con pinza) | −x | z = −0.5 (plano medio de la muestra) | conector 1/4-28 sobre el cuerpo Ø4 |
+| RE Ag/AgCl | −y | z = 7 | vástago Ø6 con O-ring radial |
+| CE (Pt o grafito) | +y, a 6 mm del centro | z = 6 | conector 1/4-28 |
+| Entrada de electrolito | +y, a 6 mm del centro, del otro lado | z = 6 | conector 1/4-28 |
+| Salida | +x | z = 9 | conector 1/4-28 |
+
+Montaje: pasar el portaelectrodo desde afuera (la pinza cerrada debe caber por el puerto, lo
+verifica `checks/walls.py`), poner la tira en la pinza desde arriba con el pozo abierto, cerrar con
+la tapa. **Medir el portaelectrodo** (`MEDIR` en `params.WE_CLAMP`): Ø del cuerpo, ancho de la pinza,
+espesor y largo de las mandíbulas, espesor máximo de muestra.
+
+## Ensamble Raman con muestra sellada: base + anillo + tapa (valores por defecto)
 | | |
 |---|---|
 | Huella | 54 × 54 mm; base 6 mm, anillo 13 mm, placa de tapa 5 mm (sobre lainas) |

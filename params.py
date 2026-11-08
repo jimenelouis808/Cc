@@ -46,6 +46,22 @@ WE_FLAT = {
                              # con pared de 2 mm (ver checks/walls.py: lid_checks)
 }
 
+# WE C: muestra en pinza de Pt (como la celda de PTFE de docs/referencias.md, R1).
+# El portaelectrodo entra por un puerto lateral 1/4-28; la muestra (tira) queda
+# horizontal, cara arriba, apoyada en un pedestal que fija su cara en z = 0.
+WE_CLAMP = {
+    "rod_d": 4.0,            # MEDIR: Ø del cuerpo del portaelectrodo (pasa por el conector)
+    "clip_w": 3.5,           # MEDIR: ancho de la pinza; cerrada debe pasar por el puerto
+    "jaw_t": 0.8,            # MEDIR: espesor de cada mandíbula, sobre y bajo la muestra
+    "jaw_l": 3.0,            # MEDIR: largo de agarre
+    "sample_w": 8.0,         # tira: ancho
+    "sample_l": 12.0,        # tira: largo total (incluye el agarre)
+    "sample_t": 1.0,         # MEDIR: espesor máximo que admite la pinza
+    "clip_clearance": 0.5,   # pinza ↔ émbolo de la tapa
+    "pedestal_d": 4.0,       # apoyo bajo el punto de medición (0 = sin pedestal)
+    "floor_clearance": 1.0,  # pinza/cuerpo ↔ piso de la cámara
+}
+
 # --- Celda ------------------------------------------------------------------
 CELL = {
     "thin_gap_raman": 0.3,   # capa de electrolito entre WE y ventana (Raman), nominal
@@ -109,6 +125,18 @@ LID_RAMAN = {
     "port_clearance": 1.0,   # émbolo ↔ bocas de los puertos del anillo
     "bolt_engagement_min": 3.0,
 }
+
+# Puertos de la cámara para pinza. Misma cara superior que el anillo (la tapa Raman
+# sirve igual). El WE entra por −x a la altura del plano medio de la muestra.
+CLAMP_PORTS = (
+    {"name": "WE", "face": "-x", "offset": 0.0, "z": -WE_CLAMP["sample_t"] / 2, "kind": "fitting",
+     "through_d": WE_CLAMP["rod_d"]},
+    {"name": "inlet", "face": "+y", "offset": 6.0, "z": 6.0, "kind": "fitting", "through_d": 2.0},
+    {"name": "CE", "face": "+y", "offset": -6.0, "z": 6.0, "kind": "fitting",
+     "through_d": ELECTRODES["CE_sleeve_d"]},
+    {"name": "outlet", "face": "+x", "offset": 0.0, "z": 9.0, "kind": "fitting", "through_d": 2.0},
+    {"name": "RE", "face": "-y", "offset": 0.0, "z": 7.0, "kind": "radial"},
+)
 
 # Puertos del anillo. face: cara por la que entra; offset: desplazamiento sobre la
 # cara; z: altura del eje. kind 'fitting' = 1/4-28 de fondo plano (machuelar tras

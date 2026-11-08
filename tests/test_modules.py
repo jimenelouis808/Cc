@@ -121,7 +121,7 @@ def test_barrel_sized_objective_tip_is_rejected():
     """Con la cara frontal del tamaño del barril (25 mm) el émbolo no cabe en el pozo."""
     p = variant(RAMAN={"objective_tip_diameter": 25.0})
     bad = [r.name for r in walls.lid_raman_checks(p) if not r.ok]
-    assert any("émbolo ↔ anillo" in n or "interferencia" in n for n in bad)
+    assert any("émbolo ↔ cámara" in n or "interferencia" in n for n in bad)
 
 
 def test_small_exposed_area_breaks_nose_wall():
@@ -136,3 +136,38 @@ def test_ports_open_into_well(ring):
     p_closed = variant(RING_PORTS=())
     v_closed = chamber_ring.build(p_closed).val().Volume()
     assert ring.val().Volume() < v_closed
+
+
+# --- cámara para pinza de Pt ----------------------------------------------------
+
+def test_clamp_chamber_valid_and_lid_compatible():
+    from modules import chamber_clamp
+
+    s = chamber_clamp.build().val()
+    assert s.isValid() and len(s.Solids()) == 1
+    bb = s.BoundingBox()
+    assert bb.zmax == pytest.approx(P.CHAMBER_RING["h"], abs=1e-6)   # misma cara que el anillo
+    assert bb.xmax - bb.xmin == pytest.approx(P.CELL["body_w"], abs=1e-6)
+
+
+def test_clamp_sample_face_is_reference_plane():
+    from modules import chamber_clamp
+
+    smp = chamber_clamp.sample().BoundingBox()
+    assert smp.zmax == pytest.approx(0.0, abs=1e-9)
+    assert smp.xmin < 0 < smp.xmax                                    # el eje óptico cae en la tira
+    ped = chamber_clamp.pedestal().BoundingBox()
+    assert ped.zmax == pytest.approx(smp.zmin, abs=1e-9)              # apoya en el pedestal
+
+
+def test_clamp_checks_pass():
+    bad = [str(r) for r in walls.clamp_checks() + walls.lid_raman_checks(chamber="clamp")
+           if not r.ok]
+    assert not bad, "\n".join(bad)
+
+
+def test_wide_clip_is_rejected():
+    """Una pinza que cerrada no pasa por el puerto WE debe marcarse."""
+    p = variant(WE_CLAMP={"clip_w": 4.5})
+    bad = [r.name for r in walls.clamp_checks(p) if not r.ok]
+    assert "pinza cerrada cabe por el puerto WE (holgura)" in bad

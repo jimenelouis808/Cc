@@ -44,7 +44,10 @@ Electrolitos objetivo: 0.5 M H2SO4 y 3 M KOH. EPD: etanol / IPA (y posiblemente 
 - RE: Ag/AgCl sat. KCl (Camray). En KOH considerar Hg/HgO → puerto de RE con adaptador intercambiable.
 - CE: alambre de Pt (en HER ácida preferir barra de grafito: el Pt se disuelve y redeposita en el WE).
 - WE A: glassy carbon Ø3 mm (entra **por abajo**, cara hacia arriba, sello radial).
-- WE B: sustrato plano sujetado (pinza de Pt / placa de contacto).
+- WE B: sustrato plano sellado con O-ring (área = ID del O-ring), contacto con lámina por debajo
+  (`base_flat` + `chamber_ring`).
+- WE C: tira sujeta con portaelectrodo de pinza de Pt que entra por un puerto lateral, sumergida,
+  sobre un pedestal que fija su cara en z = 0 (`chamber_clamp`, como la celda R1). La pinza se moja.
 
 ## Arquitectura modular ("sándwich")
 
