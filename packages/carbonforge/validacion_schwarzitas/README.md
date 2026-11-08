@@ -23,8 +23,8 @@ esta clase de material, y si lo hace por la razón correcta.
 | | átomos | celda | vacío | helio | área (m²/g) | cavidad | canal |
 |---|---|---|---|---|---|---|---|
 | primitive | 968 | 31.9 Å | 0.537 | 0.854 | 2543 | 25.3 Å | 14.6 Å |
-| diamond | 1440 | 30.0 Å | 0.267 | 0.722 | 1717 | 11.5 Å | 6.7 Å |
-| gyroid | 1744 | 39.0 Å | 0.547 | 0.864 | 2534 | 16.7 Å | 15.8 Å |
+| diamond | 1440 | 30.0 Å | 0.266 | 0.721 | 1717 | 11.4 Å | 6.7 Å |
+| gyroid | 1744 | 39.0 Å | 0.548 | 0.867 | 2534 | 16.7 Å | 15.8 Å |
 
 Todas cruzan la celda con holgura para H₂ (sonda de 2.9 Å de diámetro),
 así que el GCMC tenía sentido. El área es geométrica, no BET.
@@ -49,7 +49,7 @@ estrecho satura antes, y eso es coherencia interna, no ajuste.
 
 De material, y la figura lo muestra: **el diamond, cuya área (1717 m²/g)
 es la que su ~3 wt% implica por la regla de Chahine, da 3.68 absoluto y
-2.79 en exceso.** Las otras dos son el doble de abiertas y dan el doble.
+2.82 en exceso.** Las otras dos son el doble de abiertas y dan el doble.
 No estamos discrepando con él: estamos describiendo materiales distintos
 que comparten nombre.
 
@@ -60,19 +60,24 @@ frente a la regla de Chahine (~1 wt% por 500 m²/g a 77 K):
 
 | | área | wt% abs | wt% exceso | abs/Chahine | exc/Chahine |
 |---|---|---|---|---|---|
-| haz SWNT | 2590 | 4.49 | 3.46 | 0.87 | 0.67 |
-| primitive | 2543 | 6.07 | 4.24 | 1.19 | 0.83 |
-| diamond | 1717 | 3.68 | 2.79 | 1.07 | 0.81 |
-| gyroid | 2534 | 6.37 | 4.49 | 1.26 | 0.89 |
+| haz SWNT | 2590 | 4.49 | 3.49 | 0.87 | 0.67 |
+| primitive | 2543 | 6.07 | 4.32 | 1.19 | 0.85 |
+| diamond | 1717 | 3.68 | 2.82 | 1.07 | 0.82 |
+| gyroid | 2534 | 6.37 | 4.57 | 1.26 | 0.90 |
 
-La dispersión es **±25 %**, que es lo que una regla empírica entrega: es
-suficiente para descartar un error de factor dos y no para verificar
-nada. Y el caso que lo deja claro: **el haz y el gyroid tienen casi la
-misma área (2590 contra 2534) y difieren un 42 %.** Parte se explica
-por la fracción de vacío — 0.23 contra 0.55, y en base absoluta ese
-volumen libre cuenta como gas comprimido además de película adsorbida,
-por lo que pasar a exceso encoge la brecha de 0.87/1.26 a 0.67/0.89.
-No la cierra.
+El wt% en exceso es `100 m_exc/(m_exc + m_C)`, la misma fórmula que el
+absoluto con la masa que queda al descontar el gas libre — no el
+absoluto reescalado por `rho_exc/rho_abs`, que es lo que decía antes
+esta columna y da entre 1 y 2 % menos.
+
+Los cocientes van de 0.87 a 1.26, un factor 1.45 entre el menor y el
+mayor, que es lo que una regla empírica entrega: suficiente para
+descartar un error de factor dos y no para verificar nada. Y el caso
+que lo deja claro: **el haz y el gyroid tienen casi la misma área (2590
+contra 2534) y difieren un 42 %.** Parte se explica por la fracción de
+vacío — 0.23 contra 0.55, y en base absoluta ese volumen libre cuenta
+como gas comprimido además de película adsorbida, por lo que pasar a
+exceso encoge la brecha del 45 % al 34 %. No la cierra.
 
 El punto del haz a 3.8 MPa está **interpolado** entre los puntos
 medidos de 3.0 y 5.0 MPa de su isoterma validada (4.43 y 4.58 wt%), y
