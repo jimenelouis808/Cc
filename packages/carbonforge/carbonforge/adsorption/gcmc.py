@@ -124,19 +124,29 @@ class GCMCResult:
         but **5 %** at 5 wt%, so they diverge precisely where cryogenic
         adsorption gets interesting.
 
-        It is here because the reference tables need it. Levesque's
-        ``wt%`` column agrees with his own ``rho_o`` column on this
-        basis and not on the other: at 77 K and 20 MPa, ``rho_o =
-        0.051 28`` g cm⁻³ in the reproduced cell is 5.20 % per carbon
-        and 4.94 % of the total, against a published 5.2. At 0.1 MPa it
-        is 3.21 against a published 3.2. Over his 77 K isotherm this
-        basis reproduces the column to 1.3 % and the other to 3.2 %.
+        **This is not the convention the reference papers use**, and
+        the history of that sentence is worth keeping. Kowalczyk et
+        al. (Phys. Chem. Chem. Phys. 9 (2007) 1786) write the formula
+        out as their eqn 5 — ``N_H2 m_H2 / (N_H2 m_H2 + N_C m_C)``,
+        the total-mass basis — and cite Levesque for it. So
+        :attr:`weight_percent` is the one to quote.
 
-        His 293 and 150 K columns are printed to too few digits to
-        settle it — 0.01 wt% is one significant figure — so the
-        unambiguous validation target is ``rho_o``, which carries five
-        decimals and no convention at all. Both numbers are returned so
-        that a comparison has to name the one it used.
+        It was briefly concluded here that Levesque's column was
+        per-carbon, on the strength of the arithmetic alone: converting
+        his ``rho_o`` with the reproduced cell reproduces his 77 K
+        ``wt%`` column to 1.4 % on this basis and 3.1 % on the other,
+        and lands exactly on his printed 3.2 and 5.2 at the two ends.
+        That fit is real and it is not evidence of a convention. With
+        the formula in hand the reading is simply that **his two
+        columns do not agree with each other at 77 K**, by about 3 %,
+        and that the gap happens to look like this basis.
+
+        Which is the argument for validating against ``rho_o`` and
+        nothing else: five decimals, no convention, and no second
+        column to disagree with. Both weight percentages are still
+        returned, because the two differ by ``1 + m(H2)/m(C)`` — 0.3 %
+        at 1 wt% but **5 %** at 5 wt% — so anyone comparing numbers
+        across papers has to be able to say which they mean.
         """
         hydrogen = self.mean_count * MASS_H2 / AVOGADRO
         return 100.0 * hydrogen / self.carbon_mass_g

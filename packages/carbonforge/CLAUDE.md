@@ -207,6 +207,24 @@ published and all reproduced in `tests/test_adsorption.py`.
   count, independent of the seed, and unchanged by tiling the cell —
   and note the tiling one **passed while the area was wrong**, to every
   digit, which is what gave the bug away. Keep all three.
+- **The two sphere diameters come from a GRID, the void fraction from
+  random samples, and mixing them up was a cubic-time bug.** A volume
+  is a Monte Carlo integral and converges as `1/sqrt(N)`; a channel is
+  a yes/no about the geometry, and a random cloud answers it by luck.
+  The old percolation linked every pair of sampled points within twice
+  the probe radius, which on an open framework is half the cell, so the
+  pair count went as `N²` and the pure-Python union-find behind it
+  (no path compression, a `np.zeros(3)` per `find`) as `N³`. Measured
+  on a Schwarz P cell: **0.5 s at 2000 samples, 2.6 at 5000, 19.7 at
+  10 000** — hours at the count the void fraction wants, so an open
+  schwarzite could not be measured at all. Now: free-radius field on a
+  grid, `scipy.ndimage.label` for the components in C, and the
+  union-find only over the few thousand cells that touch across
+  opposite faces, carrying the lattice offset. Linear in the samples,
+  and the diameters no longer move with them — three tests pin that,
+  the monotonicity in `grid_spacing`, and that an open cell finishes.
+  Both diameters are **lower bounds** in the spacing: a channel
+  narrower than the grid can be missed, none is ever invented.
 - **A cell edge under twice the cutoff is refused.** The minimum image
   is only the nearest image below L/2; above it, `_minimum_image`
   returns one displacement per pair while the true sum has two images
@@ -241,17 +259,21 @@ published and all reproduced in `tests/test_adsorption.py`.
   published table's own rounding**: its lowest-pressure entries have
   one significant figure, and unweighted they dominate the fit and
   return a negative third virial coefficient hydrogen does not have.
-- **`wt%` has two definitions and the papers do not say which.**
-  `100 m(H2)/(m(H2)+m(C))` is the storage-target convention;
-  `100 m(H2)/m(C)` is hydrogen per adsorbent. They differ by
-  `1 + m(H2)/m(C)`: 0.3 % at 1 wt%, **5 % at 5 wt%** — the size of the
-  quantum correction at 77 K, so the wrong one hides a real error.
-  Levesque's column matches his own `rho_o` on the per-carbon basis
-  (1.3 % over the 77 K isotherm against 3.2 %, and it lands on his
-  printed 3.2 and 5.2 at the two ends); his 293 and 150 K columns are
-  printed to too few digits to settle it. So **validate against
-  `rho_o`**, which has five decimals and no convention, and quote both
-  weight percentages — `GCMCResult` returns both and names them.
+- **`wt%` has two definitions, and the intended one is total mass.**
+  `100 m(H2)/(m(H2)+m(C))` against `100 m(H2)/m(C)`; they differ by
+  `1 + m(H2)/m(C)`, which is 0.3 % at 1 wt% but **5 % at 5 wt%** — the
+  size of the quantum correction at 77 K, so the wrong one hides a
+  real error. Kowalczyk writes the definition out as his eqn 5, total
+  mass, citing Levesque for it. **Quote `weight_percent`.**
+  *Correcting this file:* it briefly said Levesque's column was
+  per-carbon, from the arithmetic alone — that conversion reproduces
+  his 77 K column to 1.4 % against 3.1 %, and hits his printed 3.2 and
+  5.2 exactly. The fit is real and is not evidence of a convention;
+  with the formula in hand it means **his two columns disagree with
+  each other at 77 K by about 3 %**. Which is the argument for
+  validating against `rho_o` and nothing else: five decimals, no
+  convention, no second column to disagree with. Both percentages are
+  still returned and named, because comparing across papers needs it.
 - **An isotherm is a FOLDER, not a function call.** One state point on
   a validation-sized bundle runs 31 to 46 minutes, so eight of them is
   most of a day. `adsorption/campaign.py` writes a

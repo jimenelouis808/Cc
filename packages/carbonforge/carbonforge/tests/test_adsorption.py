@@ -120,14 +120,20 @@ class TestTheReferenceIsothermTable:
         assert bulk[15.0] < adsorbed[15.0]
         assert bulk[20.0] > adsorbed[20.0]
 
-    def test_the_wt_column_is_hydrogen_per_carbon_not_per_total_mass(
+    def test_the_77_K_wt_column_disagrees_with_its_own_rho_o(
             self, cell_volume_cm3, carbon_mass_g):
-        """The finding this table carries a paragraph about.
+        """The table's two columns are ~3 % apart, and that is the point.
 
         Converting the published ``rho_o`` at 77 K with the reproduced
-        cell reaches the published ``wt%`` on the per-carbon basis and
-        misses it on the total-mass basis, consistently and in one
-        direction. 1.3 % against 3.2 % mean error over eight points.
+        cell reaches the published ``wt%`` to 3.1 % on the total-mass
+        basis — which Kowalczyk's eqn 5 says is the intended one — and
+        to 1.4 % on the per-carbon basis, landing exactly on the
+        printed 3.2 and 5.2 at the two ends.
+
+        **That closer fit is not evidence of a convention**, and this
+        test is named for what it measures rather than for the
+        conclusion once drawn from it: the two columns simply do not
+        agree, and ``rho_o`` is therefore the only honest target.
         """
         per_carbon = total = 0.0
         rows = LEVESQUE_BUNDLE_ISOTHERMS[77.0]
@@ -147,11 +153,45 @@ class TestTheReferenceIsothermTable:
     @pytest.mark.parametrize("pressure, published", [(0.1, 3.2), (20.0, 5.2)])
     def test_the_two_ends_of_the_77_K_isotherm_land_on_the_printed_digits(
             self, pressure, published, cell_volume_cm3, carbon_mass_g):
-        """Not a tolerance — the per-carbon conversion of ``rho_o``
-        rounds to the printed value at both ends."""
+        """The coincidence itself, pinned so it cannot quietly change.
+
+        The per-carbon conversion of ``rho_o`` rounds to the printed
+        value at both ends. It is recorded because it is the reason
+        this table was once read as per-carbon, not because it settles
+        the basis — Kowalczyk's eqn 5 does, and it says total mass.
+        """
         rho = {p: r for p, r, _ in LEVESQUE_BUNDLE_ISOTHERMS[77.0]}[pressure]
         hydrogen = rho * cell_volume_cm3
         assert round(100 * hydrogen / carbon_mass_g, 1) == published
+
+
+class TestTheSolidFluidParametersAreDerivable:
+    """H2-C from carbon's own LJ, which is an independent check.
+
+    Levesque quotes the H2-C pair directly. Kowalczyk gives carbon's
+    own parameters instead and says he mixes them with Lorentz-Berthelot
+    — so the same two numbers are reachable by two routes that were
+    published five years apart, and if they disagreed one of them would
+    be transcribed wrong here.
+    """
+
+    #: Kowalczyk et al. 2007, section III: carbon's own LJ parameters.
+    CARBON_SIGMA = 3.40
+    CARBON_EPSILON = 28.0
+
+    def test_sigma_is_the_arithmetic_mean(self):
+        mixed = 0.5 * (H2_H2.sigma + self.CARBON_SIGMA)
+        assert H2_C.sigma == pytest.approx(mixed, abs=0.002)
+
+    def test_epsilon_is_the_geometric_mean(self):
+        mixed = np.sqrt(H2_H2.epsilon * self.CARBON_EPSILON)
+        assert H2_C.epsilon == pytest.approx(mixed, abs=0.02)
+
+    def test_the_wall_does_not_recoil_and_the_fluid_pair_does(self):
+        """Both papers say it in the same words: the Feynman-Hibbs
+        reduced mass is ``m/2`` for a pair of molecules and ``m`` for a
+        molecule against a fixed framework atom."""
+        assert H2_H2.reduced_mass == pytest.approx(0.5 * H2_C.reduced_mass)
 
 
 class TestPotentials:
@@ -378,6 +418,82 @@ class TestPorosity:
                                   seed=0)
         assert report.largest_included_sphere > 4.0
         assert report.largest_free_sphere < report.largest_included_sphere
+
+    def test_the_two_diameters_do_not_depend_on_the_sample_count(self):
+        """They come from a grid, and that is the fix for a real bug.
+
+        They used to be read off the random cloud: the included sphere
+        as a maximum over samples, which is biased low by however
+        unlucky the draw was, and the free one by linking every pair of
+        sampled points within twice the probe radius. On an open
+        framework that link distance is half the cell, so the pair count
+        went as the square of the samples and the Python union-find
+        behind it as the cube. Measured on a Schwarz P cell: 0.5 s at
+        2000 samples, 2.6 at 5000, **19.7 at 10 000** — hours at the
+        count the void fraction wants, which is why a schwarzite could
+        not be measured at all.
+
+        A geometric extremum is not a Monte Carlo integral, and this
+        pins the distinction: the void fraction still moves with the
+        samples, and the two diameters must not.
+        """
+        atoms = levesque_bundle(gap=6.0, diameter=REFERENCE_DIAMETER,
+                                repeats=2, periods=3)
+        coarse = analyse_porosity(atoms, samples=3000, area_points=60,
+                                  seed=0)
+        fine = analyse_porosity(atoms, samples=30_000, area_points=60,
+                                seed=0)
+        assert coarse.largest_free_sphere == fine.largest_free_sphere
+        assert coarse.largest_included_sphere == fine.largest_included_sphere
+        # The sampled quantity does move, or the comparison above would
+        # be testing that nothing is computed at all.
+        assert coarse.void_fraction != fine.void_fraction
+
+    def test_a_finer_grid_never_loses_a_channel(self):
+        """Both diameters are lower bounds in the grid spacing.
+
+        A channel narrower than the spacing can be missed; none is ever
+        invented, because every grid point's free radius is a real
+        distance to a real atom. So refining can only find more.
+
+        The tolerance is the **bisection's** own resolution, not zero:
+        the search runs a fixed number of halvings between 0 and the
+        included radius, so two grids that disagree about that radius
+        in the ninth digit land a few parts in 10⁸ apart on the free
+        one. Measured here, 1.2 Å and 0.3 Å spacings agree to
+        10.2051304 against 10.2051329 — which is the real result, the
+        bundle's channel being smooth and far wider than either grid.
+        """
+        atoms = levesque_bundle(gap=6.0, diameter=REFERENCE_DIAMETER,
+                                repeats=2, periods=3)
+        coarse = analyse_porosity(atoms, samples=3000, area_points=60,
+                                  grid_spacing=1.2, seed=0)
+        fine = analyse_porosity(atoms, samples=3000, area_points=60,
+                                grid_spacing=0.3, seed=0)
+        bisection = 1e-4
+        assert (fine.largest_free_sphere
+                >= coarse.largest_free_sphere - bisection)
+        assert (fine.largest_included_sphere
+                >= coarse.largest_included_sphere - bisection)
+
+    def test_an_open_framework_is_measurable_at_a_real_sample_count(self):
+        """The case the old percolation could not finish.
+
+        An open cell — half void, channels wide enough that the old
+        pair graph linked nearly everything — at a sample count anyone
+        would actually use. The assertion is only that it returns
+        something sane; the point is that it returns at all.
+        """
+        import time
+
+        atoms = levesque_bundle(gap=10.0, diameter=REFERENCE_DIAMETER,
+                                repeats=2, periods=3)
+        started = time.perf_counter()
+        report = analyse_porosity(atoms, samples=50_000, area_points=100,
+                                  seed=0)
+        assert time.perf_counter() - started < 120.0
+        assert report.void_fraction > 0.3
+        assert report.largest_free_sphere > 2.0 * report.probe_radius
 
 
 class TestGCMC:

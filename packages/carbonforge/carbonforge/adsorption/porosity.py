@@ -162,6 +162,7 @@ def analyse_porosity(
     area_points: int = 500,
     temperature: float = 298.0,
     bins: int = 40,
+    grid_spacing: float = 0.4,
     seed: int = 0,
 ) -> PorosityReport:
     """Measure a framework's porosity by Monte Carlo insertion.
@@ -191,6 +192,14 @@ def analyse_porosity(
         experimental convention.
     bins
         Bins in the pore size distribution.
+    grid_spacing
+        Resolution in Å of the grid the two sphere diameters are
+        measured on. It is **not** the sampling of the void fraction,
+        which stays Monte Carlo: a volume is an integral and a channel
+        is a yes/no, and they want different tools. Both diameters are
+        lower bounds limited by this number — a channel narrower than
+        the spacing can be missed — so halve it if a framework reports
+        no channel and you expect one. The cost is the cube of it.
     seed
         Required: this is a stochastic measurement.
 
@@ -230,10 +239,14 @@ def analyse_porosity(
     area = _accessible_area(positions, tree, edges, atom_radius,
                             probe_radius, area_points)
 
-    # --- the two sphere diameters.
-    largest_included = 2.0 * float(free_radius.max()) if samples else 0.0
-    largest_free = 2.0 * _percolating_radius(
-        points, free_radius, edges, probe_radius)
+    # --- the two sphere diameters, from a grid rather than the cloud.
+    # Both are geometric extrema, and a maximum over random samples is
+    # biased low by however unlucky the draw was, with no error bar that
+    # shrinks usefully. The grid's error is its spacing.
+    free_radius_max, included_radius = _percolating_radius(
+        tree, edges, atom_radius, probe_radius, grid_spacing)
+    largest_free = 2.0 * free_radius_max
+    largest_included = 2.0 * included_radius
 
     if fraction <= 0.0:
         warnings.append(
@@ -387,95 +400,113 @@ def _accessible_area(
     return total
 
 
-def _percolating_radius(
-    points: np.ndarray, free_radius: np.ndarray, edges: np.ndarray,
-    probe_radius: float,
-) -> float:
-    """Largest probe radius whose void still crosses the cell.
+def _free_radius_grid(
+    tree: cKDTree, edges: np.ndarray, atom_radius: float, spacing: float
+) -> np.ndarray:
+    """The free-sphere radius on a regular grid over the cell.
 
-    A bisection on the radius. At each trial the sampled points that
-    admit a probe of that size are linked into a graph, and the
-    question asked of the graph is whether any component **wraps**:
-    whether walking its edges can return to the starting point in a
-    different periodic image. That is the definition of percolation
-    and it is not the same as "the component is wide" — a spherical
-    cavity large enough to span the cell still does not percolate, and
-    a proxy on point spacing or on extent says it does.
-
-    Union-find with image offsets does it in one pass: each point
-    carries the displacement to its component's root, and an edge
-    whose two ends are already in the same component closes a loop
-    whose offset is the lattice vector it wraps by. Nonzero offset,
-    percolating.
-
-    The estimate is from a point cloud, so it can **under**-report a
-    channel too narrow to be sampled; it cannot over-report one,
-    because every link is a real pair of void points. The report says
-    so rather than presenting it as exact.
+    A grid rather than the random samples the rest of this module uses,
+    and the reason is not speed alone. A channel is a *geometric*
+    feature: whether one exists is a yes/no about the structure, and a
+    random cloud answers it by luck — it under-reports a narrow channel
+    it happened not to sample, and the error does not shrink predictably
+    because it is a maximum over samples, not a mean. A grid's error is
+    its spacing, which is a number the caller sets.
     """
-    if not len(points):
-        return 0.0
-    high = float(free_radius.max())
-    if high <= 0.0:
-        return 0.0
-    low = 0.0
-    for _ in range(16):
-        trial = 0.5 * (low + high)
-        if _void_percolates(points[free_radius >= trial], edges, trial):
-            low = trial
-        else:
-            high = trial
-    return low
+    counts = np.maximum(2, np.ceil(edges / spacing).astype(int))
+    axes = [np.linspace(0.0, edge, n, endpoint=False)
+            for edge, n in zip(edges, counts)]
+    mesh = np.stack(np.meshgrid(*axes, indexing="ij"), axis=-1)
+    distances, _ = tree.query(mesh.reshape(-1, 3), k=1)
+    return distances.reshape(counts) - atom_radius
 
 
-def _void_percolates(
-    points: np.ndarray, edges: np.ndarray, radius: float
-) -> bool:
-    """Does a probe of ``radius`` have a path across the periodic cell?
+def _mask_percolates(mask: np.ndarray) -> bool:
+    """Does a connected region of ``mask`` wrap the periodic cell?
 
-    Two void points are linked when they are within ``2 * radius``: the
-    probe can roll from one to the other without its centre leaving the
-    void. Whether the resulting graph wraps is decided by union-find
-    with offsets, as described in :func:`_percolating_radius`.
+    Label the mask **non-periodically** first, which ``scipy.ndimage``
+    does in C, and only then join the labels that touch across opposite
+    faces, carrying the lattice offset each join crosses. A component
+    that reaches itself with a nonzero accumulated offset has returned
+    to its own starting cell in a different image, which is the
+    definition of percolation — and is not the same as "the component
+    is wide", which a spherical cavity spanning the cell also satisfies.
+
+    The work is the labelling, which is linear and compiled; the
+    union-find is over the few hundred labels and the few thousand face
+    cells, not over every pair of void points. The version this replaced
+    linked every pair of sampled points within twice the probe radius,
+    which on an open framework is most of the cell: measured on a Schwarz
+    P cell, 0.5 s at 2000 samples, 2.6 at 5000 and 19.7 at 10 000 — cubic,
+    and hours at the sample count the void fraction wants.
     """
-    if len(points) < 2 or radius <= 0.0:
-        return False
-    wrapped = np.mod(points, edges)
-    np.clip(wrapped, 0.0, np.nextafter(edges, 0.0), out=wrapped)
-    tree = cKDTree(wrapped, boxsize=edges)
-    pairs = tree.query_pairs(2.0 * radius, output_type="ndarray")
-    if not len(pairs):
+    from scipy import ndimage
+
+    structure = ndimage.generate_binary_structure(3, 1)
+    labels, count = ndimage.label(mask, structure=structure)
+    if count == 0:
         return False
 
-    parent = np.arange(len(wrapped))
-    offset = np.zeros((len(wrapped), 3))
+    parent = list(range(count + 1))
+    offset = [np.zeros(3, dtype=int) for _ in range(count + 1)]
 
     def find(node: int) -> tuple[int, np.ndarray]:
-        shift = np.zeros(3)
+        shift = np.zeros(3, dtype=int)
         while parent[node] != node:
-            shift += offset[node]
+            shift = shift + offset[node]
             node = parent[node]
         return node, shift
 
-    for a, b in pairs:
-        # The image of b that is actually within reach of a.
-        delta = wrapped[int(b)] - wrapped[int(a)]
-        image = -edges * np.round(delta / edges)
-        root_a, shift_a = find(int(a))
-        root_b, shift_b = find(int(b))
-        # Displacement from a's root to b's root through this edge.
-        through = shift_a + (delta + image) - shift_b
-        if root_a == root_b:
-            # A closed loop's discrepancy is either zero or a lattice
-            # vector, so the test is per axis against that axis's own
-            # edge -- not against the smallest, which would judge a
-            # wrap along a long cell by a short cell's standard.
-            if np.any(np.abs(through) > 0.5 * edges):
-                return True
+    for axis in range(3):
+        last = np.take(labels, -1, axis=axis).ravel()
+        first = np.take(labels, 0, axis=axis).ravel()
+        touching = (last > 0) & (first > 0)
+        if not touching.any():
             continue
-        parent[root_b] = root_a
-        offset[root_b] = through
+        step = np.zeros(3, dtype=int)
+        step[axis] = 1
+        for a, b in zip(last[touching], first[touching]):
+            root_a, shift_a = find(int(a))
+            root_b, shift_b = find(int(b))
+            through = shift_a + step - shift_b
+            if root_a == root_b:
+                if np.any(through != 0):
+                    return True
+                continue
+            parent[root_b] = root_a
+            offset[root_b] = through
     return False
+
+
+def _percolating_radius(
+    tree: cKDTree, edges: np.ndarray, atom_radius: float,
+    probe_radius: float, spacing: float,
+) -> tuple[float, float]:
+    """``(largest free sphere, largest included sphere)`` radii, in Å.
+
+    The free one is the largest probe whose void still **crosses** the
+    cell, by bisection on :func:`_mask_percolates`. The included one is
+    the largest that fits anywhere, which is the same grid's maximum and
+    comes for free. They are different questions and a sealed cage
+    separates them: large included, zero free.
+
+    Both are limited by ``spacing`` rather than by luck, and both are
+    **lower** bounds — a channel narrower than the grid can be missed,
+    and no feature is ever invented, because every grid point's free
+    radius is a real distance to a real atom.
+    """
+    free = _free_radius_grid(tree, edges, atom_radius, spacing)
+    included = float(free.max())
+    if included <= 0.0:
+        return 0.0, max(included, 0.0)
+    low, high = 0.0, included
+    for _ in range(20):
+        trial = 0.5 * (low + high)
+        if _mask_percolates(free >= trial):
+            low = trial
+        else:
+            high = trial
+    return (low if low >= probe_radius * 1e-6 else 0.0), included
 
 
 def _pore_distribution(

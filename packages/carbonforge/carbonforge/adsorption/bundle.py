@@ -106,19 +106,24 @@ REFERENCE_DIAMETER: float = 13.3
 #: regression, and that cannot be judged from a scratch file that was
 #: run once.
 #:
-#: **The ``wt%`` column is on the per-carbon basis, and that had to be
-#: worked out rather than read.** Converting the published ``rho_o``
-#: with this module's own cell gives, at 77 K, 5.20 % per carbon and
-#: 4.94 % of the total mass against a published 5.2; at 0.1 MPa, 3.21
-#: and 3.11 against a published 3.2. Over the 77 K isotherm the
-#: per-carbon basis reproduces the column to 1.3 % and the total-mass
-#: basis to 3.2 %. The 293 and 150 K columns carry too few digits to
-#: settle it on their own. So ``rho_o`` is the column to validate
-#: against — five decimals, no convention — and
-#: :class:`~carbonforge.adsorption.gcmc.GCMCResult` returns both weight
-#: percentages rather than picking one. The two differ by 5 % at 5 wt%,
-#: which is the whole size of the quantum correction at this
-#: temperature, so getting it wrong would hide a real error.
+#: **The ``wt%`` column does not agree with this table's own ``rho_o``
+#: at 77 K**, by about 3 %, and that is a fact about the table rather
+#: than a convention to decode. Kowalczyk et al. (Phys. Chem. Chem.
+#: Phys. 9 (2007) 1786) write the definition out as their eqn 5 —
+#: hydrogen over *total* mass — and cite Levesque for it, so that is
+#: the intended basis. Converting ``rho_o`` with the reproduced cell
+#: reproduces the 77 K column to 3.1 % on that basis and 1.4 % on the
+#: per-carbon one, landing exactly on the printed 3.2 and 5.2 at the
+#: two ends; that fit is real, and with the formula in hand it is not
+#: evidence of anything. The 293 and 150 K columns carry too few
+#: digits to say either way.
+#:
+#: Hence: **validate against ``rho_o``** — five decimals, no
+#: convention, and no second column to disagree with — and quote
+#: :attr:`~carbonforge.adsorption.gcmc.GCMCResult.weight_percent`,
+#: the total-mass one. Both are returned because they differ by 5 % at
+#: 5 wt%, the whole size of the quantum correction at this
+#: temperature, so a comparison across papers has to name its basis.
 #:
 #: Note how little the 77 K column moves — 3.2 wt% at 0.1 MPa to
 #: 5.2 wt% at 20 MPa. Almost all of the capacity is already there at a
