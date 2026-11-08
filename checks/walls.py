@@ -413,6 +413,82 @@ def chladni_checks(p=P) -> list[Result]:
     return res
 
 
+def epd_checks(p=P) -> list[Result]:
+    """Celda EPD/DEP: máscara, electrodos, canal, apilado, conectores, pads y materiales."""
+    from modules import epd as m
+
+    e, lay, pat = p.EPD, m.layout(p), m.ide_rects(p)
+    dry = p.CELL["min_wall_dry"]
+    res = []
+    # 1. máscara de sombra
+    opens = pat["A"] + pat["B"]
+    min_open = min(min(x1 - x0, y1 - y0) for x0, x1, y0, y1 in opens)
+    res.append(Result("máscara: abertura mínima", min_open, e["mask_min_feature"]))
+    webs = list(e["gaps"]) + [max(e["gaps"])]          # entre dedos y en las puntas
+    res.append(Result("máscara: puente mínimo", min(webs), e["mask_min_web"]))
+    web_len = e["channel_w"] + 2 * e["finger_overlap"]
+    res.append(Result("máscara: esbeltez del puente más fino (−)",
+                      -web_len / min(e["gaps"]), -e["mask_max_aspect"]))
+    sx, sy, _ = e["slide"]
+    b = e["mask_border"]
+    sheet = m.box(-sx / 2 - b, sx / 2 + b, -sy / 2 - b, sy / 2 + b, 0, 1)
+    for x0, x1, y0, y1 in opens:
+        sheet = sheet.cut(m.box(x0, x1, y0, y1, -1, 2))
+    res.append(Result("máscara: la lámina es una sola pieza (−piezas+1)",
+                      -(len(sheet.Solids()) - 1), 0))
+    for name in ("A", "B"):
+        merged = cq.Workplane("XY")
+        for x0, x1, y0, y1 in pat[name]:
+            merged = merged.union(cq.Workplane("XY").add(m.box(x0, x1, y0, y1, 0, 1)))
+        res.append(Result(f"peine {name}: un solo electrodo conectado (−piezas+1)",
+                          -(len(merged.val().Solids()) - 1), 0))
+    # 2. electrodos y canal
+    W = e["channel_w"]
+    channel = m.slot(e["channel_l"], W, 0, lay["h_channel"])
+    buses = cq.Compound.makeCompound([m.box(*r[:4], 0, 0.02) for r in (pat["A"][-2], pat["B"][-2])])
+    res.append(Result("buses fuera del canal (bajo la junta)", dist(buses, channel), 0.3))
+    fingers = pat["A"][:-2] + pat["B"][:-2]
+    fingers_ok = all(y0 <= -W / 2 and y1 >= W / 2 for x0, x1, y0, y1 in fingers)
+    res.append(Result("cada dedo cruza el canal entero", 1.0 if fingers_ok else 0.0, 1.0))
+    cx, cy, _ = e["cover"]
+    seal = min(cy / 2 - W / 2, cx / 2 - e["channel_l"] / 2)
+    res.append(Result("junta entre canal y borde exterior", seal, e["gasket_seal_min"]))
+    ide0, ide1 = pat["ide_x"]
+    res.append(Result("electrodos dentro del canal en x (margen a los agujeros)",
+                      lay["hole_x"] - e["cover_hole_d"] / 2 - max(abs(ide0), abs(ide1)), 1.0))
+    # 3. apilado
+    frame, base = m.build_frame(p).val(), m.build_base(p).val()
+    chip, cov, gk = m.chip(p), m.cover(p), m.gasket(p)
+    for a_name, a, b_name, b in (("marco", frame, "vidrio superior", cov),
+                                 ("marco", frame, "chip", chip),
+                                 ("base", base, "chip", chip), ("marco", frame, "base", base),
+                                 ("junta", gk, "vidrio superior", cov)):
+        res.append(Result(f"interferencia {a_name}/{b_name} (−mm³)",
+                          -a.intersect(b).Volume(), -1e-3))
+    res.append(Result("marco ↔ chip (no lo toca)", dist(frame, chip),
+                      e["frame_chip_clearance"] - 1e-3))
+    # 4. marco: ventana, conectores, tornillos
+    ff = m.frame_features(p)
+    ports = [k for k in ff if k.startswith("port_")]
+    for k in ports:
+        res += [Result(f"{k} ↔ ventana", dist(ff[k], ff["window"]), dry),
+                Result(f"{k} ↔ tornillos", dist(ff[k], ff["screws"]), dry)]
+    res.append(Result("rosca del conector cabe en el marco",
+                      e["frame_t"] - p.PORTS["thread_depth"], 1.0))
+    res.append(Result("ventana ↔ tornillos", dist(ff["window"], ff["screws"]), dry))
+    o_id, o_cs = e["port_oring"]
+    res.append(Result("O-ring del conector cubre el agujero del vidrio",
+                      o_id / 2 - e["cover_hole_d"] / 2, 0.3))
+    res.append(Result("pads afuera del marco (largo para la pinza)",
+                      sx / 2 - max(lay["frame"][0], pat["pad_x0"]), e["clip_l"]))
+    # 5. materiales contra los disolventes
+    bad = [(s, mat) for s in e["solvents"] for mat in e["wetted_materials"]
+           if mat in p.SOLVENT_ATTACKS.get(s, ())]
+    res.append(Result("materiales mojados compatibles con los disolventes (−incompatibles)",
+                      -len(bad), 0))
+    return res
+
+
 def _box_outside(p, lay):
     """Todo lo que está fuera del cuerpo rectangular de la celda XRD, a lo ancho."""
     from modules.chamber_xrd import body_block
@@ -425,7 +501,7 @@ def _box_outside(p, lay):
 def run(p=P) -> list[Result]:
     return (ring_checks(p) + base_checks(p) + seal_checks(p) + assembly_checks(p)
             + lid_raman_checks(p) + clamp_checks(p) + lid_raman_checks(p, "clamp")
-            + xrd_checks(p) + chladni_checks(p))
+            + xrd_checks(p) + chladni_checks(p) + epd_checks(p))
 
 
 if __name__ == "__main__":

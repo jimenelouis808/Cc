@@ -165,6 +165,75 @@ CHLADNI_LID_PORTS = (
     {"name": "vent", "xy": (3.0, 13.0), "kind": "fitting", "through_d": 2.0},
 )
 
+# EPD / DEP selectivo: chip de vidrio con electrodos interdigitados (sputtering con
+# máscara de sombra) cuyo gap baja por segmentos a lo largo del canal. Plano z = 0 =
+# cara del chip con los electrodos. El canal (a lo largo de x) lo define una junta
+# entre el chip y un vidrio superior perforado; un marco con ventana lo aprieta.
+EPD = {
+    "slide": (75.0, 25.0, 1.0),     # MEDIR: portaobjetos (x, y, espesor)
+    "cover": (48.0, 25.0, 1.0),     # MEDIR: vidrio superior, perforado en los extremos del canal
+    "cover_hole_d": 1.0,            # MEDIR: agujeros del vidrio superior
+    "gasket_t": 0.25,               # MEDIR: junta (PTFE o FFKM): altura del canal sin comprimir
+    "gasket_compression": 0.10,     # fracción; el tope duro del marco la fija
+    "channel_w": 3.0,
+    "channel_l": 42.0,              # extremos redondeados; los agujeros van en los centros
+    "gasket_seal_min": 2.0,         # junta mínima entre el canal y cualquier borde o bus
+    # electrodos interdigitados por segmentos (dedos a lo largo de y, cruzando el canal)
+    "gaps": (0.50, 0.35, 0.25, 0.15, 0.10),   # gap de cada segmento, de la entrada a la salida
+    "segment_l": 4.0,
+    "segment_spacing": 1.0,
+    "finger_w": 0.20,
+    "finger_overlap": 0.5,          # cuánto pasan los dedos bajo la junta a cada lado del canal
+    "bus_w": 1.0,
+    "pad": (10.0, 8.0),             # pads de contacto en el extremo +x (x, y)
+    "pad_gap": 2.0,
+    "clip_l": 8.0,                  # largo de pad que necesita la pinza
+    # máscara de sombra (lámina cortada por láser): límites del proveedor
+    "mask_min_feature": 0.10,       # MEDIR: abertura mínima
+    "mask_min_web": 0.10,           # MEDIR: puente mínimo de lámina entre aberturas
+    "mask_max_aspect": 45.0,        # MEDIR: largo / ancho máximo de un puente sin apoyo
+    "mask_border": 5.0,
+    # soporte
+    "base_t": 5.0,
+    "frame_t": 9.0,                 # ≥ rosca del conector (7) + asiento
+    "frame_side": 6.5,              # franjas del marco fuera del ancho del portaobjetos
+    "frame_chip_clearance": 0.3,    # el marco no toca el portaobjetos (sólo base y vidrio)
+    "window_margin": 2.0,
+    "port_oring": (2.0, 1.0),       # MEDIR: O-ring de cara sobre cada agujero (ID, cs)
+    "screw_x": (-20.0, 0.0, 20.0),
+    # operación (para la estimación de sim/epd_dep.py)
+    "flow_ul_min": 10.0,
+    "solvents": ("etanol", "IPA", "acetona"),
+    "wetted_materials": ("vidrio", "Pt/Au", "PTFE", "FFKM", "PEEK"),
+}
+
+# Estimación de captura DEP (sim/epd_dep.py): orden de magnitud, no FEM.
+EPD_SIM = {
+    "medium": "etanol",
+    "viscosity": 1.08e-3,     # Pa s (etanol, 25 °C)
+    "eps_r": 24.5,
+    "rho_medium": 789.0,      # kg/m³
+    "v_rms": 10.0,            # MEDIR: tensión AC entre peines
+    "re_k": 1.0,              # MEDIR: Re[K] del factor de Clausius-Mossotti (CNT metálico ≫ 1)
+    "particle_l_um": 2.0,     # largo de los CNT
+    "particle_d_nm": (5.0, 10.0, 20.0, 40.0),
+    "rho_particle": 1300.0,
+}
+
+# Puertos del marco EPD: verticales, sobre los agujeros del vidrio superior.
+EPD_PORTS = (
+    {"name": "inlet", "x_sign": -1, "kind": "fitting", "through_d": 1.0},
+    {"name": "outlet", "x_sign": 1, "kind": "fitting", "through_d": 1.0},
+)
+
+# Materiales que un disolvente ataca (no deben tocar el líquido)
+SOLVENT_ATTACKS = {
+    "acetona": ("PMMA", "ABS", "PC", "PS", "FKM"),
+    "etanol": ("PMMA",),
+    "IPA": ("PMMA",),
+    "KOH": ("PLA", "PETG", "PC", "Kapton"),
+}
+
 # --- Celda ------------------------------------------------------------------
 CELL = {
     "thin_gap_raman": 0.3,   # capa de electrolito entre WE y ventana (Raman), nominal

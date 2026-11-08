@@ -138,6 +138,10 @@ Electrolitos objetivo: 0.5 M H2SO4 y 3 M KOH. EPD: etanol / IPA (y posiblemente 
   depositados por sputtering con máscara de sombra sobre vidrio.
 - Medio de baja conductividad para DEP. Si es EPD DC en agua: considerar electrólisis (>1.23 V).
 - Simulación: electrostática + trazado de partículas (arrastre de Stokes + EP + DEP + sedimentación).
+- Implementado (`modules/epd.py`, `sim/epd_dep.py`): IDE por segmentos de gap constante, buses
+  bajo la junta, pads fuera del marco; máscara exportada a DXF con checks de esténcil.
+- Captura ∝ V²·Re[K]/g³: con gaps de máscara de sombra (≥ 100 µm) la DEP de CNT individuales
+  necesita Re[K] alto (metálicos) o kV. Para diámetros, gaps de µm (litografía).
 
 ### Módulo decoración con NPs
 - Reutiliza base + anillo-cámara; tapa con puerto para agitación y purga de N2.

@@ -279,3 +279,56 @@ def test_wet_modes_are_below_dry_ones():
     from sim.chladni_estimate import mode_table
     for row in mode_table():
         assert row["f_liquido_hz"] < row["f_seco_hz"]
+
+
+# --- celda EPD / DEP -------------------------------------------------------------
+
+def test_epd_parts_valid():
+    from modules import epd
+    for part in (epd.build_base(), epd.build_frame()):
+        s = part.val()
+        assert s.isValid() and len(s.Solids()) == 1
+
+
+def test_epd_checks_pass():
+    bad = [str(r) for r in walls.epd_checks() if not r.ok]
+    assert not bad, "\n".join(bad)
+
+
+def test_epd_gaps_decrease_downstream_and_fingers_alternate():
+    from modules import epd
+    pat = epd.ide_rects()
+    gaps = [s["gap"] for s in pat["segments"]]
+    assert gaps == sorted(gaps, reverse=True)
+    for seg in pat["segments"]:
+        xs = seg["fingers"]
+        pitch = P.EPD["finger_w"] + seg["gap"]
+        assert all(b - a == pytest.approx(pitch) for a, b in zip(xs, xs[1:]))
+
+
+def test_epd_mask_is_written(tmp_path):
+    from modules import epd
+    path = epd.mask_dxf(path=str(tmp_path / "m.dxf"))
+    assert os.path.getsize(path) > 1000
+
+
+def test_epd_mask_check_catches_too_fine_a_gap():
+    p = variant(EPD={"gaps": (0.5, 0.05)})
+    bad = [r.name for r in walls.epd_checks(p) if not r.ok]
+    assert "máscara: puente mínimo" in bad
+
+
+def test_epd_solvent_check_catches_pmma():
+    p = variant(EPD={"wetted_materials": ("vidrio", "PMMA")})
+    bad = [r.name for r in walls.epd_checks(p) if not r.ok]
+    assert any("disolventes" in n for n in bad)
+
+
+def test_dep_capture_scales_as_v2_over_g3():
+    from sim.epd_dep import capture_table
+    base = capture_table()
+    hi = capture_table(variant(EPD_SIM={"v_rms": 2 * P.EPD_SIM["v_rms"]}))
+    d = P.EPD_SIM["particle_d_nm"][0]
+    assert hi[0]["C"][d] == pytest.approx(4 * base[0]["C"][d], rel=1e-9)
+    g0, g1 = base[0]["gap_um"], base[-1]["gap_um"]
+    assert base[-1]["C"][d] / base[0]["C"][d] == pytest.approx((g0 / g1) ** 3, rel=1e-9)

@@ -16,7 +16,9 @@ python modules/chamber_xrd.py              # → out/chamber_xrd.step / .stl (ce
 python modules/lid_xrd.py                  # → out/lid_xrd + out/xrd_pocket_cover
 python modules/chladni.py                  # → out/chladni_{wall,bottom,lid,plate,ce}
 python sim/chladni_estimate.py             # modos de la placa y acoplamiento del piezo
-python checks/walls.py                     # paredes, holguras, sellos e interferencias (231 checks)
+python modules/epd.py                      # → out/epd_{base,frame,gasket,cover} + out/epd_mask.dxf
+python sim/epd_dep.py                      # captura DEP por segmento (estimación)
+python checks/walls.py                     # paredes, holguras, sellos e interferencias (256 checks)
 python checks/raman_clearance.py           # objetivo y cono de luz vs cada pieza, gap 0.1–0.5
 python checks/xrd_clearance.py             # huella y altura máxima permitida
 python sim/chladni_estimate.py             # modos de la placa-WE
@@ -32,7 +34,8 @@ python -m pytest -q
 | 3b | `modules/chamber_clamp.py` (WE en pinza de Pt) | listo; falta medir el portaelectrodo |
 | 4 | `modules/chamber_xrd.py` + `modules/lid_xrd.py` + `checks/xrd_clearance.py` | listos; falta medir el haz y la platina |
 | 5a | `modules/chladni.py` (electrodeposición acústica) | lista; falta medir piezo y placa |
-| 5b | EPD/DEP, decoración | pendiente |
+| 5b | `modules/epd.py` (EPD / DEP selectivo) | lista; ver el aviso sobre el gap |
+| 5c | Decoración con NPs | pendiente |
 | 6 | Simulación (gmsh → FEniCSx / Elmer) | pendiente |
 
 ## Dos formas de montar el WE para Raman
@@ -154,3 +157,26 @@ impedancia del piezo con la celda llena.
 **Material:** pared y tapa de PEEK o PTFE maquinado; marco inferior de aluminio con Kapton en la
 cara de apoyo (la placa es el WE y no debe tocar metal a tierra) o de PEEK. El empotramiento debe
 ser rígido: un marco impreso amortigua y corre los modos.
+
+## Celda EPD / DEP selectiva: `epd.py`
+| | |
+|---|---|
+| Chip | portaobjetos 75 × 25 × 1 mm; electrodos por sputtering con máscara de sombra (`out/epd_mask.dxf`) |
+| Electrodos | dos peines interdigitados; 5 segmentos de 4 mm con gap 500, 350, 250, 150 y 100 µm de la entrada a la salida; dedos de 200 µm |
+| Canal | 42 × 3 mm, 225 µm de alto (junta de 250 µm comprimida 10 % por un tope duro), 28 µL |
+| Apilado | base con ventana · chip · junta (PTFE/FFKM) · vidrio superior perforado · marco con ventana de 27.8 × 7 mm |
+| Flujo | entrada y salida 1/4-28 en el marco, con O-ring de cara sobre los agujeros del vidrio |
+| Contactos | dos pads de 10 × 8 mm en el extremo +x, fuera del marco, para las pinzas |
+| Disolventes | etanol, IPA, acetona: lo mojado es vidrio, Pt/Au, PTFE/FFKM y PEEK (el check rechaza PMMA, ABS, PC, PS y FKM con acetona) |
+
+**La máscara pasa sus checks**: es una sola pieza, cada peine es un solo electrodo conectado, la
+abertura mínima es 200 µm, el puente mínimo 100 µm y la esbeltez del puente más fino 40 (límite
+del proveedor: 45, por confirmar).
+
+**Aviso sobre el gap (`sim/epd_dep.py`).** El número de captura de un CNT escala como
+V²·Re[K]/g³. Con los gaps que permite una máscara de sombra (≥ 100 µm), 10 µL/min en etanol y
+Re[K] = 1, capturar un CNT de 10 nm × 2 µm pide ~1.7 kV rms en el segmento de 100 µm. Con
+Re[K] ≈ 10³–10⁴ (CNT metálicos) baja a ~17–54 V, y cada factor 10 menos de caudal la divide entre
+~3. Los semiconductores no llegan. La separación por DEP de CNT individuales que se reporta usa
+gaps de ~1 µm (litografía): el soporte sirve igual con un chip litografiado, y esa es una
+decisión para la fase de dimensiones. Para EPD en DC el chip sirve tal cual.
