@@ -1,0 +1,80 @@
+{
+  "esquema": "carbonforge-isoterma/1",
+  "nombre": "C1440",
+  "temperatura_k": 77.0,
+  "muestreo": {
+    "equilibrado": 1500000,
+    "produccion": 1500000,
+    "semilla": 0,
+    "corte_a": 12.0
+  },
+  "porosidad": {
+    "probe_radius": 1.445,
+    "void_fraction": 0.26649,
+    "void_fraction_error": 0.0009886179239220782,
+    "pore_volume_cm3_g": 0.25032746250357657,
+    "helium_void_fraction": 0.7207144745676538,
+    "accessible_area_m2_g": 1717.3879703818006,
+    "largest_included_sphere": 11.446640994102008,
+    "largest_free_sphere": 6.723390758769441,
+    "cell_volume_a3": 26978.53339669638,
+    "framework_mass_g": 2.872041801958863e-20,
+    "samples": 200000,
+    "warnings": []
+  },
+  "puntos": [
+    {
+      "presion_mpa": 1.0,
+      "n_medio": 290.88985333333335,
+      "n_error": 0.8578493748870345,
+      "densidad_absoluta_g_cm3": 0.03609308543449459,
+      "densidad_exceso_g_cm3": 0.0337398167006685,
+      "densidad_gas_g_cm3": 0.0032651886660633287,
+      "wt_pct_total": 3.2792260315201993,
+      "wt_pct_por_carbono": 3.3904050773920207,
+      "aceptacion": {
+        "insert": 0.01949338371270974,
+        "delete": 0.01924495775899955,
+        "move": 0.1757245996232572
+      },
+      "segundos": 825.0515515070001,
+      "avisos": []
+    },
+    {
+      "presion_mpa": 3.8,
+      "n_medio": 327.350838,
+      "n_error": 0.6372201248137916,
+      "densidad_absoluta_g_cm3": 0.040617098285131194,
+      "densidad_exceso_g_cm3": 0.030836355105451616,
+      "densidad_gas_g_cm3": 0.013570898774506932,
+      "wt_pct_total": 3.6751479306276478,
+      "wt_pct_por_carbono": 3.8153683620306382,
+      "aceptacion": {
+        "insert": 0.008845024349279607,
+        "delete": 0.00853629602637272,
+        "move": 0.14645135861355593
+      },
+      "segundos": 890.7259869320001,
+      "avisos": []
+    },
+    {
+      "presion_mpa": 10.0,
+      "n_medio": 344.28073666666666,
+      "n_error": 0.9952317322747838,
+      "densidad_absoluta_g_cm3": 0.0427177294070876,
+      "densidad_exceso_g_cm3": 0.016358347880466636,
+      "densidad_gas_g_cm3": 0.036573958837768004,
+      "wt_pct_total": 3.8578861518056193,
+      "wt_pct_por_carbono": 4.012691210323408,
+      "aceptacion": {
+        "insert": 0.0057455712469806795,
+        "delete": 0.0054349186263841325,
+        "move": 0.13371754523209772
+      },
+      "segundos": 912.5351539730004,
+      "avisos": [
+        "the loading drifted by -9.0 molecules from the first production block to the last, so equilibration had not finished when averaging began."
+      ]
+    }
+  ]
+}

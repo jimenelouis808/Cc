@@ -1,0 +1,20 @@
+estructura   P (MPa)  wt% total   wt% /C     rho_o        N
+primitive        1.0       4.54     4.76   0.02833      274
+primitive        3.8       6.07     6.46   0.03848      372
+primitive       10.0       6.98     7.51   0.04473      433
+diamond          1.0       3.28     3.39   0.03609      291
+diamond          3.8       3.68     3.82   0.04062      327
+diamond         10.0       3.86     4.01   0.04272      344
+            aviso: the loading drifted by -9.0 molecules from the first production block to the last, so equilibration had not finished when averaging began.
+gyroid           1.0       4.76     5.00   0.02924      520
+gyroid           3.8       6.37     6.81   0.03980      707
+gyroid          10.0       7.29     7.87   0.04599      817
+
+Contra la regla de Chahine (~1 wt% por 500 m2/g a 77 K):
+estructura     area  esperado  a 3.8 MPa   razon
+primitive      2543       5.1       6.07    1.19
+diamond        1717       3.4       3.68    1.07
+gyroid         2534       5.1       6.37    1.26
+
+Kowalczyk cita ~3.0 wt% a 3.8 MPa y 77 K para las tres, leido de una figura.
+Una schwarzita 'primitive' es una familia, no un fichero: el area por gramo depende del tamano de celda y del radio de tubo, y las nuestras no tienen por que ser las suyas. Esto es una comprobacion de plausibilidad de clase, no una validacion.
