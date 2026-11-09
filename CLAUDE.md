@@ -41,9 +41,11 @@ Electrolitos objetivo: 0.5 M H2SO4 y 3 M KOH. EPD: etanol / IPA (y posiblemente 
 
 ## Electrodos (ver `params.py`, valores marcados MEDIR deben confirmarse con calibrador)
 
-- RE: Ag/AgCl sat. KCl (Camray). En KOH considerar Hg/HgO → puerto de RE con adaptador intercambiable.
-- CE: alambre de Pt (en HER ácida preferir barra de grafito: el Pt se disuelve y redeposita en el WE).
-- WE A: glassy carbon Ø3 mm (entra **por abajo**, cara hacia arriba, sello radial).
+- RE: Ag/AgCl sat. KCl (Gamry). En KOH considerar Hg/HgO → puerto de RE con adaptador intercambiable.
+- CE: alambre de Pt Ø0.406 mm × 15 cm, Gamry 935-00056 (en HER ácida preferir barra de grafito: el Pt se disuelve y redeposita en el WE).
+- WE A: glassy carbon Ø3 o Ø5 mm, convencional (entra **por abajo**, cara hacia arriba, sello radial).
+- Portaelectrodos: Corrtest CS945 (3.2.01.009) y Corrtest double knob (3.2.01.366, cabeza en bloque
+  de ~11 × 27 mm que no pasa por un conector: va dentro de la celda o vertical desde la tapa).
 - WE B: sustrato plano sellado con O-ring (área = ID del O-ring), contacto con lámina por debajo
   (`base_flat` + `chamber_ring`).
 - WE C: tira sujeta con portaelectrodo de pinza de Pt que entra por un puerto lateral, sumergida,

@@ -33,10 +33,11 @@ RAMAN = {
 
 # --- Electrodos -------------------------------------------------------------
 ELECTRODES = {
-    "RE_body_d": 6.0,        # MEDIR: diámetro del cuerpo Ag/AgCl Camray
-    "CE_wire_d": 0.5,        # MEDIR: alambre de Pt
+    "RE_body_d": 6.0,        # MEDIR: diámetro del cuerpo de vidrio, Ag/AgCl Gamry
+    "CE_wire_d": 0.406,      # alambre de Pt Gamry 935-00056 (0.406 mm × 15 cm), de la etiqueta
     "CE_sleeve_d": 3.0,      # funda (PTFE/vidrio) por donde pasa el alambre
-    "GC_disk_d": 3.0,        # disco glassy carbon
+    "GC_disk_d": 3.0,        # disco glassy carbon (hay de 3 y de 5 mm)
+    "GC_disk_options": (3.0, 5.0),
     "GC_body_d": 6.0,        # MEDIR: diámetro exterior del cuerpo del electrodo GC
 }
 
@@ -51,6 +52,12 @@ WE_FLAT = {
 # WE C: muestra en pinza de Pt (como la celda de PTFE de docs/referencias.md, R1).
 # El portaelectrodo entra por un puerto lateral 1/4-28; la muestra (tira) queda
 # horizontal, cara arriba, apoyada en un pedestal que fija su cara en z = 0.
+# Portaelectrodos disponibles (foto del usuario, 2026-11-09):
+#   - Corrtest CS945 Electrode clamp, 3.2.01.009 (compacto, en tubo, conector dorado)
+#   - Corrtest Double knob platinum electrode clamp, 3.2.01.366: cuerpo de PTFE y una
+#     cabeza en bloque con dos perillas. Estimado de la foto (±20 %): cuerpo Ø ~6 mm,
+#     cabeza ~11 × 27 mm, ~10 mm de alto con las perillas. NO pasa por un conector 1/4-28.
+# Los valores de abajo describen una pinza compacta (supuesta la CS945) y siguen siendo MEDIR.
 WE_CLAMP = {
     "rod_d": 4.0,            # MEDIR: Ø del cuerpo del portaelectrodo (pasa por el conector)
     "clip_w": 3.5,           # MEDIR: ancho de la pinza; cerrada debe pasar por el puerto
