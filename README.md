@@ -36,6 +36,7 @@ python -m pytest -q
 | 5a | `modules/chladni.py` (electrodeposición acústica) | lista; falta medir piezo y placa |
 | 5b | `modules/epd.py` (EPD / DEP selectivo) | lista; ver el aviso sobre el gap |
 | 5c | Decoración con NPs | pendiente |
+| 5d | Base para glassy carbon desde abajo (Ø7 y Ø10) | pendiente |
 | 6 | Simulación (gmsh → FEniCSx / Elmer) | pendiente |
 
 ## Electrodos (medidos el 2026-11-10)
@@ -66,7 +67,7 @@ La tapa Raman es la misma; cambia lo que va debajo.
 
 | | Muestra plana sellada (`base_flat` + `chamber_ring`) | Pinza de Pt (`chamber_clamp`) |
 |---|---|---|
-| Cómo se sujeta | O-ring sobre la muestra; contacto por debajo con lámina | Portaelectrodo con pinza por la cara −x (1/4-28), muestra sobre un pedestal |
+| Cómo se sujeta | O-ring sobre la muestra; contacto por debajo con lámina | Pinza CS945 por la cara −x (O-ring radial Ø6), muestra sobre un pedestal |
 | Área | Definida: Ø9.5 = 70.9 mm² (solo cara superior) | Toda la tira fuera del agarre: 72 mm² arriba, 170 mm² en total; enmascarar reverso y bordes si se necesita un área definida |
 | Pt en el electrolito | No | Sí: la pinza se moja (suma su propia corriente; en HER el Pt puede disolverse y redepositarse en el WE) |
 | Piezas | 2 + tapa | 1 + tapa |

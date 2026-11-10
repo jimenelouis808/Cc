@@ -39,16 +39,27 @@ Electrolitos objetivo: 0.5 M H2SO4 y 3 M KOH. EPD: etanol / IPA (y posiblemente 
 | Prohibidos con KOH | PLA, PETG, PC, resinas SLA estándar | Hidrólisis / lixiviación |
 | Prohibidos con acetona (EPD) | PMMA, ABS | |
 
-## Electrodos (ver `params.py`, valores marcados MEDIR deben confirmarse con calibrador)
+## Electrodos (medidos con calibrador el 2026-11-10; ver `params.ELECTRODES` y `params.CLAMPS`)
 
-- RE: Ag/AgCl sat. KCl (Gamry). En KOH considerar Hg/HgO → puerto de RE con adaptador intercambiable.
-- CE: alambre de Pt Ø0.406 mm × 15 cm, Gamry 935-00056 (en HER ácida preferir barra de grafito: el Pt se disuelve y redeposita en el WE).
-- WE A: glassy carbon Ø3 o Ø5 mm, convencional (entra **por abajo**, cara hacia arriba, sello radial).
-- Portaelectrodos: Corrtest CS945 (3.2.01.009) y Corrtest double knob (3.2.01.366, cabeza en bloque
-  de ~11 × 27 mm que no pasa por un conector: va dentro de la celda o vertical desde la tapa).
+| Electrodo | Medidas | Cómo entra a las celdas |
+|---|---|---|
+| RE Ag/AgCl sat. KCl, Gamry | cuerpo de vidrio Ø9, punta Ø4 × 20 mm, 75 mm total | O-ring radial sobre el cuerpo Ø9; en Chladni, sobre la punta Ø4 con el hombro en un resalte |
+| CE: electrodo de Pt | cuerpo Ø6, alambre de 35 mm | O-ring radial Ø6 |
+| CE: alambre de Pt, Gamry 935-00056 | Ø0.406 × 150 mm | CE plano de Chladni (espiral), con funda y conector |
+| WE: pinza Corrtest CS945 (3.2.01.009) | varilla PEEK Ø6 × 60, ranura en la punta, tornillo transversal; 10–11 mm de alto con el tornillo | O-ring radial Ø6; se pasa sin el tornillo, se monta con el tornillo hacia abajo |
+| WE: pinza Corrtest double knob (3.2.01.366) | cuerpo Ø6; cabeza 18 (ancho) × 21 (largo) × 15 (alto con perillas) | no pasa por un puerto: dentro con la celda abierta, o afuera en seco |
+| WE A: glassy carbon Gamry 932-00022 | disco 3 mm, cuerpo Ø7 | por abajo, cara arriba, sello radial — **pendiente** |
+| WE A: glassy carbon Corrtest CS920 | disco 5 mm, cuerpo Ø10 × 60 | por abajo, cara arriba, sello radial — **pendiente** |
+
+- Por medir: ranura de la CS945 (profundidad `grip_l`, ancho `max_sample_t`); en la double knob,
+  altura de la muestra dentro de la cabeza (`head_up`/`head_down`) y agarre (`grip_l`).
+- En KOH considerar Hg/HgO → el puerto de RE debe aceptar otro cuerpo (cambiar `rod_d`).
+- En HER ácida preferir barra de grafito como CE: el Pt se disuelve y redeposita en el WE.
+- La CS945 cabe en todas las celdas. La double knob no cabe en la cámara Raman con pinza (choca con
+  el émbolo); en XRD cabe con `WE_XRD["clip_depth"]` = 12; en Chladni y EPD va afuera, en seco.
 - WE B: sustrato plano sellado con O-ring (área = ID del O-ring), contacto con lámina por debajo
   (`base_flat` + `chamber_ring`).
-- WE C: tira sujeta con portaelectrodo de pinza de Pt que entra por un puerto lateral, sumergida,
+- WE C: tira sujeta con la pinza CS945 por un puerto lateral (O-ring radial Ø6), sumergida,
   sobre un pedestal que fija su cara en z = 0 (`chamber_clamp`, como la celda R1). La pinza se moja.
 
 ## Arquitectura modular ("sándwich")
@@ -89,7 +100,7 @@ Electrolitos objetivo: 0.5 M H2SO4 y 3 M KOH. EPD: etanol / IPA (y posiblemente 
   película sellada con cordón bajo un marco que se bisela sólo dentro del corredor del haz
   (|y| ≤ `beam_length_y`/2 + margen). Fuera del corredor la altura no importa: tornillos,
   pinza y marco grueso van ahí. Puertos sólo en ±y (el cuerpo se niega a construir uno en ±x).
-- WE con pinza de Pt en XRD: la pinza toma una lengüeta 4.5 mm bajo la muestra (decisión del
+- WE con pinza de Pt en XRD: la pinza toma una lengüeta 6 mm bajo la muestra (12 con la double knob) (decisión del
   usuario). Con la pinza a la altura de la muestra el sello de la película tendría que subir
   sobre el portaelectrodo.
 - Verificación del haz: `forbidden_region` + `invasion` en `checks/xrd_clearance.py`.
@@ -165,6 +176,8 @@ Electrolitos objetivo: 0.5 M H2SO4 y 3 M KOH. EPD: etanol / IPA (y posiblemente 
 3. `modules/lid_raman.py` → prueba con agua antes de electrolito.
 4. `modules/lid_xrd.py` + `checks/xrd_clearance.py`.
 5. Chladni, EPD/DEP, decoración.
+5b. **Pendiente:** base para los GC desde abajo (Gamry Ø7 y Corrtest Ø10), cara en z = 0, sello
+    radial; compatible con `chamber_ring` y `lid_raman`.
 6. Simulación: STEP → gmsh → FEniCSx o Elmer
    - modos propios de la placa Chladni (seca y con carga de fluido)
    - distribución de corriente secundaria (número de Wagner) en celdas de deposición

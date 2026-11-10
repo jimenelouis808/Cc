@@ -57,7 +57,8 @@ describen. Completar la columna de cita con el DOI de cada una.
   la columna de electrolito; dimensionar el anillo tensor con eso.
 
 ## Consecuencias para este proyecto
-1. Puertos con una rosca estándar (`PORTS`), no agujeros a la medida de cada electrodo.
+1. Puertos estandarizados: conector 1/4-28 para el flujo y O-ring radial sobre el cuerpo de cada
+   electrodo (los cuerpos medidos son de Ø6 y Ø9, más gruesos que un conector 1/4-28).
 2. Contacto del WE anular, por abajo, fuera del área mojada, con pines guía (base plana).
 3. Tapa Raman con rebaje cónico; nada de tornillos dentro del cono del objetivo.
 4. XRD: variante "WE como pared" (R3/R5) como primera opción para catalizadores sobre papel de carbón

@@ -59,7 +59,7 @@ WE_FLAT = {
 }
 
 # WE C: muestra en pinza de Pt (como la celda de PTFE de docs/referencias.md, R1).
-# El portaelectrodo entra por un puerto lateral 1/4-28; la muestra (tira) queda
+# La pinza CS945 entra por un puerto lateral con O-ring radial Ø6; la muestra (tira) queda
 # horizontal, cara arriba, apoyada en un pedestal que fija su cara en z = 0.
 # Portaelectrodos (medidos, 2026-11-10). La cabeza se describe como un bloque:
 #   head_l × head_w, y head_up / head_down sobre y bajo el plano medio de la muestra
@@ -368,7 +368,8 @@ ORING = {
 
 # --- Puertos ----------------------------------------------------------------
 # Las referencias (docs/referencias.md) usan conectores HPLC de fondo plano 1/4-28 UNF.
-# Estandarizar todos los puertos en una misma rosca permite intercambiar RE/CE/flujo.
+# Se usan sólo para el flujo. Los electrodos entran por O-ring radial sobre su propio
+# cuerpo (Ø9 la RE, Ø6 el CE y la CS945): cambiar de electrodo = cambiar `rod_d`.
 PORTS = {
     "thread": "1/4-28 UNF",
     "tap_drill_d": 5.5,      # broca para machuelo 1/4-28 (PTFE/PEEK maquinado)
