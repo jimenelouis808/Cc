@@ -37,11 +37,13 @@ def _nose_r(p) -> float:
 def layout(p=P) -> dict:
     """Posiciones (x) de pinza y muestra, y alturas del piso y del fondo."""
     c = p.WE_CLAMP
-    x_jaw = -(_nose_r(p) + c["clip_clearance"])          # borde de la pinza hacia el eje
-    x0 = x_jaw - c["jaw_l"]                              # extremo de la muestra
-    z_low = min(-c["sample_t"] - c["jaw_t"], p.CLAMP_PORTS[0]["z"] - c["rod_d"] / 2)
+    x_jaw = -(_nose_r(p) + c["clip_clearance"])          # cara frontal de la cabeza
+    x0 = x_jaw - c["grip_l"]                             # extremo de la muestra, dentro
+    z_s = -c["sample_t"] / 2                             # plano medio = eje de la pinza
+    z_low = z_s - max(c["head_down"], c["rod_d"] / 2)
     z_floor = z_low - c["floor_clearance"]
-    return {"x_jaw": x_jaw, "x0": x0, "x1": x0 + c["sample_l"],
+    return {"x_jaw": x_jaw, "x_head0": x_jaw - c["head_l"], "x0": x0,
+            "x1": x0 + c["sample_l"], "z_s": z_s,
             "z_floor": z_floor, "z_bottom": z_floor - p.CELL["min_wall"]}
 
 
@@ -52,16 +54,19 @@ def sample(p=P) -> cq.Solid:
 
 
 def clamp(p=P) -> cq.Shape:
-    """Envolvente del portaelectrodo dentro de la celda: pinza + cuerpo hasta la cara −x."""
+    """Envolvente del portaelectrodo dentro de la celda: cabeza + cuerpo hasta la cara −x."""
     c, lay = p.WE_CLAMP, layout(p)
-    zc = p.CLAMP_PORTS[0]["z"]
-    zj0, zj1 = -c["sample_t"] - c["jaw_t"], c["jaw_t"]
-    jaw = cq.Solid.makeBox(c["jaw_l"], c["clip_w"], zj1 - zj0,
-                           cq.Vector(lay["x0"], -c["clip_w"] / 2, zj0))
+    zc = lay["z_s"]
+    head = cq.Solid.makeBox(c["head_l"], c["head_w"], c["head_up"] + c["head_down"],
+                            cq.Vector(lay["x_head0"], -c["head_w"] / 2, zc - c["head_down"]))
     x_face = -p.CELL["body_w"] / 2 - 2
-    rod = cq.Solid.makeCylinder(c["rod_d"] / 2, lay["x0"] - x_face, cq.Vector(x_face, 0, zc),
-                                cq.Vector(1, 0, 0))
-    return jaw.fuse(rod).clean()
+    if lay["x_head0"] <= x_face:
+        raise ValueError(
+            f"la cabeza de la pinza {c.get('model', '')} ({c['head_l']} mm) no cabe entre la "
+            f"nariz de la tapa y la cara −x de la cámara")
+    rod = cq.Solid.makeCylinder(c["rod_d"] / 2, lay["x_head0"] - x_face,
+                                cq.Vector(x_face, 0, zc), cq.Vector(1, 0, 0))
+    return head.fuse(rod).clean()
 
 
 def pedestal(p=P) -> cq.Solid | None:
@@ -99,7 +104,7 @@ def build(p=P) -> cq.Workplane:
 
 def summary(p=P) -> dict:
     c, lay = p.WE_CLAMP, layout(p)
-    free = c["sample_l"] - c["jaw_l"]
+    free = c["sample_l"] - c["grip_l"]
     one_face = c["sample_w"] * free
     wet = 2 * one_face + c["sample_t"] * (2 * free + c["sample_w"])
     return {

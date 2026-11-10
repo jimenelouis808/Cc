@@ -18,7 +18,7 @@ python modules/chladni.py                  # → out/chladni_{wall,bottom,lid,pl
 python sim/chladni_estimate.py             # modos de la placa y acoplamiento del piezo
 python modules/epd.py                      # → out/epd_{base,frame,gasket,cover} + out/epd_mask.dxf
 python sim/epd_dep.py                      # captura DEP por segmento (estimación)
-python checks/walls.py                     # paredes, holguras, sellos e interferencias (256 checks)
+python checks/walls.py                     # paredes, holguras, sellos e interferencias (259 checks)
 python checks/raman_clearance.py           # objetivo y cono de luz vs cada pieza, gap 0.1–0.5
 python checks/xrd_clearance.py             # huella y altura máxima permitida
 python sim/chladni_estimate.py             # modos de la placa-WE
@@ -38,6 +38,29 @@ python -m pytest -q
 | 5c | Decoración con NPs | pendiente |
 | 6 | Simulación (gmsh → FEniCSx / Elmer) | pendiente |
 
+## Electrodos (medidos el 2026-11-10)
+| Electrodo | Medidas | Cómo entra |
+|---|---|---|
+| RE Ag/AgCl Gamry | cuerpo Ø9, punta Ø4 × 20 mm, 75 mm en total | O-ring radial sobre el cuerpo Ø9 (laterales); en Chladni, sobre la punta Ø4, con el hombro apoyado en un resalte de la tapa |
+| CE: electrodo de Pt | cuerpo Ø6, alambre de 35 mm | O-ring radial Ø6 |
+| CE: alambre de Pt Gamry 935-00056 | Ø0.406 × 150 mm | espiral plana para el CE paralelo de Chladni, con funda y conector |
+| WE: pinza Corrtest CS945 | varilla PEEK Ø6 × 60, 10–11 mm de alto con el tornillo | O-ring radial Ø6; se pasa sin el tornillo y se monta con el tornillo hacia abajo |
+| WE: pinza Corrtest double knob | cuerpo Ø6; cabeza 18 × 21 × 15 mm | no pasa por un puerto: va dentro con la celda abierta, o afuera en seco |
+| WE: glassy carbon Gamry 932-00022 | disco 3 mm, cuerpo Ø7 | base desde abajo (pendiente) |
+| WE: glassy carbon Corrtest CS920 | disco 5 mm, cuerpo Ø10 × 60 | base desde abajo (pendiente) |
+
+**Qué pinza va en qué celda** (lo verifica `checks/walls.py`):
+
+| Celda | CS945 | Double knob |
+|---|---|---|
+| Raman con pinza (`chamber_clamp`) | sí | no: su cabeza choca con el émbolo de la tapa |
+| XRD (`chamber_xrd`) | sí, eje a 6 mm bajo la muestra | sí, con `clip_depth` = 12 (cuerpo 81.9 × 20 mm) |
+| Chladni (lengüeta afuera, en seco) | sí | sí |
+| EPD (pads afuera, en seco) | sí | sí |
+
+Por medir todavía: profundidad y ancho de la ranura de la CS945, y en la double knob, a qué
+altura queda la muestra dentro de la cabeza (`head_up` / `head_down`) y cuánto entra (`grip_l`).
+
 ## Dos formas de montar el WE para Raman
 La tapa Raman es la misma; cambia lo que va debajo.
 
@@ -51,31 +74,30 @@ La tapa Raman es la misma; cambia lo que va debajo.
 ### Electrodos en la cámara para pinza
 | Electrodo | Cara | Altura del eje | Sello |
 |---|---|---|---|
-| WE (portaelectrodo con pinza) | −x | z = −0.5 (plano medio de la muestra) | conector 1/4-28 sobre el cuerpo Ø4 |
-| RE Ag/AgCl | −y | z = 7 | vástago Ø6 con O-ring radial |
-| CE (Pt o grafito) | +y, a 6 mm del centro | z = 6 | conector 1/4-28 |
-| Entrada de electrolito | +y, a 6 mm del centro, del otro lado | z = 6 | conector 1/4-28 |
+| WE (pinza CS945) | −x | z = −0.5 (plano medio de la muestra) | O-ring radial sobre el cuerpo Ø6 |
+| RE Ag/AgCl Gamry | −y | z = 7.8 | O-ring radial sobre el cuerpo Ø9 |
+| CE (electrodo de Pt Ø6) | +y, a 6 mm del centro | z = 6.5 | O-ring radial sobre el cuerpo Ø6 |
+| Entrada de electrolito | +y, a 6 mm del centro, del otro lado | z = 6.5 | conector 1/4-28 |
 | Salida | +x | z = 9 | conector 1/4-28 |
 
-Montaje: pasar el portaelectrodo desde afuera (la pinza cerrada debe caber por el puerto, lo
-verifica `checks/walls.py`), poner la tira en la pinza desde arriba con el pozo abierto, cerrar con
-la tapa. **Medir el portaelectrodo** (`MEDIR` en `params.WE_CLAMP`): Ø del cuerpo, ancho de la pinza,
-espesor y largo de las mandíbulas, espesor máximo de muestra.
+Montaje: quitar el tornillo de la CS945, pasar la varilla desde afuera por su puerto, poner la
+tira en la ranura desde arriba con el pozo abierto, poner el tornillo (hacia abajo) y cerrar con
+la tapa. Falta medir la profundidad y el ancho de la ranura (`grip_l`, `max_sample_t`).
 
 ## Ensamble Raman con muestra sellada: base + anillo + tapa (valores por defecto)
 | | |
 |---|---|
-| Huella | 54 × 54 mm; base 6 mm, anillo 13 mm, placa de tapa 5 mm (sobre lainas) |
+| Huella | 54 × 54 mm; base 6 mm, anillo 15 mm (pozo Ø32), placa de tapa 5 mm (sobre lainas) |
 | Área expuesta del WE | Ø9.5 mm = 70.9 mm² (ID del O-ring sobre la muestra) |
 | WE rehundido | 2.75 mm en el piso del anillo |
 | O-ring sobre la muestra | 9.5 × 1.0 EPDM; tope duro → compresión fija (25 %) |
 | Capa delgada | gap 0.3 mm nominal, 0.1–0.5 mm con lainas DIN 988 3×6 de 0–0.4 mm |
 | Ventana | Ø6 × 0.5 (cuarzo en ácido, zafiro en KOH), pegada al ras en la punta de la nariz |
 | Nariz del émbolo | Ø9.0 en el agujero de Ø9.5; pared ≥ 2 mm alrededor del cono de luz de NA 0.5 |
-| O-ring de la tapa | 33 × 1.5 EPDM; compresión 12–38 % en todo el recorrido de lainas |
-| Tornillos | anillo → base: 4 × M3×14 + tuerca; tapa → anillo: 4 × M3×6 en insertos (engrane ≥ 3.6 mm) |
+| O-ring de la tapa | 35 × 1.5 EPDM; compresión 12–38 % en todo el recorrido de lainas |
+| Tornillos | anillo → base: 4 × M3×16 + tuerca; tapa → anillo: 4 × M3×6 en insertos (engrane ≥ 3.6 mm) |
 | Pines guía | 2 × Ø3×8, posiciones asimétricas (una sola orientación) |
-| Puertos | entrada −x (z 5.5), salida +x (z 9, purga), CE +y (1/4-28), RE −y (O-ring radial) |
+| Puertos | entrada −x (z 5.5), salida +x (z 9, purga), CE +y (Pt Ø6, O-ring radial), RE −y (Ø9, O-ring radial) |
 
 ### Cómo se modela el objetivo
 Cara frontal + nariz cónica + barril (`params.RAMAN`), más `clearance_margin`. La punta queda en
@@ -105,13 +127,13 @@ lo detecta `checks/walls.py` (prueba `test_barrel_sized_objective_tip_is_rejecte
 | | |
 |---|---|
 | Haz | a lo largo de x. Nada en las caras ±x |
-| Cuerpo | 66.6 (x) × 63.8 (y) × 14 (z) mm; cara superior plana en z = 0, al ras de la muestra |
+| Cuerpo | 66.6 (x) × 68.8 (y) × 16.5 (z) mm con la CS945 (81.9 × 20 con la double knob); cara superior plana en z = 0, al ras de la muestra |
 | Muestra | 18 × 18 × 1 mm por defecto; la huella cabe en ella desde 2θ = 9.4° |
 | Película | Kapton (ácido) o PP/PE (KOH) sobre la cara superior, sellada con cordón EPDM bajo el marco |
 | Marco tensor | aluminio, 5 mm fuera del corredor del haz; dentro, biselado a 4.5° desde 0.3 mm en |x| = 13.95 |
 | Tornillos del marco | 10 × M3 en insertos, todos fuera del corredor (|y| > 8 mm) y lejos de los puertos |
-| WE | portaelectrodo con pinza de Pt por +y; toma una lengüeta (tira Pt/Ti bajo la muestra, o la muestra si es flexible) 4.5 mm bajo la cara, en un bolsillo con tapa al ras |
-| RE, CE, entrada, salida | cara −y, a z = −8, en un reservorio interno unido a la capa delgada por una ranura |
+| WE | pinza CS945 por +y (O-ring radial Ø6); toma una lengüeta (tira Pt/Ti bajo la muestra, o la muestra si es flexible) 6 mm bajo la cara, en un bolsillo con tapa al ras. Con la double knob, 12 mm |
+| RE (Ø9), CE (Pt Ø6), entrada, salida | cara −y, a z = −8, en un reservorio interno unido a la capa delgada por una ranura |
 
 **Cómo se usa.** Inflar la película con electrolito para la electroquímica; para medir, retirar
 electrolito por un puerto hasta que la película quede sobre la muestra (capa ≤ ~50 µm: el agua

@@ -89,7 +89,7 @@ def port_solid(p, spec: dict, r_outer: float, r_inner: float) -> cq.Shape:
         s = bar(p.PORTS["tap_drill_d"], r_outer + 0.5, x_seat)
         s = s.fuse(bar(p.hole(spec["through_d"]), x_seat + 0.01, r_inner))
     elif spec["kind"] == "radial":
-        rod = p.ELECTRODES["RE_body_d"]
+        rod = spec.get("rod_d", p.ELECTRODES["RE_body_d"])
         g = p.oring_gland(p.ORING["re_cs"], "radial")
         s = bar(p.hole(rod), r_outer + 0.5, r_inner)
         x_g = r_outer - p.ORING["re_groove_from_face"]
@@ -117,3 +117,18 @@ def bolt_stack(p, z_head: float, z_bottom: float, tip_recess: float = 0.5) -> di
     L = fits[-1]
     z_end = z_head - L
     return {"length": L, "z_end": z_end, "nut_top": z_end + p.CELL["nut_h"] + 0.2}
+
+
+def port_bore_r(p, spec) -> float:
+    """Radio del agujero pasante de un puerto (lo que desemboca en la cavidad)."""
+    if spec["kind"] == "fitting":
+        return p.hole(spec["through_d"]) / 2
+    return p.hole(spec.get("rod_d", p.ELECTRODES["RE_body_d"])) / 2
+
+
+def port_outer_r(p, spec) -> float:
+    """Radio máximo del puerto: rosca del conector o ranura del O-ring radial."""
+    if spec["kind"] == "fitting":
+        return p.PORTS["tap_drill_d"] / 2
+    rod = spec.get("rod_d", p.ELECTRODES["RE_body_d"])
+    return p.hole(rod + 2 * p.oring_gland(p.ORING["re_cs"], "radial")["depth"]) / 2

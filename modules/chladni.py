@@ -186,7 +186,7 @@ def ce_plate(p=P) -> cq.Solid:
     half = lay["seal_in"] + c["ce_ledge"] - 0.2
     s = rsquare(half, c["seal_corner_r"], lay["z_ce"], lay["z_ce"] + c["ce_t"])
     x, y = re_xy(p)
-    cut_r = p.hole(p.ELECTRODES["RE_body_d"]) / 2 + 2.0
+    cut_r = p.hole(p.ELECTRODES["RE_tip_d"]) / 2 + 2.0      # sólo la punta baja hasta aquí
     return s.cut(cyl(2 * cut_r, lay["z_ce"] - 1, lay["z_ce"] + c["ce_t"] + 1, x, y))
 
 
@@ -195,7 +195,7 @@ def lid_features(p=P) -> dict:
     zt, zl = lay["z_wall_top"], lay["z_wall_top"] + c["lid_t"]
     x, y = re_xy(p)
     f = {
-        "re": cyl(p.hole(p.ELECTRODES["RE_body_d"]), zt - 1, zl + 1, x, y),
+        "re": re_port(p),
         "screws": compound(cyl(p.hole(cell["bolt_clearance_d"] - p.FDM["hole_offset"]),
                                zt - 1, zl + 1, sx, sy) for sx, sy in lid_insert_xy(p)),
         "bolt_heads": compound(cyl(p.hole(cell["bolt_head_d"]) + 1.0, zt - 1, zl + 1, bx, by)
@@ -209,12 +209,32 @@ def lid_features(p=P) -> dict:
     return f
 
 
+def re_seat_z(p=P) -> float:
+    """Altura del hombro de la RE: la punta (RE_tip_l) termina a luggin_h de la placa."""
+    return p.CHLADNI["luggin_h"] + p.ELECTRODES["RE_tip_l"]
+
+
+def re_port(p=P) -> cq.Shape:
+    """Puerto vertical de la RE: sella sobre la punta Ø4 con O-ring radial; el hombro del
+    cuerpo Ø9 apoya en el resalte, así la distancia punta–placa no depende de la mano."""
+    lay, e = layout(p), p.ELECTRODES
+    x, y = re_xy(p)
+    zt, top = lay["z_wall_top"], re_seat_z(p)
+    g = p.oring_gland(p.ORING["re_cs"], "radial")
+    z_g = top - p.ORING["re_groove_from_face"]
+    return (cyl(p.hole(e["RE_tip_d"]), zt - 1, top + 1, x, y)
+            .fuse(cyl(p.hole(e["RE_tip_d"] + 2 * g["depth"]), z_g - g["width"], z_g, x, y)))
+
+
 def build_lid(p=P) -> cq.Workplane:
-    lay = layout(p)
+    lay, c = layout(p), p.CHLADNI
     zt = lay["z_wall_top"]
     s = (cq.Workplane("XY").add(box(-lay["outer"], lay["outer"], -lay["outer"], lay["outer"],
-                                    zt, zt + p.CHLADNI["lid_t"]))
+                                    zt, zt + c["lid_t"]))
          .edges("|Z").chamfer(p.CELL["corner_chamfer"]).val())
+    x, y = re_xy(p)
+    if re_seat_z(p) > zt + c["lid_t"]:
+        s = s.fuse(cyl(c["re_seat_d"], zt + c["lid_t"] - 0.01, re_seat_z(p), x, y))
     for f in lid_features(p).values():
         s = s.cut(f)
     return cq.Workplane("XY").add(s.clean())

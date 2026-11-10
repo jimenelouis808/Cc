@@ -33,12 +33,21 @@ RAMAN = {
 
 # --- Electrodos -------------------------------------------------------------
 ELECTRODES = {
-    "RE_body_d": 6.0,        # MEDIR: diámetro del cuerpo de vidrio, Ag/AgCl Gamry
-    "CE_wire_d": 0.406,      # alambre de Pt Gamry 935-00056 (0.406 mm × 15 cm), de la etiqueta
-    "CE_sleeve_d": 3.0,      # funda (PTFE/vidrio) por donde pasa el alambre
-    "GC_disk_d": 3.0,        # disco glassy carbon (hay de 3 y de 5 mm)
-    "GC_disk_options": (3.0, 5.0),
-    "GC_body_d": 6.0,        # MEDIR: diámetro exterior del cuerpo del electrodo GC
+    # RE Ag/AgCl Gamry (medido con calibrador, 2026-11-10)
+    "RE_body_d": 9.0,        # cuerpo de vidrio
+    "RE_tip_d": 4.0,         # punta (frita)
+    "RE_tip_l": 20.0,        # largo de la punta bajo el hombro
+    "RE_l": 75.0,            # largo total
+    # CE
+    "CE_rod_d": 6.0,         # electrodo de Pt con cuerpo (medido)
+    "CE_rod_wire_l": 35.0,   # alambre de Pt que sobresale del cuerpo (medido)
+    "CE_wire_d": 0.406,      # alambre suelto Gamry 935-00056 (0.406 mm × 15 cm)
+    "CE_sleeve_d": 3.0,      # funda (PTFE/vidrio) para el alambre suelto
+    # WE glassy carbon convencionales (medidos)
+    "GC_disk_d": 3.0,
+    "GC_body_d": 7.0,        # Gamry 932-00022: disco 3 mm, cuerpo 7 mm
+    "GC_options": ({"disk_d": 3.0, "body_d": 7.0, "l": None, "ref": "Gamry 932-00022"},
+                   {"disk_d": 5.0, "body_d": 10.0, "l": 60.0, "ref": "Corrtest CS920"}),
 }
 
 WE_FLAT = {
@@ -52,24 +61,35 @@ WE_FLAT = {
 # WE C: muestra en pinza de Pt (como la celda de PTFE de docs/referencias.md, R1).
 # El portaelectrodo entra por un puerto lateral 1/4-28; la muestra (tira) queda
 # horizontal, cara arriba, apoyada en un pedestal que fija su cara en z = 0.
-# Portaelectrodos disponibles (foto del usuario, 2026-11-09):
-#   - Corrtest CS945 Electrode clamp, 3.2.01.009 (compacto, en tubo, conector dorado)
-#   - Corrtest Double knob platinum electrode clamp, 3.2.01.366: cuerpo de PTFE y una
-#     cabeza en bloque con dos perillas. Estimado de la foto (±20 %): cuerpo Ø ~6 mm,
-#     cabeza ~11 × 27 mm, ~10 mm de alto con las perillas. NO pasa por un conector 1/4-28.
-# Los valores de abajo describen una pinza compacta (supuesta la CS945) y siguen siendo MEDIR.
-WE_CLAMP = {
-    "rod_d": 4.0,            # MEDIR: Ø del cuerpo del portaelectrodo (pasa por el conector)
-    "clip_w": 3.5,           # MEDIR: ancho de la pinza; cerrada debe pasar por el puerto
-    "jaw_t": 0.8,            # MEDIR: espesor de cada mandíbula, sobre y bajo la muestra
-    "jaw_l": 3.0,            # MEDIR: largo de agarre
-    "sample_w": 8.0,         # tira: ancho
-    "sample_l": 12.0,        # tira: largo total (incluye el agarre)
-    "sample_t": 1.0,         # MEDIR: espesor máximo que admite la pinza
-    "clip_clearance": 0.5,   # pinza ↔ émbolo de la tapa
-    "pedestal_d": 4.0,       # apoyo bajo el punto de medición (0 = sin pedestal)
-    "floor_clearance": 1.0,  # pinza/cuerpo ↔ piso de la cámara
+# Portaelectrodos (medidos, 2026-11-10). La cabeza se describe como un bloque:
+#   head_l × head_w, y head_up / head_down sobre y bajo el plano medio de la muestra
+#   (que coincide con el eje del cuerpo). grip_l = cuánto entra la muestra en la cabeza.
+CLAMPS = {
+    # Corrtest CS945 (3.2.01.009): varilla de PEEK Ø6 × 60 con ranura en la punta y un
+    # tornillo transversal; 10–11 mm de alto con el tornillo. Se monta con el tornillo
+    # hacia abajo: sobre la muestra sólo queda el radio de la varilla. Sin el tornillo,
+    # la varilla pasa por un puerto radial de Ø6.
+    "CS945": {"rod_d": 6.0, "rod_l": 60.0, "head_l": 8.0, "head_w": 6.0,
+              "head_up": 3.0, "head_down": 7.5, "grip_l": 5.0,   # grip_l: MEDIR (ranura)
+              "max_sample_t": 1.5,                                # MEDIR: ancho de la ranura
+              "mount": "through_port"},
+    # Corrtest double knob (3.2.01.366): cuerpo Ø6, cabeza 18 × 21 × 15 mm con perillas.
+    # No pasa por un puerto: se coloca desde arriba con la celda abierta.
+    "double_knob": {"rod_d": 6.0, "rod_l": None, "head_l": 21.0, "head_w": 18.0,
+                    "head_up": 10.0, "head_down": 5.0,            # MEDIR: dónde queda la muestra
+                    "grip_l": 10.0, "max_sample_t": 2.0,          # MEDIR
+                    "mount": "from_inside"},
 }
+
+WE_CLAMP = dict(CLAMPS["CS945"], **{
+    "model": "CS945",
+    "sample_w": 8.0,         # tira: ancho
+    "sample_l": 14.0,        # tira: largo total (incluye el agarre)
+    "sample_t": 1.0,         # MEDIR: espesor de tu muestra
+    "clip_clearance": 0.5,   # cabeza ↔ émbolo de la tapa
+    "pedestal_d": 4.0,       # apoyo bajo el punto de medición (0 = sin pedestal)
+    "floor_clearance": 1.0,  # cabeza ↔ piso de la cámara
+})
 
 # Celda XRD (θ-θ): el haz va a lo largo de x. La muestra queda bajo una película
 # (Kapton en ácido, PP/PE en KOH) sellada con O-ring bajo un marco tensor. La pinza
@@ -84,14 +104,14 @@ WE_XRD = {
     "tab_w": 5.0,            # lengüeta de contacto (Pt/Ti, o la muestra misma)
     "tab_t": 0.1,            # MEDIR
     "ramp_l": 6.0,           # tramo en que la lengüeta baja hasta la pinza
-    "clip_depth": 4.5,       # eje del portaelectrodo bajo la cara de la muestra
+    "clip_depth": 6.0,       # eje de la pinza bajo la cara (CS945; double knob: 12)
 }
 
 CHAMBER_XRD = {
     "slot_w": 2.0,           # ranura reservorio → capa delgada, junto a la muestra (−y)
     "reservoir_l": 12.0,     # largo del reservorio interno en y
     "reservoir_margin": 1.5, # el reservorio cubre las bocas de los puertos −y con este margen
-    "reservoir_z": (-12.0, -3.5),  # piso y techo: bajo el cordón quedan ≥ 2 mm de pared
+    "reservoir_z": (-14.5, -3.5),  # piso y techo: bajo el cordón quedan ≥ 2 mm de pared
     "port_wall": 8.0,        # pared entre reservorio/bolsillo y cara lateral (rosca 7 + 1)
     "cover_open": 3.0,       # tramo del bolsillo sin tapa junto a la muestra (la lengüeta baja)
     "cover_t": 1.5,          # tapa del bolsillo de la pinza, al ras
@@ -118,11 +138,12 @@ LID_XRD = {
 
 # Puertos de la celda XRD: sólo en caras ±y (nada sobresale a lo largo del haz).
 XRD_PORTS = (
-    {"name": "WE", "face": "+y", "offset": 0.0, "z": -WE_XRD["clip_depth"], "kind": "fitting",
-     "through_d": WE_CLAMP["rod_d"]},
-    {"name": "CE", "face": "-y", "offset": -18.0, "z": -8.0, "kind": "fitting",
-     "through_d": ELECTRODES["CE_sleeve_d"]},
-    {"name": "RE", "face": "-y", "offset": -6.0, "z": -8.0, "kind": "radial"},
+    {"name": "WE", "face": "+y", "offset": 0.0, "z": -WE_XRD["clip_depth"], "kind": "radial",
+     "rod_d": WE_CLAMP["rod_d"]},
+    {"name": "CE", "face": "-y", "offset": -18.0, "z": -8.0, "kind": "radial",
+     "rod_d": ELECTRODES["CE_rod_d"]},
+    {"name": "RE", "face": "-y", "offset": -6.0, "z": -8.0, "kind": "radial",
+     "rod_d": ELECTRODES["RE_body_d"]},
     {"name": "inlet", "face": "-y", "offset": 6.0, "z": -8.0, "kind": "fitting",
      "through_d": 2.0},
     {"name": "outlet", "face": "-y", "offset": 18.0, "z": -8.0, "kind": "fitting",
@@ -156,6 +177,7 @@ CHLADNI = {
     "ce_ledge": 1.5,         # escalón de la pared que sostiene el CE
     "re_corner": (1, 1),     # esquina (signos x, y) donde baja la RE con Luggin
     "re_inset": 4.0,         # punta de la RE ↔ esquina del área expuesta
+    "re_seat_d": 14.0,       # resalte de la tapa donde apoya el hombro de la RE (Ø9)
     "luggin_h": 1.5,         # punta de la RE sobre la placa
     "bolts_per_side": 4,
     "bolt_margin": 4.0,      # tornillo ↔ borde de la placa
@@ -168,8 +190,8 @@ CHLADNI_CE_PORT = {"name": "CE", "face": "-x", "offset": 0.0, "z": None, "kind":
 
 # Puertos de la tapa de la celda Chladni (verticales, desde arriba).
 CHLADNI_LID_PORTS = (
-    {"name": "inlet", "xy": (-9.0, 13.0), "kind": "fitting", "through_d": 2.0},
-    {"name": "vent", "xy": (3.0, 13.0), "kind": "fitting", "through_d": 2.0},
+    {"name": "inlet", "xy": (-10.0, 10.0), "kind": "fitting", "through_d": 2.0},
+    {"name": "vent", "xy": (10.0, -10.0), "kind": "fitting", "through_d": 2.0},
 )
 
 # EPD / DEP selectivo: chip de vidrio con electrodos interdigitados (sputtering con
@@ -281,9 +303,9 @@ BASE_FLAT = {
 }
 
 CHAMBER_RING = {
-    "h": 13.0,               # altura (de z = 0 a z = h)
+    "h": 15.0,               # altura (de z = 0 a z = h): el O-ring de la RE Ø9 cabe con pared
     "floor_lip": 2.0,        # material sobre el escalón del O-ring (rigidez del piso)
-    "well_d": 30.0,          # pozo/reservorio: aloja el émbolo de lid_raman con holgura
+    "well_d": 32.0,          # pozo/reservorio: aloja el émbolo de lid_raman con holgura
 }
 
 LID_RAMAN = {
@@ -308,13 +330,14 @@ LID_RAMAN = {
 # Puertos de la cámara para pinza. Misma cara superior que el anillo (la tapa Raman
 # sirve igual). El WE entra por −x a la altura del plano medio de la muestra.
 CLAMP_PORTS = (
-    {"name": "WE", "face": "-x", "offset": 0.0, "z": -WE_CLAMP["sample_t"] / 2, "kind": "fitting",
-     "through_d": WE_CLAMP["rod_d"]},
-    {"name": "inlet", "face": "+y", "offset": 6.0, "z": 6.0, "kind": "fitting", "through_d": 2.0},
-    {"name": "CE", "face": "+y", "offset": -6.0, "z": 6.0, "kind": "fitting",
-     "through_d": ELECTRODES["CE_sleeve_d"]},
+    {"name": "WE", "face": "-x", "offset": 0.0, "z": -WE_CLAMP["sample_t"] / 2, "kind": "radial",
+     "rod_d": WE_CLAMP["rod_d"]},
+    {"name": "inlet", "face": "+y", "offset": 6.0, "z": 6.5, "kind": "fitting", "through_d": 2.0},
+    {"name": "CE", "face": "+y", "offset": -6.0, "z": 6.5, "kind": "radial",
+     "rod_d": ELECTRODES["CE_rod_d"]},
     {"name": "outlet", "face": "+x", "offset": 0.0, "z": 9.0, "kind": "fitting", "through_d": 2.0},
-    {"name": "RE", "face": "-y", "offset": 0.0, "z": 7.0, "kind": "radial"},
+    {"name": "RE", "face": "-y", "offset": 0.0, "z": 7.8, "kind": "radial",
+     "rod_d": ELECTRODES["RE_body_d"]},
 )
 
 # Puertos del anillo. face: cara por la que entra; offset: desplazamiento sobre la
@@ -323,9 +346,10 @@ CLAMP_PORTS = (
 RING_PORTS = (
     {"name": "inlet", "face": "-x", "offset": 0.0, "z": 5.5, "kind": "fitting", "through_d": 2.0},
     {"name": "outlet", "face": "+x", "offset": 0.0, "z": 9.0, "kind": "fitting", "through_d": 2.0},
-    {"name": "CE", "face": "+y", "offset": 0.0, "z": 6.0, "kind": "fitting",
-     "through_d": ELECTRODES["CE_sleeve_d"]},
-    {"name": "RE", "face": "-y", "offset": 0.0, "z": 7.0, "kind": "radial"},
+    {"name": "CE", "face": "+y", "offset": 0.0, "z": 6.5, "kind": "radial",
+     "rod_d": ELECTRODES["CE_rod_d"]},
+    {"name": "RE", "face": "-y", "offset": 0.0, "z": 7.8, "kind": "radial",
+     "rod_d": ELECTRODES["RE_body_d"]},
 )
 
 # --- Sellos -----------------------------------------------------------------
@@ -338,7 +362,7 @@ ORING = {
     "re_cs": 1.5,            # MEDIR
     "re_groove_from_face": 4.0,
     # O-ring de cara de la tapa Raman (sella contra la cara superior del anillo)
-    "lid_id": 33.0,          # MEDIR
+    "lid_id": 35.0,          # MEDIR
     "lid_cs": 1.5,           # MEDIR
 }
 

@@ -90,9 +90,8 @@ def ring_checks(p=P) -> list[Result]:
 
 
 def _port_r(p, spec) -> float:
-    if spec["kind"] == "fitting":
-        return p.hole(spec["through_d"]) / 2
-    return p.hole(p.ELECTRODES["RE_body_d"]) / 2
+    from modules._geom import port_bore_r
+    return port_bore_r(p, spec)
 
 
 def base_checks(p=P) -> list[Result]:
@@ -230,7 +229,9 @@ def _ports_checks(p, f, specs, z_top, z_bottom, cavity_floor) -> list[Result]:
         res += [Result(f"{a} ↔ {b}", dist(pa, ports[b]), dry) for b in names[i + 1:]]
     for s in specs:
         bottom = s["z"] - _port_r(p, s)
-        res.append(Result(f"port_{s['name']}: boca sobre el piso", bottom - cavity_floor, 0.0))
+        floor = cavity_floor.get(s["name"], cavity_floor["*"]) if isinstance(
+            cavity_floor, dict) else cavity_floor
+        res.append(Result(f"port_{s['name']}: boca sobre el piso", bottom - floor, 0.0))
     fittings = [s for s in specs if s["kind"] == "fitting"]
     for i, a in enumerate(fittings):
         for b in fittings[i + 1:]:
@@ -241,9 +242,23 @@ def _ports_checks(p, f, specs, z_top, z_bottom, cavity_floor) -> list[Result]:
     return res
 
 
+def _clamp_port_checks(p, ports) -> list[Result]:
+    """La pinza entra por su puerto (si se monta así) y su cuerpo es el que sella el puerto."""
+    c = p.WE_CLAMP
+    we = next(s for s in ports if s["name"] == "WE")
+    res = [Result("cuerpo de la pinza = Ø del puerto WE (−diferencia)",
+                  -abs(we.get("rod_d", 0.0) - c["rod_d"]), 0.0)]
+    if c["mount"] == "through_port":
+        # sin el tornillo, la cabeza es la propia varilla: debe pasar por el agujero
+        res.append(Result("cabeza (sin tornillo) pasa por el puerto WE (holgura)",
+                          p.hole(we["rod_d"]) - c["head_w"], 0.0))
+    res.append(Result("muestra cabe en la pinza (holgura de espesor)",
+                      c["max_sample_t"] - c["sample_t"], 0.0))
+    return res
+
+
 def clamp_checks(p=P) -> list[Result]:
     """Cámara para pinza de Pt: paredes, puertos, pinza, muestra y pedestal."""
-    import math
 
     from modules import chamber_clamp as m
 
@@ -262,13 +277,7 @@ def clamp_checks(p=P) -> list[Result]:
     ]
     res += _ports_checks(p, f, p.CLAMP_PORTS, h, lay["z_bottom"], lay["z_floor"])
 
-    # la pinza cerrada pasa por el agujero del puerto WE
-    we = next(s for s in p.CLAMP_PORTS if s["name"] == "WE")
-    diag = math.hypot(c["clip_w"], 2 * c["jaw_t"])
-    res.append(Result("pinza cerrada cabe por el puerto WE (holgura)",
-                      p.hole(we["through_d"]) - diag, 0.0))
-    res.append(Result("cuerpo del portaelectrodo coincide con el puerto WE",
-                      -abs(we["through_d"] - c["rod_d"]), 0.0))
+    res += _clamp_port_checks(p, p.CLAMP_PORTS)
     # pinza y muestra dentro del pozo, sin tocar la cámara
     chamber = m.build(p).val()
     holder = m.clamp(p).cut(lateral_outside(p, lay["z_bottom"] - 1, h + 1))
@@ -324,7 +333,9 @@ def xrd_checks(p=P) -> list[Result]:
         Result("insertos ↔ exterior lateral", dist(f["screws"], sides), dry),
         Result("insertos ↔ ranura del cordón", dist(f["screws"], f["groove"]), dry),
     ]
-    res += _ports_checks(p, f, p.XRD_PORTS, 0.0, lay["z_bottom"], lay["z_rf"])
+    # el WE desemboca en el bolsillo de la pinza; los demás, en el reservorio
+    res += _ports_checks(p, f, p.XRD_PORTS, 0.0, lay["z_bottom"],
+                         {"WE": lay["pocket_floor"], "*": lay["z_rf"]})
     # 3. pinza, lengüeta y tapa
     port_we = f["port_WE"]
     res.append(Result("pinza ↔ cuerpo (fuera del puerto)",
@@ -334,6 +345,10 @@ def xrd_checks(p=P) -> list[Result]:
     y_cov = lay["sy"] + k["cover_open"]
     z_at = z1 + (z2 - z1) * (y_cov - y1) / (y2 - y1)
     res.append(Result("lengüeta bajo la tapa del bolsillo (holgura)", -k["cover_t"] - z_at, 0.3))
+    head_top = lay["z_clip"] + p.WE_CLAMP["head_up"]
+    res.append(Result("cabeza de la pinza bajo la tapa del bolsillo (holgura)",
+                      -k["cover_t"] - head_top, 0.3))
+    res += _clamp_port_checks(p, p.XRD_PORTS)
     from checks.xrd_clearance import min_two_theta_for_footprint
     x = p.XRD
     tt = min_two_theta_for_footprint(s["sample_x"], x["goniometer_radius"], x["divergence_deg"])
@@ -377,7 +392,7 @@ def chladni_checks(p=P) -> list[Result]:
         # piezo
         Result("piezo ↔ marco inferior", dist(piezo, bottom), c["piezo_margin"]),
         Result("lengüeta afuera: largo libre para la pinza",
-               c["tab_out"] - p.WE_CLAMP["jaw_l"], 2.0),
+               c["tab_out"] - max(cl["grip_l"] for cl in p.CLAMPS.values()), 2.0),
         # cámara
         Result("cámara ↔ exterior lateral", dist(wf["cavity"], outside), wet),
         Result("cámara ↔ tornillos", dist(wf["cavity"].fuse(wf["ce_seat"]), bolts), wet),
@@ -394,11 +409,15 @@ def chladni_checks(p=P) -> list[Result]:
         Result("interferencia CE/pared (−mm³)", -ce.intersect(wall).Volume(), -1e-3),
     ]
     rx, ry = m.re_xy(p)
-    re_body = cyl(p.ELECTRODES["RE_body_d"], c["luggin_h"], lay["z_wall_top"] + 10, rx, ry)
+    from modules.chladni import re_seat_z
+    re_body = cyl(p.ELECTRODES["RE_tip_d"], c["luggin_h"], re_seat_z(p), rx, ry).fuse(
+        cyl(p.ELECTRODES["RE_body_d"], re_seat_z(p), re_seat_z(p) + 40, rx, ry))
     res += [
         Result("RE ↔ CE (pasa por el recorte)", dist(re_body, ce), 0.5),
         Result("RE ↔ pared de la cámara", dist(re_body, wall), 0.5),
         Result("punta de la RE sobre la placa", c["luggin_h"], 0.5),
+        Result("hombro de la RE sobre la tapa (no entra a la celda)",
+               re_seat_z(p) - lay["z_wall_top"] - c["lid_t"], 0.0),
     ]
     lf = m.lid_features(p)
     names = [k for k in lf if k.startswith("port_")] + ["re"]

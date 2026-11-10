@@ -24,7 +24,7 @@ import cadquery as cq
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 import params as P  # noqa: E402
-from modules._geom import compound, cyl, port_solid  # noqa: E402
+from modules._geom import compound, cyl, port_bore_r, port_outer_r, port_solid  # noqa: E402
 
 
 def corridor_half(p=P) -> float:
@@ -39,10 +39,10 @@ def layout(p=P) -> dict:
     sy = s["sample_y"] / 2 + s["pocket_clearance"]
     z_clip = -s["clip_depth"]
     y_jaw0 = sy + s["ramp_l"]
-    y_jaw1 = y_jaw0 + c["jaw_l"]
-    pocket_hw = max(c["clip_w"], c["rod_d"], s["tab_w"]) / 2 + k["pocket_margin"]
+    y_jaw1 = y_jaw0 + c["head_l"]                 # cabeza de la pinza, frente en y_jaw0
+    pocket_hw = max(c["head_w"], c["rod_d"], s["tab_w"]) / 2 + k["pocket_margin"]
     pocket_y1 = y_jaw1 + 1.0
-    pocket_floor = z_clip - c["rod_d"] / 2 - k["floor_clearance"]
+    pocket_floor = z_clip - max(c["head_down"], c["rod_d"] / 2) - k["floor_clearance"]
     res_y0 = -(sy + k["slot_w"])
     res_y1 = res_y0 - k["reservoir_l"]
     z_rf, z_rr = k["reservoir_z"]
@@ -50,8 +50,7 @@ def layout(p=P) -> dict:
     edges = []
     for spec in p.XRD_PORTS:
         if spec["face"] == "-y":
-            r = (p.hole(spec["through_d"]) if spec["kind"] == "fitting"
-                 else p.hole(p.ELECTRODES["RE_body_d"])) / 2
+            r = port_bore_r(p, spec)
             edges += [spec["offset"] - r, spec["offset"] + r]
     res_x0 = min(edges + [-sx]) - k["reservoir_margin"]
     res_x1 = max(edges + [sx]) + k["reservoir_margin"]
@@ -135,11 +134,7 @@ def screw_xy(p=P, lay=None) -> list[tuple[float, float]]:
         busy = []
         for spec in p.XRD_PORTS:
             if spec["face"] == face:
-                if spec["kind"] == "fitting":
-                    r = p.PORTS["tap_drill_d"] / 2
-                else:
-                    gland = p.oring_gland(p.ORING["re_cs"], "radial")["depth"]
-                    r = p.hole(p.ELECTRODES["RE_body_d"] + 2 * gland) / 2
+                r = port_outer_r(p, spec)
                 x_port = spec["offset"] if face == "-y" else -spec["offset"]
                 busy.append((x_port, r))
         for i in range(n):
@@ -223,11 +218,11 @@ def sample(p=P) -> cq.Solid:
 
 
 def clamp(p=P) -> cq.Shape:
-    """Envolvente del portaelectrodo: pinza cerrada sobre la lengüeta + cuerpo hasta la cara +y."""
-    s, c, lay = p.WE_XRD, p.WE_CLAMP, layout(p)
+    """Envolvente del portaelectrodo: cabeza sobre la lengüeta + cuerpo hasta la cara +y."""
+    c, lay = p.WE_CLAMP, layout(p)
     zc = lay["z_clip"]
-    h = s["tab_t"] / 2 + c["jaw_t"]
-    jaw = box(-c["clip_w"] / 2, c["clip_w"] / 2, lay["y_jaw0"], lay["y_jaw1"], zc - h, zc + h)
+    jaw = box(-c["head_w"] / 2, c["head_w"] / 2, lay["y_jaw0"], lay["y_jaw1"],
+              zc - c["head_down"], zc + c["head_up"])
     rod = cq.Solid.makeCylinder(c["rod_d"] / 2, lay["y_pos"] + 2 - lay["y_jaw1"],
                                 cq.Vector(0, lay["y_jaw1"], zc), cq.Vector(0, 1, 0))
     return jaw.fuse(rod).clean()
@@ -238,7 +233,7 @@ def tab_path(p=P) -> list[tuple[float, float]]:
     s, lay = p.WE_XRD, layout(p)
     zt = -s["sample_t"] - s["tab_t"] / 2
     return [(-(lay["sy"] - 2.0), zt), (lay["sy"], zt), (lay["y_jaw0"], lay["z_clip"]),
-            (lay["y_jaw1"], lay["z_clip"])]
+            (lay["y_jaw0"] + p.WE_CLAMP["grip_l"], lay["z_clip"])]
 
 
 def summary(p=P) -> dict:

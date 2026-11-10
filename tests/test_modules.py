@@ -166,11 +166,36 @@ def test_clamp_checks_pass():
     assert not bad, "\n".join(bad)
 
 
-def test_wide_clip_is_rejected():
-    """Una pinza que cerrada no pasa por el puerto WE debe marcarse."""
-    p = variant(WE_CLAMP={"clip_w": 4.5})
-    bad = [r.name for r in walls.clamp_checks(p) if not r.ok]
-    assert "pinza cerrada cabe por el puerto WE (holgura)" in bad
+def _double_knob(**xrd):
+    dk = dict(P.WE_CLAMP)
+    dk.update(P.CLAMPS["double_knob"])
+    p = variant(WE_CLAMP=dk, **({"WE_XRD": xrd} if xrd else {}))
+    p.CLAMP_PORTS = tuple(dict(s, rod_d=dk["rod_d"]) if s["name"] == "WE" else s
+                          for s in P.CLAMP_PORTS)
+    if xrd:
+        p.XRD_PORTS = tuple(dict(s, z=-xrd["clip_depth"]) if s["name"] == "WE" else s
+                            for s in P.XRD_PORTS)
+    return p
+
+
+def test_double_knob_does_not_fit_the_raman_clamp_chamber():
+    """La cabeza de 18 × 21 × 15 mm choca con el émbolo de la tapa Raman."""
+    p = _double_knob()
+    bad = [r.name for r in walls.clamp_checks(p) + walls.lid_raman_checks(p, "clamp")
+           if not r.ok]
+    assert any("émbolo ↔ pinza" in n for n in bad)
+
+
+def test_cs945_passes_its_port_without_the_screw():
+    names = {r.name: r for r in walls.clamp_checks()}
+    assert names["cabeza (sin tornillo) pasa por el puerto WE (holgura)"].ok
+
+
+def test_double_knob_in_xrd_needs_a_deeper_clip():
+    shallow = [r.name for r in walls.xrd_checks(_double_knob(clip_depth=6.0)) if not r.ok]
+    assert "cabeza de la pinza bajo la tapa del bolsillo (holgura)" in shallow
+    deep = [str(r) for r in walls.xrd_checks(_double_knob(clip_depth=12.0)) if not r.ok]
+    assert not deep, deep
 
 
 # --- celda XRD -------------------------------------------------------------------
