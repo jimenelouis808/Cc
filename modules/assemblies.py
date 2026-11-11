@@ -198,8 +198,81 @@ CONFIGS = {
 }
 
 
+NOTES = {
+    "raman_sellada": [
+        "WE: muestra plana de 15 × 15 mm bajo el anillo; el O-ring define el área (Ø9.5).",
+        "RE Gamry por −y: la punta Ø4 entra 1.5 mm en el pozo; el hombro Ø9 apoya en el resalte.",
+        "CE de Pt por +y: el cuerpo Ø6 sella en su O-ring; la espiral de 35 mm queda en la boca.",
+        "Entrada −x (abajo) y salida +x (arriba, purga burbujas).",
+    ],
+    "raman_pinza": [
+        "WE: tira de 8 × 14 mm en la pinza CS945 (−x), cara en z = 0, apoyada en el pedestal.",
+        "La cabeza de la pinza queda 0.5 mm fuera de la nariz de la tapa; tornillo hacia abajo.",
+        "RE por −y (punta 1.5 mm dentro del pozo); CE de Pt por +y; entrada +y, salida +x.",
+    ],
+    "xrd": [
+        "Haz a lo largo de x: nada sale por las caras ±x.",
+        "WE: muestra bajo la película; la CS945 (+y) toma la lengüeta 6 mm más abajo, "
+        "bajo una tapa.",
+        "RE, CE, entrada y salida por −y, en el reservorio que se une a la capa delgada "
+        "por una ranura.",
+    ],
+    "chladni": [
+        "WE: placa de Ti empotrada; su lengüeta sale por +x y la double knob la toma en seco.",
+        "RE vertical desde la tapa: la punta queda a 1.5 mm de la placa, en una esquina.",
+        "CE plano (espiral de Pt) a 6 mm sobre la placa; su cable sale por −x.",
+        "Piezo pegado bajo la placa en (−8.75, −8.75).",
+    ],
+    "epd": [
+        "Electrodos interdigitados depositados en el chip; el gap baja de 500 a 100 µm hacia +x.",
+        "Dos pinzas CS945 toman los pads en el extremo +x del chip, que sobresale de la base.",
+        "Entrada y salida verticales sobre los agujeros del vidrio superior.",
+    ],
+}
+
+
+LABELS = {"RE": "RE Ag/AgCl", "CE": "CE (Pt)", "CS945": "WE · pinza CS945",
+          "double knob": "WE · pinza double knob"}
+FLOW_LABELS = {"inlet": "entrada", "outlet": "salida", "vent": "venteo", "CE": "cable del CE"}
+
+
+def _anchors(parts) -> dict:
+    """Etiquetas del visor: electrodos, WE y conectores de flujo (coordenadas de la celda).
+
+    Electrodos y conectores: centro de su caja, arriba. WE: centro de la cara de la muestra.
+    """
+    boxes = {}
+
+    def grow(key, s, top=True):
+        bb = s.BoundingBox()
+        b = boxes.setdefault(key, [bb.xmin, bb.xmax, bb.ymin, bb.ymax, bb.zmin, bb.zmax, top])
+        b[:6] = [min(b[0], bb.xmin), max(b[1], bb.xmax), min(b[2], bb.ymin), max(b[3], bb.ymax),
+                 min(b[4], bb.zmin), max(b[5], bb.zmax)]
+
+    for n, s, _, g in parts:
+        if g == ELECTRODE:
+            key = "double knob" if n.startswith("double knob") else n.split(" ")[0]
+            key = LABELS.get(key, key)
+            if "(pad" in n:
+                key = "pinza " + n[n.find("(pad") + 1:-1]
+            if n.startswith("CE plano"):
+                key = LABELS["CE"]
+            grow(key, s)
+        elif g == SAMPLE and n.startswith("electrodos"):
+            grow("WE: peines interdigitados A y B", s)
+        elif g == SAMPLE and not n.startswith("lengüeta"):
+            grow("WE (muestra)" if "placa" not in n else "WE (placa de Ti)", s)
+        elif g == FLOW and n.startswith("conector"):
+            grow(FLOW_LABELS.get(n.split(" ", 1)[1], n.split(" ", 1)[1]), s)
+    return {k: [(b[0] + b[1]) / 2, (b[2] + b[3]) / 2, b[5]] for k, b in boxes.items()}
+
+
 def export(name: str, p=P, out_dir=None) -> dict:
-    """STEP + GLB del ensamble y un manifiesto (nombre, grupo, color) para el visor."""
+    """STEP + GLB del ensamble y un manifiesto (id, nombre, grupo, color) para el visor.
+
+    Los nodos del GLB se llaman p00, p01…: el escritor de OpenCascade codifica mal los
+    acentos, así que el nombre legible va en el manifiesto.
+    """
     import json
 
     from export import OUT
@@ -209,18 +282,22 @@ def export(name: str, p=P, out_dir=None) -> dict:
     parts = fn(p)
     assy = cq.Assembly(name=name)
     manifest = []
-    seen = {}
-    for n, s, col, group in parts:
-        k = seen.get(n, 0)
-        seen[n] = k + 1
-        node = n if k == 0 else f"{n} {k + 1}"
-        safe = node.replace("/", "-")
-        assy.add(_wp(s), name=safe, color=cq.Color(*col))
-        manifest.append({"name": safe, "group": group, "color": col})
+    for i, (n, s, col, group) in enumerate(parts):
+        pid = f"p{i:02d}"
+        assy.add(_wp(s), name=pid, color=cq.Color(*col))
+        manifest.append({"id": pid, "name": n, "group": group, "color": col})
     assy.export(os.path.join(out_dir, f"ensamble_{name}.step"))
     assy.export(os.path.join(out_dir, f"ensamble_{name}.glb"), tolerance=0.05,
                 angularTolerance=0.2)
-    meta = {"title": title, "parts": manifest}
+    # el visor (docs/visor) lee el GLB como base64 en .txt: el servidor de artefactos no
+    # sirve .glb, y un .txt se sirve en cualquier parte
+    import base64
+    with open(os.path.join(out_dir, f"ensamble_{name}.glb"), "rb") as f:
+        b64 = base64.b64encode(f.read()).decode()
+    with open(os.path.join(out_dir, f"ensamble_{name}.glb.txt"), "w") as f:
+        f.write(b64)
+    meta = {"key": name, "title": title, "notes": NOTES.get(name, []), "parts": manifest,
+            "labels": _anchors(parts)}
     with open(os.path.join(out_dir, f"ensamble_{name}.json"), "w", encoding="utf-8") as f:
         json.dump(meta, f, ensure_ascii=False, indent=1)
     return meta

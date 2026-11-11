@@ -18,7 +18,7 @@ python modules/chladni.py                  # → out/chladni_{wall,bottom,lid,pl
 python sim/chladni_estimate.py             # modos de la placa y acoplamiento del piezo
 python modules/epd.py                      # → out/epd_{base,frame,gasket,cover} + out/epd_mask.dxf
 python sim/epd_dep.py                      # captura DEP por segmento (estimación)
-python checks/walls.py                     # paredes, holguras, sellos e interferencias (259 checks)
+python checks/walls.py                     # paredes, holguras, sellos e interferencias (264 checks)
 python checks/raman_clearance.py           # objetivo y cono de luz vs cada pieza, gap 0.1–0.5
 python checks/xrd_clearance.py             # huella y altura máxima permitida
 python sim/chladni_estimate.py             # modos de la placa-WE
@@ -38,6 +38,13 @@ python -m pytest -q
 | 5c | Decoración con NPs | pendiente |
 | 5d | Base para glassy carbon desde abajo (Ø7 y Ø10) | pendiente |
 | 6 | Simulación (gmsh → FEniCSx / Elmer) | pendiente |
+
+## Ver las celdas con sus electrodos
+- **3D interactivo:** `docs/visor/` (ver su README). `python modules/assemblies.py` arma cada celda
+  con la RE, el CE y la pinza en sus puertos y exporta STEP + GLB.
+- **Figuras 2D:** `docs/figuras/<celda>.png`, con vista 3D, dos cortes por los electrodos y vista
+  superior; electrodos con borde rojo. Se regeneran con `python docs/figuras.py`.
+- `checks/walls.py` comprueba en cada ensamble que ningún electrodo choca con una pieza ni con otro.
 
 ## Electrodos (medidos el 2026-11-10)
 | Electrodo | Medidas | Cómo entra |

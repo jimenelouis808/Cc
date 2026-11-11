@@ -1,0 +1,302 @@
+<title>Celdas in situ en 3D</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600&family=JetBrains+Mono:wght@400&display=swap">
+<style>
+/* Banco de trabajo: barra de celdas arriba, visor 3D a la derecha, controles y piezas a la izquierda */
+:root {
+  --bg: #eef0ee; --panel: #f8f9f8; --fg: #1b1f22; --fg-2: #4f585e; --muted: #7d868c;
+  --rule: #d6dbd9; --accent: #1f6fb2; --chip: #e3e8e6; --canvas: #f3f5f4;
+  --f-head: "Space Grotesk", "Segoe UI", system-ui, sans-serif;
+  --f-body: "Inter", "Segoe UI", system-ui, sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #151819; --panel: #1c2022; --fg: #e8ecec; --fg-2: #b4bdc1; --muted: #87929a;
+  --rule: #2e3437; --accent: #6fb0ec; --chip: #262c2f; --canvas: #1f2427; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #151819; --panel: #1c2022; --fg: #e8ecec; --fg-2: #b4bdc1; --muted: #87929a;
+  --rule: #2e3437; --accent: #6fb0ec; --chip: #262c2f; --canvas: #1f2427; color-scheme: dark }
+html, body { height: 100%; }
+body { background: var(--bg); color: var(--fg); font: 14px/1.5 var(--f-body); }
+.app { height: 100%; display: grid; grid-template-rows: auto 1fr; gap: 12px;
+  padding-block: 14px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); box-sizing: border-box; }
+header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 20px; }
+h1 { font: 600 20px/1.2 var(--f-head); margin: 0; }
+.tabs { display: flex; flex-wrap: wrap; gap: 6px; }
+.tabs button { font: 500 13px var(--f-body); color: var(--fg-2); background: var(--chip); border: 1px solid transparent;
+  border-radius: 999px; padding: 5px 12px; cursor: pointer; }
+.tabs button[aria-selected="true"] { color: var(--bg); background: var(--fg); }
+.main { display: grid; grid-template-columns: minmax(250px, 300px) minmax(0, 1fr); gap: 12px; min-height: 0; }
+aside { background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; padding: 14px; overflow-y: auto; min-height: 0;
+  display: flex; flex-direction: column; gap: 16px; }
+.stage { position: relative; background: var(--canvas); border: 1px solid var(--rule); border-radius: 8px; overflow: hidden; min-height: 360px; }
+.stage canvas { display: block; width: 100%; height: 100%; }
+.label { position: absolute; transform: translate(-50%, -120%); pointer-events: none; font: 600 12px var(--f-body);
+  color: var(--fg); background: var(--panel); border: 1px solid var(--rule); border-radius: 4px; padding: 2px 6px; white-space: nowrap; }
+.label::after { content: ""; position: absolute; left: 50%; bottom: -5px; width: 1px; height: 5px; background: var(--fg-2); }
+.status { position: absolute; left: 12px; bottom: 10px; font: 12px var(--f-mono); color: var(--muted); }
+h2 { font: 600 12px var(--f-body); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 0 0 6px; }
+.notes { margin: 0; padding-left: 16px; color: var(--fg-2); font-size: 13px; }
+.notes li + li { margin-top: 4px; }
+.row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.btn { font: 500 12px var(--f-body); color: var(--fg); background: var(--chip); border: 1px solid var(--rule); border-radius: 5px; padding: 4px 9px; cursor: pointer; }
+.btn:hover { border-color: var(--fg-2); }
+label.chk { display: flex; gap: 8px; align-items: center; font-size: 13px; cursor: pointer; }
+.group { border-top: 1px solid var(--rule); padding-top: 8px; }
+.group > label.chk { font-weight: 600; }
+.parts { list-style: none; margin: 4px 0 0; padding: 0 0 0 4px; }
+.parts li { margin: 2px 0; }
+.sw { width: 11px; height: 11px; border-radius: 2px; border: 1px solid rgba(0,0,0,.25); flex: none; }
+input[type="range"] { width: 100%; accent-color: var(--accent); }
+select { font: 13px var(--f-body); background: var(--chip); color: var(--fg); border: 1px solid var(--rule); border-radius: 4px; padding: 3px 6px; }
+.mono { font-family: var(--f-mono); font-size: 12px; color: var(--muted); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (max-width: 760px) {
+  html, body { height: auto; }
+  .app { height: auto; }
+  .main { grid-template-columns: minmax(0, 1fr); }
+  .stage { height: 62vh; order: -1; }
+  aside { overflow: visible; }
+}
+</style>
+
+<div class="app">
+  <header>
+    <h1>Celdas in situ en 3D</h1>
+    <nav class="tabs" id="tabs" role="tablist"></nav>
+  </header>
+  <div class="main">
+    <aside>
+      <section>
+        <h2>Electrodos en esta celda</h2>
+        <ul class="notes" id="notes"></ul>
+      </section>
+      <section>
+        <h2>Vista</h2>
+        <div class="row">
+          <button class="btn" data-view="iso">Isométrica</button>
+          <button class="btn" data-view="top">Arriba</button>
+          <button class="btn" data-view="front">Frente (−y)</button>
+          <button class="btn" data-view="side">Lado (+x)</button>
+        </div>
+      </section>
+      <section>
+        <h2>Celda</h2>
+        <label class="chk"><input type="checkbox" id="ghost" checked> Cuerpos transparentes</label>
+        <label class="chk"><input type="checkbox" id="labels" checked> Etiquetas de electrodos</label>
+      </section>
+      <section>
+        <h2>Corte</h2>
+        <div class="row">
+          <label class="chk"><input type="checkbox" id="clip"> Cortar la celda</label>
+          <select id="axis" aria-label="Eje del corte">
+            <option value="y">plano y</option>
+            <option value="x">plano x</option>
+            <option value="z">plano z</option>
+          </select>
+        </div>
+        <input type="range" id="clipPos" min="0" max="1000" value="500" aria-label="Posición del corte">
+        <div class="mono" id="clipVal">—</div>
+      </section>
+      <section id="partsBox">
+        <h2>Piezas</h2>
+        <div id="parts"></div>
+      </section>
+    </aside>
+    <div class="stage" id="stage">
+      <div class="status" id="status">Cargando…</div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+(function () {
+  const CONFIGS = [
+    ["raman-sellada", "raman_sellada", "Raman · sellada"],
+    ["raman-pinza", "raman_pinza", "Raman · pinza"],
+    ["xrd", "xrd", "XRD"],
+    ["chladni", "chladni", "Chladni"],
+    ["epd", "epd", "EPD / DEP"],
+  ];
+  const GROUP_NAMES = { celda: "Celda", muestra: "Muestra / WE", electrodo: "Electrodos", flujo: "Conectores de flujo" };
+  const stage = document.getElementById("stage");
+  const status = document.getElementById("status");
+  const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+
+  const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.localClippingEnabled = true;
+  stage.prepend(renderer.domElement);
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(35, 1, 0.5, 5000);
+  const controls = new THREE.OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x8a8f94, 0.85));
+  const sun = new THREE.DirectionalLight(0xffffff, 0.75); sun.position.set(1, 2, 1.5); scene.add(sun);
+  const fill = new THREE.DirectionalLight(0xffffff, 0.3); fill.position.set(-1.5, 0.5, -1); scene.add(fill);
+
+  let root = null, meta = null, meshes = [], labels = [], box = null, size = 1;
+  const plane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
+  // celda (x, y, z) → three (x, z, −y): el GLB gira la celda para dejar z arriba
+  const toThree = (x, y, z) => new THREE.Vector3(x, z, -y);
+
+  function resize() {
+    const w = stage.clientWidth, h = stage.clientHeight;
+    renderer.setSize(w, h, false); camera.aspect = w / Math.max(h, 1); camera.updateProjectionMatrix();
+  }
+  window.addEventListener("resize", resize);
+
+  function setBackground() { scene.background = new THREE.Color(css("--canvas") || "#f3f5f4"); }
+  setBackground();
+  window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", setBackground);
+  new MutationObserver(setBackground).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+
+  function view(kind) {
+    if (!box) return;
+    const c = box.getCenter(new THREE.Vector3());
+    const d = size * 1.05;
+    const dirs = { iso: [0.9, 0.75, 1.0], top: [0.0001, 1, 0.0001], front: [0, 0.25, 1], side: [1, 0.25, 0] };
+    const v = new THREE.Vector3(...dirs[kind]).normalize().multiplyScalar(d);
+    camera.position.copy(c).add(v); controls.target.copy(c); controls.update();
+  }
+  document.querySelectorAll("[data-view]").forEach(b => b.addEventListener("click", () => view(b.dataset.view)));
+
+  function applyLook() {
+    const ghost = document.getElementById("ghost").checked;
+    const clip = document.getElementById("clip").checked;
+    meshes.forEach(m => {
+      const cell = m.userData.group === "celda";
+      const glassy = m.userData.alpha < 1;
+      m.material.transparent = (cell && ghost) || glassy;
+      m.material.opacity = cell && ghost ? Math.min(0.28, m.userData.alpha) : m.userData.alpha;
+      m.material.depthWrite = !m.material.transparent;
+      m.material.clippingPlanes = clip && cell ? [plane] : [];
+      m.material.needsUpdate = true;
+    });
+    updateClip();
+  }
+  ["ghost", "clip"].forEach(id => document.getElementById(id).addEventListener("change", applyLook));
+  document.getElementById("labels").addEventListener("change", e => labels.forEach(l => l.el.hidden = !e.target.checked));
+
+  function updateClip() {
+    if (!meta) return;
+    const axis = document.getElementById("axis").value;
+    const t = document.getElementById("clipPos").value / 1000;
+    const b = meta.bounds, i = { x: 0, y: 1, z: 2 }[axis];
+    const c = b.min[i] + t * (b.max[i] - b.min[i]);
+    // se conserva lo que queda de este lado del plano: celda x ≤ c, y ≥ c (se ve desde −y), z ≤ c
+    if (axis === "x") plane.set(new THREE.Vector3(-1, 0, 0), c);
+    if (axis === "y") plane.set(new THREE.Vector3(0, 0, -1), -c);
+    if (axis === "z") plane.set(new THREE.Vector3(0, -1, 0), c);
+    document.getElementById("clipVal").textContent = `${axis} = ${c.toFixed(1)} mm`;
+  }
+  document.getElementById("axis").addEventListener("change", updateClip);
+  document.getElementById("clipPos").addEventListener("input", updateClip);
+
+  function buildParts() {
+    const box = document.getElementById("parts"); box.textContent = "";
+    const groups = {};
+    meta.parts.forEach(p => (groups[p.group] = groups[p.group] || []).push(p));
+    Object.keys(GROUP_NAMES).filter(g => groups[g]).forEach(g => {
+      const div = document.createElement("div"); div.className = "group";
+      const head = document.createElement("label"); head.className = "chk";
+      const hc = document.createElement("input"); hc.type = "checkbox"; hc.checked = true; hc.id = "g-" + g;
+      head.append(hc, GROUP_NAMES[g]); div.append(head);
+      const ul = document.createElement("ul"); ul.className = "parts";
+      const boxes = [];
+      groups[g].forEach(p => {
+        const li = document.createElement("li"); const l = document.createElement("label"); l.className = "chk";
+        const c = document.createElement("input"); c.type = "checkbox"; c.checked = true; c.id = "pt-" + p.id;
+        const sw = document.createElement("span"); sw.className = "sw";
+        sw.style.background = `rgb(${p.color.slice(0, 3).map(v => Math.round(v * 255)).join(",")})`;
+        c.addEventListener("change", () => meshes.filter(m => m.userData.pid === p.id).forEach(m => m.visible = c.checked));
+        l.append(c, sw, p.name); li.append(l); ul.append(li); boxes.push(c);
+      });
+      hc.addEventListener("change", () => boxes.forEach(c => { c.checked = hc.checked; c.dispatchEvent(new Event("change")); }));
+      div.append(ul); box.append(div);
+    });
+  }
+
+  function buildLabels() {
+    labels.forEach(l => l.el.remove()); labels = [];
+    const show = document.getElementById("labels").checked;
+    Object.entries(meta.labels).forEach(([name, xyz]) => {
+      const el = document.createElement("div"); el.className = "label"; el.textContent = name; el.hidden = !show;
+      stage.append(el); labels.push({ el, pos: toThree(...xyz) });
+    });
+  }
+
+  const loader = new THREE.GLTFLoader();
+  const cache = {};
+  async function load(key) {
+    status.hidden = false; status.textContent = "Cargando…";
+    if (root) { scene.remove(root); }
+    try {
+      if (!cache[key]) {
+        const m = await (await fetch(`ensamble_${key}.json`)).json();
+        // el GLB viaja como base64 en un .txt (el servidor no sirve .glb)
+        const b64 = (await (await fetch(`ensamble_${key}.glb.txt`)).text()).trim();
+        const bin = Uint8Array.from(atob(b64), ch => ch.charCodeAt(0)).buffer;
+        const g = await new Promise((res, rej) => loader.parse(bin, "", res, rej));
+        cache[key] = { meta: m, scene: g.scene };
+      }
+    } catch (err) {
+      status.textContent = "No se pudo cargar el modelo: " + err; return;
+    }
+    meta = cache[key].meta; root = cache[key].scene; scene.add(root);
+    const byId = Object.fromEntries(meta.parts.map(p => [p.id, p]));
+    meshes = [];
+    root.traverse(o => {
+      if (!o.isMesh) return;
+      let a = o; while (a && !byId[a.name]) a = a.parent;
+      const p = a ? byId[a.name] : null;
+      if (!o.userData.done) {
+        const col = p ? p.color : [0.7, 0.7, 0.7, 1];
+        o.material = new THREE.MeshStandardMaterial({ color: new THREE.Color(col[0], col[1], col[2]),
+          metalness: p && p.group === "electrodo" ? 0.25 : 0.05, roughness: 0.6, side: THREE.DoubleSide });
+        o.userData = { done: true, pid: p ? p.id : null, group: p ? p.group : "celda", alpha: col[3] };
+      }
+      o.visible = true; meshes.push(o);
+    });
+    box = new THREE.Box3().setFromObject(root);
+    size = box.getSize(new THREE.Vector3()).length();
+    const bb = { min: [box.min.x, -box.max.z, box.min.y], max: [box.max.x, -box.min.z, box.max.y] };
+    meta.bounds = bb;
+    document.getElementById("notes").innerHTML = meta.notes.map(n => `<li>${n}</li>`).join("");
+    buildParts(); buildLabels(); applyLook(); view("iso");
+    status.hidden = true;
+  }
+
+  const tabs = document.getElementById("tabs");
+  CONFIGS.forEach(([hash, key, name]) => {
+    const b = document.createElement("button"); b.textContent = name; b.role = "tab"; b.dataset.hash = hash;
+    b.addEventListener("click", () => { location.hash = hash; });
+    tabs.append(b);
+  });
+  function route() {
+    const h = location.hash.slice(1);
+    const cfg = CONFIGS.find(c => c[0] === h) || CONFIGS[0];
+    tabs.querySelectorAll("button").forEach(b => b.setAttribute("aria-selected", b.dataset.hash === cfg[0]));
+    load(cfg[1]);
+  }
+  window.addEventListener("hashchange", route);
+
+  const v = new THREE.Vector3();
+  function tick() {
+    controls.update();
+    renderer.render(scene, camera);
+    const w = stage.clientWidth, h = stage.clientHeight;
+    labels.forEach(l => {
+      v.copy(l.pos).project(camera);
+      const vis = v.z < 1 && Math.abs(v.x) < 1.05 && Math.abs(v.y) < 1.05;
+      l.el.style.left = ((v.x + 1) / 2 * w) + "px"; l.el.style.top = ((1 - v.y) / 2 * h) + "px";
+      l.el.style.visibility = vis ? "visible" : "hidden";
+    });
+    requestAnimationFrame(tick);
+  }
+  resize(); route(); tick();
+})();
+</script>
