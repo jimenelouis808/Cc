@@ -1,0 +1,49 @@
+{
+  "esquema": "carbonforge-isoterma/1",
+  "nombre": "C7506",
+  "temperatura_k": 77.0,
+  "muestreo": {
+    "equilibrado": 4500000,
+    "produccion": 1500000,
+    "semilla": 0,
+    "corte_a": 12.0
+  },
+  "porosidad": {
+    "probe_radius": 1.445,
+    "void_fraction": 0.76551,
+    "void_fraction_error": 0.0009473764824503508,
+    "pore_volume_cm3_g": 2.3500054125619414,
+    "helium_void_fraction": 0.899752390200793,
+    "accessible_area_m2_g": 2155.056017612811,
+    "largest_included_sphere": 63.4370573785181,
+    "largest_free_sphere": 33.388463052451826,
+    "cell_volume_a3": 459573.3312003947,
+    "framework_mass_g": 1.4970517892708946e-19,
+    "samples": 200000,
+    "warnings": []
+  },
+  "puntos": [
+    {
+      "presion_mpa": 1.0,
+      "n_medio": 1698.840746,
+      "n_error": 6.492362891356073,
+      "densidad_absoluta_g_cm3": 0.01237404308099582,
+      "densidad_exceso_g_cm3": 0.009436181774248802,
+      "densidad_gas_g_cm3": 0.0032651886660633287,
+      "wt_pct_total": 3.659636078421553,
+      "wt_pct_por_carbono": 3.7986529523601504,
+      "aceptacion": {
+        "insert": 0.2481790787860492,
+        "delete": 0.24745502349709125,
+        "move": 0.43690247848735
+      },
+      "segundos": 4055.79612206,
+      "instantaneas": [
+        "instantaneas/P1MPa_01.extxyz"
+      ],
+      "avisos": [
+        "the loading drifted by +35.3 molecules from the first production block to the last, so equilibration had not finished when averaging began."
+      ]
+    }
+  ]
+}

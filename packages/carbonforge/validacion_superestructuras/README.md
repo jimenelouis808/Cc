@@ -200,13 +200,43 @@ barrida, que fija la química y la curvatura y mueve sólo el ancho.
 - **Sin cargas**, así que nada de electrostática.
 - Las áreas son geométricas, no BET (ver arriba).
 - El supertubo está **roto** por un enlace (ver arriba).
-- El punto de 1 MPa del superfulereno avisó de una deriva de −42
-  moléculas entre el primer bloque de producción y el último, o sea que
-  el equilibrado no había terminado. Se repitió en
-  `iso_superfulereno_1MPa` con el equilibrado triplicado a 4.5 × 10⁶
-  pasos, **en una carpeta aparte**: el `muestreo` es uno por carpeta, y
-  cambiarlo in situ haría que el archivo describiera mal a los otros dos
-  puntos.
+- El aviso de deriva del punto de 1 MPa del superfulereno es un **falso
+  positivo**, y vale la pena saber por qué (abajo).
+
+## El aviso de deriva saltó sobre ruido, no sobre sesgo
+
+El punto de 1 MPa del superfulereno avisó de una deriva de **−42
+moléculas** entre el primer bloque de producción y el último, que es el
+aviso de "el equilibrado no había terminado cuando empezó el promedio".
+Se repitió en una carpeta aparte (`superfulereno_1MPa_repetido.json`) con
+el equilibrado **triplicado** a 4.5 × 10⁶ pasos — en carpeta aparte
+porque el `muestreo` es uno por carpeta y cambiarlo in situ haría que el
+archivo describiera mal a los otros dos puntos.
+
+| | N | ± | wt% abs | wt% exceso | deriva | min |
+|---|---|---|---|---|---|---|
+| original, equil. 1.5 × 10⁶ | 1702.4 | 4.0 | 3.67 | +2.82 | **−42.0** | 27.4 |
+| repetido, equil. 4.5 × 10⁶ | 1698.8 | 6.5 | 3.66 | +2.82 | **+35.3** | 67.6 |
+
+**La media no se movió y la deriva cambió de signo.** 3.6 moléculas de
+diferencia, un 0.2 %, muy dentro de los errores combinados; el wt% en
+exceso coincide a dos decimales. Si el aviso estuviera señalando un
+equilibrado incompleto, triplicarlo tendría que haberlo reducido, no
+invertido.
+
+Así que lo que el test está midiendo es **fluctuación lenta, no sesgo**.
+La razón es la forma del test: compara el **primer** bloque de producción
+con el **último**, que es comparar dos medias de un solo bloque cada una
+— la comparación más ruidosa posible de las que se podrían hacer con los
+mismos datos. Con M bloques en la mano, un ajuste lineal sobre todos, o
+la primera mitad contra la segunda, tendría una fracción del ruido. Los
+dos casos saltan además rozando el segundo criterio (2 % de ⟨N⟩ = 34.0,
+contra 42.0 y 35.3), que es lo que cabe esperar de un umbral que el ruido
+cruza y vuelve a cruzar.
+
+**El número de 1 MPa, por tanto, es bueno**, y es el original el que
+queda en la tabla de arriba: 2.82 wt% en exceso por las dos vías. Lo que
+queda señalado es el diagnóstico, no el punto.
 
 ## Reproducir
 
