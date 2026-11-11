@@ -1,0 +1,89 @@
+{
+  "esquema": "carbonforge-isoterma/1",
+  "nombre": "C7506",
+  "temperatura_k": 77.0,
+  "muestreo": {
+    "equilibrado": 1500000,
+    "produccion": 1500000,
+    "semilla": 0,
+    "corte_a": 12.0
+  },
+  "porosidad": {
+    "probe_radius": 1.445,
+    "void_fraction": 0.76551,
+    "void_fraction_error": 0.0009473764824503508,
+    "pore_volume_cm3_g": 2.3500054125619414,
+    "helium_void_fraction": 0.899752390200793,
+    "accessible_area_m2_g": 2155.056017612811,
+    "largest_included_sphere": 63.4370573785181,
+    "largest_free_sphere": 33.388463052451826,
+    "cell_volume_a3": 459573.3312003947,
+    "framework_mass_g": 1.4970517892708946e-19,
+    "samples": 200000,
+    "warnings": []
+  },
+  "puntos": [
+    {
+      "presion_mpa": 1.0,
+      "n_medio": 1702.3971693333333,
+      "n_error": 4.0088254558223815,
+      "densidad_absoluta_g_cm3": 0.012399947413491107,
+      "densidad_exceso_g_cm3": 0.009462086106744089,
+      "densidad_gas_g_cm3": 0.0032651886660633287,
+      "wt_pct_total": 3.667016372954834,
+      "wt_pct_por_carbono": 3.8066052092310896,
+      "aceptacion": {
+        "insert": 0.2500406902260579,
+        "delete": 0.24900241262976644,
+        "move": 0.4400757887239264
+      },
+      "segundos": 1643.4254452550003,
+      "instantaneas": [
+        "instantaneas/P1MPa_01.extxyz"
+      ],
+      "avisos": [
+        "the loading drifted by -42.0 molecules from the first production block to the last, so equilibration had not finished when averaging began."
+      ]
+    },
+    {
+      "presion_mpa": 3.8,
+      "n_medio": 3066.622978,
+      "n_error": 5.699419591053145,
+      "densidad_absoluta_g_cm3": 0.022336716924344177,
+      "densidad_exceso_g_cm3": 0.010126268314808552,
+      "densidad_gas_g_cm3": 0.013570898774506932,
+      "wt_pct_total": 6.417031230894444,
+      "wt_pct_por_carbono": 6.857050289489098,
+      "aceptacion": {
+        "insert": 0.3022096584310816,
+        "delete": 0.29998668550051005,
+        "move": 0.4531382862722109
+      },
+      "segundos": 2662.933231415,
+      "instantaneas": [
+        "instantaneas/P3.8MPa_01.extxyz"
+      ],
+      "avisos": []
+    },
+    {
+      "presion_mpa": 10.0,
+      "n_medio": 4317.470686,
+      "n_error": 9.10434108985849,
+      "densidad_absoluta_g_cm3": 0.03144766123327994,
+      "densidad_exceso_g_cm3": -0.0014598456501072402,
+      "densidad_gas_g_cm3": 0.036573958837768004,
+      "wt_pct_total": 8.804038872669112,
+      "wt_pct_por_carbono": 9.653978930466684,
+      "aceptacion": {
+        "insert": 0.25854171929779013,
+        "delete": 0.25488356820577607,
+        "move": 0.4440208398774737
+      },
+      "segundos": 4681.53153481,
+      "instantaneas": [
+        "instantaneas/P10MPa_01.extxyz"
+      ],
+      "avisos": []
+    }
+  ]
+}
