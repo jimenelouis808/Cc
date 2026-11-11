@@ -1,0 +1,89 @@
+{
+  "esquema": "carbonforge-isoterma/1",
+  "nombre": "C480",
+  "temperatura_k": 77.0,
+  "muestreo": {
+    "equilibrado": 1500000,
+    "produccion": 1500000,
+    "semilla": 0,
+    "corte_a": 12.0
+  },
+  "porosidad": {
+    "probe_radius": 1.445,
+    "void_fraction": 0.63036,
+    "void_fraction_error": 0.0010793661806819778,
+    "pore_volume_cm3_g": 1.3245822909655733,
+    "helium_void_fraction": 0.8984524017151755,
+    "accessible_area_m2_g": 2669.665332725315,
+    "largest_included_sphere": 13.054819880814819,
+    "largest_free_sphere": 12.875476962053432,
+    "cell_volume_a3": 20116.84175067965,
+    "framework_mass_g": 9.573472673196116e-21,
+    "samples": 200000,
+    "warnings": []
+  },
+  "puntos": [
+    {
+      "presion_mpa": 1.0,
+      "n_medio": 151.924794,
+      "n_error": 0.4450476894412408,
+      "densidad_absoluta_g_cm3": 0.025280323689286874,
+      "densidad_exceso_g_cm3": 0.022346707090209108,
+      "densidad_gas_g_cm3": 0.0032651886660633287,
+      "wt_pct_total": 5.044223460437231,
+      "wt_pct_por_carbono": 5.312181780047457,
+      "aceptacion": {
+        "insert": 0.16650090966642903,
+        "delete": 0.16677978997106846,
+        "move": 0.33277112194185016
+      },
+      "segundos": 486.073891634,
+      "instantaneas": [
+        "instantaneas/P1MPa_01.extxyz"
+      ],
+      "avisos": []
+    },
+    {
+      "presion_mpa": 3.8,
+      "n_medio": 227.644632,
+      "n_error": 0.9745006744266907,
+      "densidad_absoluta_g_cm3": 0.03788012365571214,
+      "densidad_exceso_g_cm3": 0.025687317058322855,
+      "densidad_gas_g_cm3": 0.013570898774506932,
+      "wt_pct_total": 7.372922161857866,
+      "wt_pct_por_carbono": 7.95979138491383,
+      "aceptacion": {
+        "insert": 0.13271543916618236,
+        "delete": 0.1328357910122033,
+        "move": 0.3074405976647219
+      },
+      "segundos": 527.4800112510001,
+      "instantaneas": [
+        "instantaneas/P3.8MPa_01.extxyz"
+      ],
+      "avisos": [
+        "the loading drifted by +4.7 molecules from the first production block to the last, so equilibration had not finished when averaging began."
+      ]
+    },
+    {
+      "presion_mpa": 10.0,
+      "n_medio": 275.094812,
+      "n_error": 0.6147757548492164,
+      "densidad_absoluta_g_cm3": 0.045775845466037086,
+      "densidad_exceso_g_cm3": 0.012915884308012451,
+      "densidad_gas_g_cm3": 0.036573958837768004,
+      "wt_pct_total": 8.77487869532478,
+      "wt_pct_por_carbono": 9.61892795518275,
+      "aceptacion": {
+        "insert": 0.07701010318872532,
+        "delete": 0.07691984262846503,
+        "move": 0.27975918945523515
+      },
+      "segundos": 558.7560103829999,
+      "instantaneas": [
+        "instantaneas/P10MPa_01.extxyz"
+      ],
+      "avisos": []
+    }
+  ]
+}

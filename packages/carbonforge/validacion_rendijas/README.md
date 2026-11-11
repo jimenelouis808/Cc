@@ -1,0 +1,150 @@
+# La rendija de grafeno: el ancho de poro, con todo lo demás quieto
+
+Diez rendijas de grafeno, de 6 a 20 Å entre paredes, a 77 K y 1, 3.8 y
+10 MPa. Treinta puntos de Monte Carlo gran canónico.
+
+**Esta serie existe por una razón metodológica, no por la rendija.** Las
+seis estructuras medidas antes —tres schwarzitas en
+`validacion_schwarzitas/` y tres superestructuras en
+`validacion_superestructuras/`— varían el área, el ancho de poro y la
+curvatura **a la vez**, así que ninguna diferencia entre ellas se podía
+atribuir a ninguno de los tres. Una rendija de grafeno fija la química y
+fija la curvatura en cero, y su área accesible resulta ser **constante en
+toda la serie**. Queda una sola variable.
+
+![exceso contra ancho de poro](ancho_vs_exceso.png)
+
+## El área constante es el control, y además calibra la medida
+
+| H (centro a centro) | canal libre | área (m²/g) | vacío He |
+|---|---|---|---|
+| 6 Å | 2.97 Å | **1973** | 0.674 |
+| 7 Å | 3.95 Å | 2670 | 0.809 |
+| 8 Å | 4.93 Å | 2670 | 0.822 |
+| 9 Å | 5.92 Å | 2670 | 0.834 |
+| 10 Å | 6.91 Å | 2670 | 0.847 |
+| 11 Å | 7.90 Å | 2670 | 0.860 |
+| 12 Å | 8.89 Å | 2670 | 0.866 |
+| 14 Å | 10.88 Å | 2670 | 0.885 |
+| 16 Å | 12.88 Å | 2670 | 0.897 |
+| 20 Å | 16.86 Å | 2670 | 0.919 |
+
+De 7 Å en adelante el área no se mueve **ni un dígito**, que es lo que
+tiene que pasar: el área de una lámina de grafeno con las dos caras
+accesibles no depende de lo separadas que estén las láminas. A 6 Å cae a
+1973 porque el canal (2.97 Å) deja de admitir la sonda con holgura y hay
+superficie a la que no llega.
+
+Y de paso es la **primera comprobación externa** que tiene esta rutina de
+área: el valor teórico del grafeno con las dos caras es 2630 m²/g, y mide
+2670 — un 1.5 % de diferencia. Hasta ahora sólo se había validado contra
+sí misma (estable en el número de puntos, independiente de la semilla,
+invariante al replicar la celda). Las tres pruebas siguen siendo
+necesarias; ésta es la que dice que el número además es correcto.
+
+El canal libre sale `H − 3.04 Å` en las diez, que es el diámetro de van
+der Waals del carbono restado del centro a centro.
+
+## Lo que mide: oscilaciones de capas, no una campana
+
+Exceso adsorbido, en wt% de la masa total:
+
+| H | canal | 1 MPa | 3.8 MPa | 10 MPa |
+|---|---|---|---|---|
+| 6 Å | 2.97 Å | 3.07 | 2.79 | 1.74 |
+| 7 Å | 3.95 Å | 3.46 | 2.91 | 1.37 |
+| 8 Å | 4.93 Å | 3.35 | 2.84 | 1.13 |
+| **9 Å** | **5.92 Å** | 4.66 | 4.50 | 2.80 |
+| 10 Å | 6.91 Å | **5.10** | 4.84 | 2.81 |
+| 11 Å | 7.90 Å | 4.87 | 4.73 | 2.50 |
+| **12 Å** | **8.89 Å** | 4.84 | 5.07 | **2.97** |
+| 14 Å | 10.88 Å | 4.67 | **5.22** | 2.84 |
+| 16 Å | 12.88 Å | 4.49 | 5.12 | 2.64 |
+| 20 Å | 16.86 Å | 4.38 | 4.85 | 1.83 |
+
+La curva no es una campana con un óptimo. **Los saltos caen en múltiplos
+enteros del diámetro del hidrógeno**, σ = 2.958 Å:
+
+- **1σ = 2.96 Å**, y el canal de H=6 mide **2.97**: una capa exacta.
+- **2σ = 5.92 Å**, y el canal de H=9 mide **5.92**. Ahí está el salto
+  grande, de 3.35 a 4.66 wt% a 1 MPa. El H=8, con 4.93 Å, se queda justo
+  por debajo de poder meter la segunda capa: es el fondo del valle.
+- **3σ = 8.87 Å**, y el canal de H=12 mide **8.89**. Ahí se recupera la
+  curva tras el bache de H=11 (7.90 Å, justo por debajo), que sale
+  **mínimo local en las tres presiones**: 4.87 / 4.73 / 2.50 contra sus
+  dos vecinos a cada lado.
+
+Es decir: cada vez que el canal cruza un múltiplo de σ entra una capa
+nueva y la captación salta; justo antes de cruzarlo hay un hueco que no
+da para la capa siguiente, y ese hueco es desperdicio. La rejilla
+aterrizó en 1σ, 2σ y 3σ por casualidad — 6, 9 y 12 se eligieron para
+acotar picos, no por esto — y es lo que hace la lectura inequívoca.
+
+**El máximo se corre con la presión**, porque cada presión prefiere un
+número de capas distinto: **H = 10 Å a 1 MPa**, **14 Å a 3.8 MPa**,
+**12 Å a 10 MPa**. Comparar materiales a una sola presión, como se hizo
+al principio de este estudio, puede invertir el orden.
+
+**Y el valle se agrava con la presión.** H=8 pasa de 3.35 a 1.13 wt%
+entre 1 y 10 MPa, mientras H=6 sólo baja de 3.07 a 1.74: cuanto más gas
+hay disponible, más se nota el hueco que no se puede llenar.
+
+## Lo que esto dice de las estructuras exóticas
+
+A cada presión, el mejor de las diez rendijas contra el mejor de las seis
+estructuras medidas antes:
+
+| | mejor rendija | mejor estructura exótica |
+|---|---|---|
+| 1 MPa | **5.10** (H=10) | 4.32 (giroide) |
+| 3.8 MPa | **5.22** (H=14) | 4.57 (giroide) |
+| 10 MPa | **2.97** (H=12) | 2.38 (giroide) |
+
+**A las tres presiones gana la rendija.** Ni los 48 heptágonos por celda
+del giroide, ni los 360 pentágonos del superfulereno, ni la curvatura
+negativa de una superficie mínima compran nada frente a dos láminas
+planas a la distancia correcta. Y en la figura se ve lo mismo punto a
+punto: a igualdad de ancho de canal, las estructuras exóticas caen **sobre
+o por debajo** de la curva de la rendija.
+
+Eso **no** dice que la topología no sirva para nada. Dice que, para
+fisisorción de H₂ a 77 K con este modelo, la variable que manda es la
+geometría del poro, y que una superestructura sólo puede ganar si llega a
+anchos que una rendija no alcanza — o aportando algo que este modelo no
+tiene: química distinta en la pared, que es exactamente el siguiente
+paso (dopantes O, N, B, P, Se), y que necesita σ/ε por elemento.
+
+## Límites
+
+Los mismos que `validacion_superestructuras/`, y uno propio:
+
+- Marco **rígido**, H₂ **esférico** (sin cuadrupolo ni rotaciones), **sin
+  cargas**. Áreas geométricas, no BET.
+- **Paredes de una sola capa**, elegido así a propósito: las paredes de
+  las superestructuras son de una capa, así que ésta es su control y no
+  otro material. Una pared de grafito de tres capas tiene un pozo de
+  potencial algo más profundo y daría captaciones algo mayores.
+- **Apilamiento AA.** A estas separaciones el registro entre capas es
+  invisible para una molécula de H₂, y AA mantiene todos los huecos
+  idénticos, que es el propósito de la serie.
+- La rejilla no resuelve dónde está el máximo **dentro** de cada régimen
+  de capas, sólo entre cuáles dos puntos cae.
+- Tres puntos (H = 6, 9 y 16) traen el aviso de deriva del muestreo. Ese
+  aviso está señalado como falso positivo en
+  `validacion_superestructuras/README.md`: compara el primer bloque de
+  producción con el último, que es la comparación más ruidosa posible con
+  esos datos, y triplicar el equilibrado invirtió su signo sin mover la
+  media.
+
+## Reproducir
+
+```bash
+python construye.py <carpeta>              # las diez rendijas
+python revisa.py   <carpeta>               # enlaces bajo PBC + porosidad
+carbonforge adsorcion isoterma <carpeta>/rendija_10.extxyz <carpeta>/iso_10 \
+    --temperatura 77 --presiones 1,3.8,10 \
+    --equilibrado 1500000 --produccion 1500000 --instantaneas 1
+python -m carbonforge.adsorption.run <carpeta>/iso_10
+python informe.py <carpeta>                # la tabla, con las seis anteriores
+python figura.py                           # ancho_vs_exceso.png
+```
