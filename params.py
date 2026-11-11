@@ -38,9 +38,17 @@ ELECTRODES = {
     "RE_tip_d": 4.0,         # punta (frita)
     "RE_tip_l": 20.0,        # largo de la punta bajo el hombro
     "RE_l": 75.0,            # largo total
+    # En los puertos laterales la RE sella sobre la punta Ø4 y el hombro del cuerpo Ø9 apoya
+    # en un resalte de la cara: con el sello sobre el cuerpo, la punta de 20 mm llegaría al
+    # centro de la celda.
+    "RE_protrusion": 1.5,    # cuánto entra la punta en la cavidad
+    "RE_boss_d": 13.0,       # resalte externo donde apoya el hombro
     # CE
     "CE_rod_d": 6.0,         # electrodo de Pt con cuerpo (medido)
     "CE_rod_wire_l": 35.0,   # alambre de Pt que sobresale del cuerpo (medido)
+    "CE_rod_l": 60.0,        # MEDIR: largo del cuerpo del electrodo de Pt
+    "CE_coil_d": 5.0,        # el alambre de 35 mm se enrolla en una espiral de este Ø (como R1)
+    "CE_coil_pitch": 1.5,
     "CE_wire_d": 0.406,      # alambre suelto Gamry 935-00056 (0.406 mm × 15 cm)
     "CE_sleeve_d": 3.0,      # funda (PTFE/vidrio) para el alambre suelto
     # WE glassy carbon convencionales (medidos)
@@ -142,8 +150,7 @@ XRD_PORTS = (
      "rod_d": WE_CLAMP["rod_d"]},
     {"name": "CE", "face": "-y", "offset": -18.0, "z": -8.0, "kind": "radial",
      "rod_d": ELECTRODES["CE_rod_d"]},
-    {"name": "RE", "face": "-y", "offset": -6.0, "z": -8.0, "kind": "radial",
-     "rod_d": ELECTRODES["RE_body_d"]},
+    {"name": "RE", "face": "-y", "offset": -6.0, "z": -8.0, "kind": "re_tip"},
     {"name": "inlet", "face": "-y", "offset": 6.0, "z": -8.0, "kind": "fitting",
      "through_d": 2.0},
     {"name": "outlet", "face": "-y", "offset": 18.0, "z": -8.0, "kind": "fitting",
@@ -222,6 +229,7 @@ EPD = {
     "mask_min_web": 0.10,           # MEDIR: puente mínimo de lámina entre aberturas
     "mask_max_aspect": 45.0,        # MEDIR: largo / ancho máximo de un puente sin apoyo
     "mask_border": 5.0,
+    "clamp_overhang": 11.5,         # el chip sobresale de la base en +x: ahí van las pinzas
     # soporte
     "base_t": 5.0,
     "frame_t": 9.0,                 # ≥ rosca del conector (7) + asiento
@@ -336,8 +344,7 @@ CLAMP_PORTS = (
     {"name": "CE", "face": "+y", "offset": -6.0, "z": 6.5, "kind": "radial",
      "rod_d": ELECTRODES["CE_rod_d"]},
     {"name": "outlet", "face": "+x", "offset": 0.0, "z": 9.0, "kind": "fitting", "through_d": 2.0},
-    {"name": "RE", "face": "-y", "offset": 0.0, "z": 7.8, "kind": "radial",
-     "rod_d": ELECTRODES["RE_body_d"]},
+    {"name": "RE", "face": "-y", "offset": 0.0, "z": 7.8, "kind": "re_tip"},
 )
 
 # Puertos del anillo. face: cara por la que entra; offset: desplazamiento sobre la
@@ -348,8 +355,7 @@ RING_PORTS = (
     {"name": "outlet", "face": "+x", "offset": 0.0, "z": 9.0, "kind": "fitting", "through_d": 2.0},
     {"name": "CE", "face": "+y", "offset": 0.0, "z": 6.5, "kind": "radial",
      "rod_d": ELECTRODES["CE_rod_d"]},
-    {"name": "RE", "face": "-y", "offset": 0.0, "z": 7.8, "kind": "radial",
-     "rod_d": ELECTRODES["RE_body_d"]},
+    {"name": "RE", "face": "-y", "offset": 0.0, "z": 7.8, "kind": "re_tip"},
 )
 
 # --- Sellos -----------------------------------------------------------------

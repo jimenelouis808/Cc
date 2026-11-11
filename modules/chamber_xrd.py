@@ -24,7 +24,8 @@ import cadquery as cq
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 import params as P  # noqa: E402
-from modules._geom import compound, cyl, port_bore_r, port_outer_r, port_solid  # noqa: E402
+from modules._geom import (  # noqa: E402
+    compound, cyl, port_boss, port_bore_r, port_outer_r, port_solid)
 
 
 def corridor_half(p=P) -> float:
@@ -191,21 +192,35 @@ def features(p=P) -> dict:
         "screws": compound(cyl(p.CELL["insert_d"], -p.CELL["insert_depth"], 0.01, x, y)
                            for x, y in screw_xy(p, lay)),
     }
+    for spec, r_out, r_in in port_axes(p, lay):
+        f["port_" + spec["name"]] = port_solid(p, spec, r_out, r_in)
+    return f
+
+
+def port_axes(p=P, lay=None):
+    """(spec, cara exterior, interior de la cavidad) de cada puerto, sobre su eje."""
+    lay = lay or layout(p)
+    out = []
     for spec in p.XRD_PORTS:
         if spec["face"] not in ("+y", "-y"):
             raise ValueError(f"puerto {spec['name']} en la cara {spec['face']}: en XRD sólo ±y "
                              "(las caras ±x están en el eje del haz)")
         if spec["face"] == "+y":
-            r_out, r_in = lay["y_pos"], lay["pocket_y1"] - 1.0
+            out.append((spec, lay["y_pos"], lay["pocket_y1"] - 1.0))
         else:
-            r_out, r_in = -lay["y_neg"], -lay["res_y1"] - 1.0
-        f["port_" + spec["name"]] = port_solid(p, spec, r_out, r_in)
-    return f
+            out.append((spec, -lay["y_neg"], -lay["res_y1"] - 1.0))
+    return out
+
+
+def bosses(p=P) -> list:
+    return [b for b in (port_boss(p, s, ro, ri) for s, ro, ri in port_axes(p)) if b is not None]
 
 
 def build(p=P) -> cq.Workplane:
     lay = layout(p)
     solid = body_block(p, lay)
+    for b in bosses(p):
+        solid = solid.fuse(b)
     for f in features(p).values():
         solid = solid.cut(f)
     return cq.Workplane("XY").add(solid.clean())

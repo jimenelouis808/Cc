@@ -25,7 +25,8 @@ import cadquery as cq
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 import params as P  # noqa: E402
-from modules._geom import body, compound, cyl, lid_insert_xy, port_solid  # noqa: E402
+from modules._geom import (  # noqa: E402
+    body, compound, cyl, lid_insert_xy, port_boss, port_solid)
 
 
 def _nose_r(p) -> float:
@@ -85,15 +86,26 @@ def features(p=P) -> dict:
         "lid_inserts": compound(cyl(c["insert_d"], h - c["insert_depth"], h + 0.01, x, y)
                                 for x, y in lid_insert_xy(p)),
     }
-    r_in = p.CHAMBER_RING["well_d"] / 2 - 1.0
-    for spec in p.CLAMP_PORTS:
-        f["port_" + spec["name"]] = port_solid(p, spec, c["body_w"] / 2, r_in)
+    for spec, r_out, r_in in port_axes(p):
+        f["port_" + spec["name"]] = port_solid(p, spec, r_out, r_in)
     return f
+
+
+def port_axes(p=P):
+    """(spec, cara exterior, interior de la cavidad) de cada puerto, sobre su eje."""
+    r_in = p.CHAMBER_RING["well_d"] / 2 - 1.0
+    return [(spec, p.CELL["body_w"] / 2, r_in) for spec in p.CLAMP_PORTS]
+
+
+def bosses(p=P) -> list:
+    return [b for b in (port_boss(p, s, ro, ri) for s, ro, ri in port_axes(p)) if b is not None]
 
 
 def build(p=P) -> cq.Workplane:
     lay = layout(p)
     solid = body(p, lay["z_bottom"], p.CHAMBER_RING["h"])
+    for b in bosses(p):
+        solid = solid.fuse(b)
     for f in features(p).values():
         solid = solid.cut(f)
     ped = pedestal(p)

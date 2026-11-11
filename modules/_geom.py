@@ -94,6 +94,14 @@ def port_solid(p, spec: dict, r_outer: float, r_inner: float) -> cq.Shape:
         s = bar(p.hole(rod), r_outer + 0.5, r_inner)
         x_g = r_outer - p.ORING["re_groove_from_face"]
         s = s.fuse(bar(p.hole(rod + 2 * g["depth"]), x_g, x_g - g["width"]))
+    elif spec["kind"] == "re_tip":
+        e = p.ELECTRODES
+        tip = e["RE_tip_d"]
+        g = p.oring_gland(p.ORING["re_cs"], "radial")
+        x_face = r_outer + re_boss_len(p, r_outer, r_inner)
+        s = bar(p.hole(tip), x_face + 0.5, r_inner)
+        x_g = x_face - p.ORING["re_groove_from_face"]
+        s = s.fuse(bar(p.hole(tip + 2 * g["depth"]), x_g, x_g - g["width"]))
     else:
         raise ValueError(f"tipo de puerto desconocido: {spec['kind']}")
     s = s.clean()
@@ -119,10 +127,33 @@ def bolt_stack(p, z_head: float, z_bottom: float, tip_recess: float = 0.5) -> di
     return {"length": L, "z_end": z_end, "nut_top": z_end + p.CELL["nut_h"] + 0.2}
 
 
+def re_boss_len(p, r_outer: float, r_inner: float) -> float:
+    """Largo del resalte externo para que la punta de la RE entre RE_protrusion en la
+    cavidad (r_inner + 1 es la pared de la cavidad sobre el eje del puerto)."""
+    e = p.ELECTRODES
+    wall = r_outer - (r_inner + 1.0)
+    return max(0.0, e["RE_tip_l"] - e["RE_protrusion"] - wall)
+
+
+def port_boss(p, spec: dict, r_outer: float, r_inner: float):
+    """Resalte que se SUMA al cuerpo para un puerto re_tip (None para los demás)."""
+    if spec["kind"] != "re_tip":
+        return None
+    L = re_boss_len(p, r_outer, r_inner)
+    if L <= 0:
+        return None
+    s = cq.Solid.makeCylinder(p.ELECTRODES["RE_boss_d"] / 2, L + 0.01,
+                              cq.Vector(r_outer - 0.01, spec["offset"], spec["z"]),
+                              cq.Vector(1, 0, 0))
+    return s.rotate(cq.Vector(0, 0, 0), cq.Vector(0, 0, 1), FACE_ANGLE[spec["face"]])
+
+
 def port_bore_r(p, spec) -> float:
     """Radio del agujero pasante de un puerto (lo que desemboca en la cavidad)."""
     if spec["kind"] == "fitting":
         return p.hole(spec["through_d"]) / 2
+    if spec["kind"] == "re_tip":
+        return p.hole(p.ELECTRODES["RE_tip_d"]) / 2
     return p.hole(spec.get("rod_d", p.ELECTRODES["RE_body_d"])) / 2
 
 
@@ -130,5 +161,6 @@ def port_outer_r(p, spec) -> float:
     """Radio máximo del puerto: rosca del conector o ranura del O-ring radial."""
     if spec["kind"] == "fitting":
         return p.PORTS["tap_drill_d"] / 2
-    rod = spec.get("rod_d", p.ELECTRODES["RE_body_d"])
+    rod = p.ELECTRODES["RE_tip_d"] if spec["kind"] == "re_tip" else spec.get(
+        "rod_d", p.ELECTRODES["RE_body_d"])
     return p.hole(rod + 2 * p.oring_gland(p.ORING["re_cs"], "radial")["depth"]) / 2

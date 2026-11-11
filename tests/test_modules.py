@@ -357,3 +357,27 @@ def test_dep_capture_scales_as_v2_over_g3():
     assert hi[0]["C"][d] == pytest.approx(4 * base[0]["C"][d], rel=1e-9)
     g0, g1 = base[0]["gap_um"], base[-1]["gap_um"]
     assert base[-1]["C"][d] / base[0]["C"][d] == pytest.approx((g0 / g1) ** 3, rel=1e-9)
+
+
+# --- ensambles con electrodos ----------------------------------------------------
+
+def test_electrodes_do_not_collide_in_any_assembly():
+    bad = [str(r) for r in walls.electrode_checks() if not r.ok]
+    assert not bad, "\n".join(bad)
+
+
+def test_re_tip_enters_the_cavity_by_the_protrusion():
+    """El resalte deja la punta de la RE exactamente RE_protrusion dentro de la cavidad."""
+    from modules import chamber_ring
+    from modules._geom import re_boss_len
+    spec, r_out, r_in = next(a for a in chamber_ring.port_axes() if a[0]["name"] == "RE")
+    seat = r_out + re_boss_len(P, r_out, r_in)
+    tip_end = seat - P.ELECTRODES["RE_tip_l"]
+    assert (r_in + 1.0) - tip_end == pytest.approx(P.ELECTRODES["RE_protrusion"])
+
+
+def test_assembly_exports_glb(tmp_path):
+    from modules import assemblies
+    meta = assemblies.export("raman_pinza", out_dir=str(tmp_path))
+    assert (tmp_path / "ensamble_raman_pinza.glb").stat().st_size > 10_000
+    assert {"celda", "electrodo", "muestra"} <= {m["group"] for m in meta["parts"]}

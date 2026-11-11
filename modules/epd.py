@@ -167,7 +167,9 @@ def base_features(p=P) -> dict:
 def build_base(p=P) -> cq.Workplane:
     lay = layout(p)
     fy = lay["frame"][1]
-    s = box(-lay["base_x"], lay["base_x"], -fy, fy, lay["z_base"], 0)
+    # en +x la base termina antes que el chip: el extremo con los pads queda en voladizo
+    x_end = p.EPD["slide"][0] / 2 - p.EPD["clamp_overhang"]
+    s = box(-lay["base_x"], x_end, -fy, fy, lay["z_base"], 0)
     for f in base_features(p).values():
         s = s.cut(f)
     return cq.Workplane("XY").add(s.clean())

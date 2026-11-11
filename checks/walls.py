@@ -508,6 +508,51 @@ def epd_checks(p=P) -> list[Result]:
     return res
 
 
+def _instrument(name: str) -> str:
+    """Agrupa las piezas de un mismo electrodo por su prefijo (RE, CE, CS945, double knob)."""
+    for key in ("RE", "CE", "CS945", "double knob"):
+        if name.startswith(key):
+            suffix = name[name.find("(pad"):] if "(pad" in name else ""
+            return key + suffix
+    return name
+
+
+def electrode_checks(p=P, configs=None) -> list[Result]:
+    """En cada ensamble, ningún electrodo invade una pieza ni otro electrodo."""
+    from modules import assemblies as A
+
+    res = []
+    for key in configs or A.CONFIGS:
+        parts = A.CONFIGS[key][1](p)
+        elec = [(n, s) for n, s, _, g in parts if g == A.ELECTRODE and "Ag/AgCl" not in n]
+        others = [(n, s) for n, s, _, g in parts if g in (A.CELL, A.SAMPLE)]
+        worst = {}
+        def overlap(a, b) -> float:
+            # la distancia (BRepExtrema) es robusta; la intersección booleana de un alambre
+            # fino contra un sólido complejo da falsos positivos: sólo se usa si se tocan
+            if a.distance(b) > 1e-6:
+                return 0.0
+            return a.intersect(b).Volume()
+
+        for en, es in elec:
+            for on, os_ in others:
+                v = overlap(es, os_)
+                k = (_instrument(en), on)
+                worst[k] = max(worst.get(k, 0.0), v)
+            for en2, es2 in elec:
+                if _instrument(en2) != _instrument(en) and en < en2:
+                    v = overlap(es, es2)
+                    k = (_instrument(en), _instrument(en2))
+                    worst[k] = max(worst.get(k, 0.0), v)
+        bad = {k: v for k, v in worst.items() if v > 1e-3}
+        n_inst = len({_instrument(n) for n, _ in elec})
+        res.append(Result(f"{key}: {n_inst} electrodos sin choques (−mm³ del peor)",
+                          -max(bad.values(), default=0.0), -1e-3))
+        for (a, b), v in sorted(bad.items(), key=lambda kv: -kv[1])[:4]:
+            res.append(Result(f"{key}: {a} invade {b} (−mm³)", -v, -1e-3))
+    return res
+
+
 def _box_outside(p, lay):
     """Todo lo que está fuera del cuerpo rectangular de la celda XRD, a lo ancho."""
     from modules.chamber_xrd import body_block
@@ -520,7 +565,7 @@ def _box_outside(p, lay):
 def run(p=P) -> list[Result]:
     return (ring_checks(p) + base_checks(p) + seal_checks(p) + assembly_checks(p)
             + lid_raman_checks(p) + clamp_checks(p) + lid_raman_checks(p, "clamp")
-            + xrd_checks(p) + chladni_checks(p) + epd_checks(p))
+            + xrd_checks(p) + chladni_checks(p) + epd_checks(p) + electrode_checks(p))
 
 
 if __name__ == "__main__":
