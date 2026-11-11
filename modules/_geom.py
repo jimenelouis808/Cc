@@ -94,6 +94,13 @@ def port_solid(p, spec: dict, r_outer: float, r_inner: float) -> cq.Shape:
         s = bar(p.hole(rod), r_outer + 0.5, r_inner)
         x_g = r_outer - p.ORING["re_groove_from_face"]
         s = s.fuse(bar(p.hole(rod + 2 * g["depth"]), x_g, x_g - g["width"]))
+    elif spec["kind"] == "plug":
+        s = bar(plug_bore_d(p), r_outer + 0.5, r_inner)
+        c = p.CELL
+        for side in (1, -1):
+            s = s.fuse(cq.Solid.makeCylinder(
+                c["insert_d"] / 2, c["insert_depth"] + 0.5,
+                cq.Vector(r_outer + 0.5, y + side * p.PLUG["screw_off"], z), ax))
     elif spec["kind"] == "re_tip":
         e = p.ELECTRODES
         tip = e["RE_tip_d"]
@@ -148,12 +155,73 @@ def port_boss(p, spec: dict, r_outer: float, r_inner: float):
     return s.rotate(cq.Vector(0, 0, 0), cq.Vector(0, 0, 1), FACE_ANGLE[spec["face"]])
 
 
+def clamp_extent(c: dict, screw: str = "down") -> tuple[float, float]:
+    """(sobre, bajo) el plano medio de la muestra para la cabeza de la pinza.
+
+    head_up / head_down del modelo valen con el tornillo (o las perillas) hacia abajo;
+    con `screw` = "up" se intercambian.
+    """
+    if screw == "up":
+        return c["head_down"], c["head_up"]
+    return c["head_up"], c["head_down"]
+
+
+def insertion_radius(p, screw: str = "down") -> float:
+    """Radio que barre la pinza CON la muestra puesta y el tornillo apretado al entrar por un
+    puerto: tira (ancho × espesor), varilla y cabeza del tornillo."""
+    c = p.WE_CLAMP
+    up, down = clamp_extent(c, screw)
+    head_r = c.get("screw_head_d", c["head_w"]) / 2
+    return max(math.hypot(c["sample_w"] / 2, c["sample_t"] / 2), c["rod_d"] / 2,
+               math.hypot(head_r, max(up, down)))
+
+
+def plug_bore_d(p) -> float:
+    """Agujero del puerto "plug": deja pasar la pinza armada con su muestra."""
+    return 2 * (insertion_radius(p, p.WE_CLAMP.get("screw", "down")) + p.PLUG["clearance"])
+
+
+def plug_part(p, spec: dict, r_outer: float, r_inner: float) -> cq.Shape:
+    """Tapón de PEEK del portaelectrodo desmontable, en su posición de montaje.
+
+    Cuerpo dentro del agujero hasta la pared de la cavidad, brida con dos tornillos M3 sobre
+    la cara, O-ring exterior (sella el agujero) e interior (sella la varilla).
+    """
+    P_, c = p.PLUG, p.CELL
+    y, z = spec["offset"], spec["z"]
+    ax = cq.Vector(1, 0, 0)
+    od = plug_bore_d(p) - 2 * P_["fit"]
+    x0, x1 = r_inner + 1.0, r_outer
+    body = cq.Solid.makeCylinder(od / 2, x1 - x0, cq.Vector(x0, y, z), ax)
+    body = body.fuse(cq.Solid.makeCylinder(P_["flange_d"] / 2, P_["flange_t"],
+                                           cq.Vector(x1, y, z), ax))
+    rod = spec.get("rod_d", p.WE_CLAMP["rod_d"])
+    body = body.cut(cq.Solid.makeCylinder(p.hole(rod) / 2, x1 + P_["flange_t"] - x0 + 2,
+                                          cq.Vector(x0 - 1, y, z), ax))
+    gi = p.oring_gland(p.ORING["re_cs"], "radial")
+    xg = x1 + P_["flange_t"] - p.ORING["re_groove_from_face"]
+    body = body.cut(cq.Solid.makeCylinder(p.hole(rod + 2 * gi["depth"]) / 2, gi["width"],
+                                          cq.Vector(xg - gi["width"], y, z), ax))
+    go = p.oring_gland(P_["oring_cs"], "radial")
+    xm = (x0 + x1) / 2
+    ring = cq.Solid.makeCylinder(od / 2 + 1, go["width"], cq.Vector(xm, y, z), ax).cut(
+        cq.Solid.makeCylinder(od / 2 - go["depth"], go["width"], cq.Vector(xm, y, z), ax))
+    body = body.cut(ring)
+    for side in (1, -1):
+        body = body.cut(cq.Solid.makeCylinder(
+            p.hole(c["bolt_clearance_d"] - p.FDM["hole_offset"]) / 2, P_["flange_t"] + 2,
+            cq.Vector(x1 - 1, y + side * P_["screw_off"], z), ax))
+    return body.rotate(cq.Vector(0, 0, 0), cq.Vector(0, 0, 1), FACE_ANGLE[spec["face"]])
+
+
 def port_bore_r(p, spec) -> float:
     """Radio del agujero pasante de un puerto (lo que desemboca en la cavidad)."""
     if spec["kind"] == "fitting":
         return p.hole(spec["through_d"]) / 2
     if spec["kind"] == "re_tip":
         return p.hole(p.ELECTRODES["RE_tip_d"]) / 2
+    if spec["kind"] == "plug":
+        return plug_bore_d(p) / 2
     return p.hole(spec.get("rod_d", p.ELECTRODES["RE_body_d"])) / 2
 
 
@@ -161,6 +229,8 @@ def port_outer_r(p, spec) -> float:
     """Radio máximo del puerto: rosca del conector o ranura del O-ring radial."""
     if spec["kind"] == "fitting":
         return p.PORTS["tap_drill_d"] / 2
+    if spec["kind"] == "plug":
+        return plug_bore_d(p) / 2
     rod = p.ELECTRODES["RE_tip_d"] if spec["kind"] == "re_tip" else spec.get(
         "rod_d", p.ELECTRODES["RE_body_d"])
     return p.hole(rod + 2 * p.oring_gland(p.ORING["re_cs"], "radial")["depth"]) / 2

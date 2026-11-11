@@ -25,7 +25,7 @@ import cadquery as cq
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 import params as P  # noqa: E402
 from modules._geom import (  # noqa: E402
-    compound, cyl, port_boss, port_bore_r, port_outer_r, port_solid)
+    clamp_extent, compound, cyl, port_boss, port_bore_r, port_outer_r, port_solid)
 
 
 def corridor_half(p=P) -> float:
@@ -43,7 +43,8 @@ def layout(p=P) -> dict:
     y_jaw1 = y_jaw0 + c["head_l"]                 # cabeza de la pinza, frente en y_jaw0
     pocket_hw = max(c["head_w"], c["rod_d"], s["tab_w"]) / 2 + k["pocket_margin"]
     pocket_y1 = y_jaw1 + 1.0
-    pocket_floor = z_clip - max(c["head_down"], c["rod_d"] / 2) - k["floor_clearance"]
+    up, down = clamp_extent(c, s.get("clamp_screw", "down"))
+    pocket_floor = z_clip - max(down, c["rod_d"] / 2) - k["floor_clearance"]
     res_y0 = -(sy + k["slot_w"])
     res_y1 = res_y0 - k["reservoir_l"]
     z_rf, z_rr = k["reservoir_z"]
@@ -177,7 +178,9 @@ def features(p=P) -> dict:
     sx, sy = lay["sx"], lay["sy"]
     f = {
         "sample_pocket": box(-sx, sx, -sy, sy, -s["sample_t"], 0.01),
-        "tab_slot": box(-s["tab_w"] / 2 - 0.2, s["tab_w"] / 2 + 0.2, -(sy - 2.0), sy + 0.01,
+        # la lengüeta toca la muestra sólo en su borde +y (tab_overlap), fuera del haz
+        "tab_slot": box(-s["tab_w"] / 2 - 0.2, s["tab_w"] / 2 + 0.2, sy - s["tab_overlap"],
+                        sy + 0.01,
                         -s["sample_t"] - s["tab_t"] - 0.05, -s["sample_t"] + 0.01),
         "clip_pocket": box(-lay["pocket_hw"], lay["pocket_hw"], sy - 0.01, lay["pocket_y1"],
                            lay["pocket_floor"], 0.01),
@@ -236,8 +239,8 @@ def clamp(p=P) -> cq.Shape:
     """Envolvente del portaelectrodo: cabeza sobre la lengüeta + cuerpo hasta la cara +y."""
     c, lay = p.WE_CLAMP, layout(p)
     zc = lay["z_clip"]
-    jaw = box(-c["head_w"] / 2, c["head_w"] / 2, lay["y_jaw0"], lay["y_jaw1"],
-              zc - c["head_down"], zc + c["head_up"])
+    up, down = clamp_extent(c, p.WE_XRD.get("clamp_screw", "down"))
+    jaw = box(-c["head_w"] / 2, c["head_w"] / 2, lay["y_jaw0"], lay["y_jaw1"], zc - down, zc + up)
     rod = cq.Solid.makeCylinder(c["rod_d"] / 2, lay["y_pos"] + 2 - lay["y_jaw1"],
                                 cq.Vector(0, lay["y_jaw1"], zc), cq.Vector(0, 1, 0))
     return jaw.fuse(rod).clean()
@@ -247,7 +250,7 @@ def tab_path(p=P) -> list[tuple[float, float]]:
     """(y, z) del eje de la lengüeta: bajo la muestra, luego baja hasta la pinza."""
     s, lay = p.WE_XRD, layout(p)
     zt = -s["sample_t"] - s["tab_t"] / 2
-    return [(-(lay["sy"] - 2.0), zt), (lay["sy"], zt), (lay["y_jaw0"], lay["z_clip"]),
+    return [(lay["sy"] - s["tab_overlap"], zt), (lay["sy"], zt), (lay["y_jaw0"], lay["z_clip"]),
             (lay["y_jaw0"] + p.WE_CLAMP["grip_l"], lay["z_clip"])]
 
 

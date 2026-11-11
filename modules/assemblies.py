@@ -57,7 +57,7 @@ def _electrode(parts, group=ELECTRODE):
     return [(n, s, col, group) for n, s, col in parts]
 
 
-def _ports(p, axes, clamp_front=None, clamp_z=None):
+def _ports(p, axes, clamp_front=None, clamp_z=None, screw="down"):
     """Electrodos y conectores de una cámara a partir de sus puertos.
 
     axes: [(spec, r_out, r_in)]. clamp_front: distancia del centro a la cara frontal de
@@ -78,6 +78,9 @@ def _ports(p, axes, clamp_front=None, clamp_z=None):
         elif spec["name"] == "WE":
             parts = (E.clamp_cs945(dict(p.WE_CLAMP), p) if p.WE_CLAMP["model"] == "CS945"
                      else E.clamp_double_knob(dict(p.WE_CLAMP), p))
+            if screw == "up":     # girada 180° sobre su eje: tornillo / perillas arriba
+                parts = [(n, s.rotate(cq.Vector(0, 0, 0), cq.Vector(1, 0, 0), 180), col)
+                         for n, s, col in parts]
             tip = E.port_tip(dict(spec, z=clamp_z if clamp_z is not None else spec["z"]),
                              clamp_front)
             out += _electrode(E.place(parts, tip, ang))
@@ -114,8 +117,11 @@ def raman_clamp(p=P) -> list:
         ("ventana", cyl(p.LID_RAMAN["window_d"], g, g + t), C["glass"], CELL),
         ("muestra (tira)", chamber_clamp.sample(p), C["sample"], SAMPLE),
     ]
+    plug = chamber_clamp.plug(p)
+    if plug is not None:
+        parts.append(("tapón del portaelectrodo (PEEK)", plug, C["lid"], CELL))
     return parts + _ports(p, chamber_clamp.port_axes(p), clamp_front=-lay["x_jaw"],
-                          clamp_z=lay["z_s"])
+                          clamp_z=lay["z_s"], screw=p.WE_CLAMP.get("screw", "down"))
 
 
 def xrd(p=P) -> list:
@@ -139,7 +145,7 @@ def xrd(p=P) -> list:
         ("lengüeta Pt/Ti", tab, C["ti"], SAMPLE),
     ]
     return parts + _ports(p, chamber_xrd.port_axes(p), clamp_front=lay["y_jaw0"],
-                          clamp_z=lay["z_clip"])
+                          clamp_z=lay["z_clip"], screw=s.get("clamp_screw", "down"))
 
 
 def chladni(p=P, clamp: str = "double_knob") -> list:

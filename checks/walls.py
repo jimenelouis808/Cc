@@ -345,7 +345,8 @@ def xrd_checks(p=P) -> list[Result]:
     y_cov = lay["sy"] + k["cover_open"]
     z_at = z1 + (z2 - z1) * (y_cov - y1) / (y2 - y1)
     res.append(Result("lengüeta bajo la tapa del bolsillo (holgura)", -k["cover_t"] - z_at, 0.3))
-    head_top = lay["z_clip"] + p.WE_CLAMP["head_up"]
+    from modules._geom import clamp_extent
+    head_top = lay["z_clip"] + clamp_extent(p.WE_CLAMP, p.WE_XRD.get("clamp_screw", "down"))[0]
     res.append(Result("cabeza de la pinza bajo la tapa del bolsillo (holgura)",
                       -k["cover_t"] - head_top, 0.3))
     res += _clamp_port_checks(p, p.XRD_PORTS)
@@ -553,6 +554,65 @@ def electrode_checks(p=P, configs=None) -> list[Result]:
     return res
 
 
+def assembly_access_checks(p=P) -> list[Result]:
+    """Montaje: cada electrodo puede LLEGAR a su posición, no sólo caber en ella.
+
+    - Lo que entra por un puerto tiene que pasar por su agujero.
+    - Un tornillo de pinza que se aprieta dentro de la celda tiene que mirar hacia el lado
+      abierto durante el montaje (arriba) y quedar al alcance del destornillador.
+    """
+    from modules import chamber_xrd
+    from modules._geom import clamp_extent, insertion_radius, port_bore_r
+
+    e, c = p.ELECTRODES, p.WE_CLAMP
+    coil_od = e["CE_coil_d"] + 0.5
+    res = []
+    for cell, ports in (("Raman sellada", p.RING_PORTS), ("Raman pinza", p.CLAMP_PORTS),
+                        ("XRD", p.XRD_PORTS)):
+        for s in ports:
+            bore = 2 * port_bore_r(p, s)
+            if s["name"] == "RE":
+                res.append(Result(f"{cell}: la punta de la RE pasa por su agujero",
+                                  bore - e["RE_tip_d"], 0.1))
+            elif s["name"] == "CE" and s["kind"] == "radial":
+                res.append(Result(f"{cell}: la espiral del CE pasa por su agujero",
+                                  bore - coil_od, 0.2))
+    # Raman con pinza: o se arma afuera y entra por un tapón, o el tornillo va arriba y libre
+    we = next(s for s in p.CLAMP_PORTS if s["name"] == "WE")
+    if we["kind"] == "plug":
+        r_need = insertion_radius(p, c.get("screw", "down"))
+        res.append(Result("Raman pinza: la pinza armada con la muestra pasa por el tapón",
+                          port_bore_r(p, we) - r_need, 0.2))
+    else:
+        res.append(Result("Raman pinza: tornillo de la pinza accesible desde arriba "
+                          "(1 = sí; con la tapa puesta no se llega)",
+                          1.0 if c.get("screw") == "up" else 0.0, 1.0))
+    # XRD: el tornillo se aprieta desde arriba con el bolsillo abierto
+    s_xrd = p.WE_XRD
+    res.append(Result("XRD: el tornillo de la pinza mira hacia el bolsillo abierto (1 = arriba)",
+                      1.0 if s_xrd.get("clamp_screw") == "up" else 0.0, 1.0))
+    lay = chamber_xrd.layout(p)
+    k = p.CHAMBER_XRD
+    y_screw = lay["y_jaw0"] + c["grip_l"] / 2
+    hw = lay["pocket_hw"] + k["cover_ledge"]
+    res.append(Result("XRD: el tornillo cae dentro de la abertura de la tapa del bolsillo",
+                      min(hw - c.get("screw_head_d", 5.0) / 2,
+                          y_screw - (lay["sy"] + k["cover_open"]),
+                          lay["pocket_y1"] - y_screw), 0.3))
+    we_x = next(s for s in p.XRD_PORTS if s["name"] == "WE")
+    res.append(Result("XRD: la varilla (sin tornillo) pasa por su puerto",
+                      2 * port_bore_r(p, we_x) - c["head_w"], 0.1))
+    up, _ = clamp_extent(c, s_xrd.get("clamp_screw", "down"))
+    res.append(Result("XRD: la cabeza del tornillo queda bajo la tapa del bolsillo",
+                      -k["cover_t"] - (lay["z_clip"] + up), 0.3))
+    # Chladni: la RE entra desde arriba por la tapa; el CE se coloca con la celda abierta
+    res.append(Result("Chladni: la punta de la RE pasa por la tapa",
+                      p.hole(e["RE_tip_d"]) - e["RE_tip_d"], 0.1))
+    res.append(Result("Chladni: el alambre del CE (con funda) sale por su conector",
+                      p.hole(p.CHLADNI_CE_PORT["through_d"]) - e["CE_sleeve_d"], 0.1))
+    return res
+
+
 def _box_outside(p, lay):
     """Todo lo que está fuera del cuerpo rectangular de la celda XRD, a lo ancho."""
     from modules.chamber_xrd import body_block
@@ -565,7 +625,8 @@ def _box_outside(p, lay):
 def run(p=P) -> list[Result]:
     return (ring_checks(p) + base_checks(p) + seal_checks(p) + assembly_checks(p)
             + lid_raman_checks(p) + clamp_checks(p) + lid_raman_checks(p, "clamp")
-            + xrd_checks(p) + chladni_checks(p) + epd_checks(p) + electrode_checks(p))
+            + xrd_checks(p) + chladni_checks(p) + epd_checks(p) + electrode_checks(p)
+            + assembly_access_checks(p))
 
 
 if __name__ == "__main__":

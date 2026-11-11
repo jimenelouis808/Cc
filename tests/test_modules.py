@@ -381,3 +381,31 @@ def test_assembly_exports_glb(tmp_path):
     meta = assemblies.export("raman_pinza", out_dir=str(tmp_path))
     assert (tmp_path / "ensamble_raman_pinza.glb").stat().st_size > 10_000
     assert {"celda", "electrodo", "muestra"} <= {m["group"] for m in meta["parts"]}
+
+
+# --- montaje -----------------------------------------------------------------------
+
+def test_every_electrode_can_reach_its_place():
+    bad = [str(r) for r in walls.assembly_access_checks() if not r.ok]
+    assert not bad, "\n".join(bad)
+
+
+def test_clamp_inside_raman_without_plug_cannot_be_assembled():
+    """Con la CS945 en un puerto radial Ø6 y el tornillo abajo, no se llega a apretarlo."""
+    ports = tuple(dict(s, kind="radial") if s["name"] == "WE" else s for s in P.CLAMP_PORTS)
+    p = variant(CLAMP_PORTS=ports)
+    bad = [r.name for r in walls.assembly_access_checks(p) if not r.ok]
+    assert any("tornillo de la pinza accesible" in n for n in bad)
+
+
+def test_xrd_screw_down_is_rejected():
+    p = variant(WE_XRD={"clamp_screw": "down"})
+    bad = [r.name for r in walls.assembly_access_checks(p) if not r.ok]
+    assert any("mira hacia el bolsillo abierto" in n for n in bad)
+
+
+def test_plug_part_is_valid_and_fits_its_bore():
+    from modules import chamber_clamp
+    pl = chamber_clamp.plug()
+    assert pl is not None and pl.isValid()
+    assert pl.intersect(chamber_clamp.build().val()).Volume() < 1e-3

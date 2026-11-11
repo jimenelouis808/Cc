@@ -26,7 +26,7 @@ import cadquery as cq
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 import params as P  # noqa: E402
 from modules._geom import (  # noqa: E402
-    body, compound, cyl, lid_insert_xy, port_boss, port_solid)
+    body, clamp_extent, compound, cyl, lid_insert_xy, plug_part, port_boss, port_solid)
 
 
 def _nose_r(p) -> float:
@@ -41,7 +41,8 @@ def layout(p=P) -> dict:
     x_jaw = -(_nose_r(p) + c["clip_clearance"])          # cara frontal de la cabeza
     x0 = x_jaw - c["grip_l"]                             # extremo de la muestra, dentro
     z_s = -c["sample_t"] / 2                             # plano medio = eje de la pinza
-    z_low = z_s - max(c["head_down"], c["rod_d"] / 2)
+    up, down = clamp_extent(c, c.get("screw", "down"))
+    z_low = z_s - max(down, c["rod_d"] / 2, _we_bore_r(p))
     z_floor = z_low - c["floor_clearance"]
     return {"x_jaw": x_jaw, "x_head0": x_jaw - c["head_l"], "x0": x0,
             "x1": x0 + c["sample_l"], "z_s": z_s,
@@ -58,8 +59,9 @@ def clamp(p=P) -> cq.Shape:
     """Envolvente del portaelectrodo dentro de la celda: cabeza + cuerpo hasta la cara −x."""
     c, lay = p.WE_CLAMP, layout(p)
     zc = lay["z_s"]
-    head = cq.Solid.makeBox(c["head_l"], c["head_w"], c["head_up"] + c["head_down"],
-                            cq.Vector(lay["x_head0"], -c["head_w"] / 2, zc - c["head_down"]))
+    up, down = clamp_extent(c, c.get("screw", "down"))
+    head = cq.Solid.makeBox(c["head_l"], c["head_w"], up + down,
+                            cq.Vector(lay["x_head0"], -c["head_w"] / 2, zc - down))
     x_face = -p.CELL["body_w"] / 2 - 2
     if lay["x_head0"] <= x_face:
         raise ValueError(
@@ -89,6 +91,21 @@ def features(p=P) -> dict:
     for spec, r_out, r_in in port_axes(p):
         f["port_" + spec["name"]] = port_solid(p, spec, r_out, r_in)
     return f
+
+
+def _we_bore_r(p) -> float:
+    """Radio del agujero del puerto WE (con tapón es el grande)."""
+    from modules._geom import port_bore_r
+    spec = next(s for s in p.CLAMP_PORTS if s["name"] == "WE")
+    return port_bore_r(p, spec)
+
+
+def plug(p=P) -> cq.Shape:
+    """Tapón del portaelectrodo desmontable, montado (None si el puerto WE no lo usa)."""
+    for spec, r_out, r_in in port_axes(p):
+        if spec["name"] == "WE" and spec["kind"] == "plug":
+            return plug_part(p, spec, r_out, r_in)
+    return None
 
 
 def port_axes(p=P):
@@ -134,5 +151,9 @@ if __name__ == "__main__":
 
     for f in export(build(), "chamber_clamp"):
         print(f)
+    pl = plug()
+    if pl is not None:
+        for f in export(cq.Workplane().add(pl), "chamber_clamp_tapon_WE"):
+            print(f)
     for k, v in summary().items():
         print(f"{k}: {v}")

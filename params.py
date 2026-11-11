@@ -77,8 +77,12 @@ CLAMPS = {
     # tornillo transversal; 10–11 mm de alto con el tornillo. Se monta con el tornillo
     # hacia abajo: sobre la muestra sólo queda el radio de la varilla. Sin el tornillo,
     # la varilla pasa por un puerto radial de Ø6.
+    # head_up / head_down valen con el tornillo hacia abajo; cada celda elige la orientación
+    # (`screw`): con el tornillo arriba se intercambian. El tornillo se aprieta con
+    # destornillador, así que tiene que quedar del lado por donde se llega con la celda abierta.
     "CS945": {"rod_d": 6.0, "rod_l": 60.0, "head_l": 8.0, "head_w": 6.0,
               "head_up": 3.0, "head_down": 7.5, "grip_l": 5.0,   # grip_l: MEDIR (ranura)
+              "screw_head_d": 5.0,                                # MEDIR
               "max_sample_t": 1.5,                                # MEDIR: ancho de la ranura
               "mount": "through_port"},
     # Corrtest double knob (3.2.01.366): cuerpo Ø6, cabeza 18 × 21 × 15 mm con perillas.
@@ -91,6 +95,7 @@ CLAMPS = {
 
 WE_CLAMP = dict(CLAMPS["CS945"], **{
     "model": "CS945",
+    "screw": "down",         # Raman con pinza: se aprieta afuera y entra por el tapón (abajo)
     "sample_w": 8.0,         # tira: ancho
     "sample_l": 14.0,        # tira: largo total (incluye el agarre)
     "sample_t": 1.0,         # MEDIR: espesor de tu muestra
@@ -112,7 +117,9 @@ WE_XRD = {
     "tab_w": 5.0,            # lengüeta de contacto (Pt/Ti, o la muestra misma)
     "tab_t": 0.1,            # MEDIR
     "ramp_l": 6.0,           # tramo en que la lengüeta baja hasta la pinza
-    "clip_depth": 6.0,       # eje de la pinza bajo la cara (CS945; double knob: 12)
+    "clip_depth": 9.5,       # eje de la pinza bajo la cara: tornillo arriba bajo la tapa (CS945)
+    "clamp_screw": "up",     # el tornillo se aprieta desde arriba con el bolsillo abierto
+    "tab_overlap": 3.0,      # la lengüeta toca la muestra sólo en su borde +y, fuera del haz
 }
 
 CHAMBER_XRD = {
@@ -335,10 +342,23 @@ LID_RAMAN = {
     "bolt_engagement_min": 3.0,
 }
 
+# Portaelectrodo desmontable (puerto "plug"): la muestra se monta en la pinza AFUERA, con el
+# tornillo apretado; la cabeza con la muestra entra por un agujero grande y un tapón de PEEK lo
+# sella (O-ring exterior) y sella la varilla Ø6 (O-ring interior). El tapón se fija con dos
+# tornillos M3 a insertos en la cara.
+PLUG = {
+    "clearance": 0.4,        # holgura radial de la cabeza + muestra al pasar por el agujero
+    "fit": 0.1,              # holgura radial tapón ↔ agujero
+    "flange_d": 30.0,
+    "flange_t": 4.0,
+    "screw_off": 11.5,       # tornillos del tapón a ±screw_off del eje, sobre la cara
+    "oring_cs": 1.5,         # MEDIR: O-ring exterior del tapón
+}
+
 # Puertos de la cámara para pinza. Misma cara superior que el anillo (la tapa Raman
 # sirve igual). El WE entra por −x a la altura del plano medio de la muestra.
 CLAMP_PORTS = (
-    {"name": "WE", "face": "-x", "offset": 0.0, "z": -WE_CLAMP["sample_t"] / 2, "kind": "radial",
+    {"name": "WE", "face": "-x", "offset": 0.0, "z": -WE_CLAMP["sample_t"] / 2, "kind": "plug",
      "rod_d": WE_CLAMP["rod_d"]},
     {"name": "inlet", "face": "+y", "offset": 6.0, "z": 6.5, "kind": "fitting", "through_d": 2.0},
     {"name": "CE", "face": "+y", "offset": -6.0, "z": 6.5, "kind": "radial",
