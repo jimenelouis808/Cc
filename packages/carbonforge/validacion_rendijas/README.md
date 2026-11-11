@@ -114,6 +114,64 @@ anchos que una rendija no alcanza — o aportando algo que este modelo no
 tiene: química distinta en la pared, que es exactamente el siguiente
 paso (dopantes O, N, B, P, Se), y que necesita σ/ε por elemento.
 
+## Se intentó llevar una superestructura a la banda buena, y no basta
+
+La pregunta obvia tras lo anterior: si lo que importa es el ancho, ¿y si
+se encoge una superestructura hasta ese ancho? Dos cosas lo impiden en
+parte y una tercera lo impide del todo.
+
+**La escala sola no es un parámetro libre.** A escalas 20, 24 y 28 con el
+tubo de 5 Å de la súper-grafeno original, el constructor **rechaza** la
+red: cada nodo se come unos `radio + blend` = 9 Å de *cada* extremo de un
+strut, y por debajo de escala 38 no queda tubo entre nodos. El hueco y el
+grosor de la pared están acoplados — `escala ≥ 2√3·(radio + blend)` — así
+que estrechar la celda obliga a adelgazar el tubo a la vez. Eso sí
+construye:
+
+| | átomos | canal libre | área (m²/g) | vacío He | veredicto |
+|---|---|---|---|---|---|
+| escala 22, tubo 4, blend 2 | 2192 | **9.15 Å** | 1963 | 0.732 | TENSO |
+| escala 26, tubo 5, blend 2 | 1588 | **10.57 Å** | 1995 | 0.744 | TENSO |
+| escala 34, tubo 5, blend 4 | 2360 | 18.46 Å | 2250 | 0.808 | TENSO |
+
+(La de escala 18 y tubo 3 también construye y sale ROTA: enlace de
+1.585 Å. Las tres cumplen el presupuesto `sum(6-n) = −24` exacto y no
+tienen un solo contacto por debajo de 2 Å.)
+
+Los canales de 9.15 y 10.57 Å caen justo donde la rendija es mejor. Pero
+**el área baja** — 2250 → 1995 → 1963 — que es el precio de estrechar una
+red de tubos: más fracción de masa en la pared.
+
+**La predicción se registró antes de correr**, para que pudiera fallar:
+si el ancho es lo único que manda, la superestructura debería dar lo de
+la rendija al mismo ancho multiplicado por el cociente de áreas. Falló.
+
+| | canal | P (MPa) | wt% exc | rendija igual ancho | predicho × área | medido/predicho |
+|---|---|---|---|---|---|---|
+| escala 22 | 9.15 Å | 1.0 | 3.11 | 4.82 | 3.54 | **0.88** |
+| | | 3.8 | 3.06 | 5.09 | 3.74 | **0.82** |
+| | | 10.0 | 1.69 | 2.96 | 2.17 | **0.78** |
+| escala 26 | 10.57 Å | 1.0 | 3.18 | 4.69 | 3.51 | **0.91** |
+| | | 3.8 | 3.05 | 5.20 | 3.88 | **0.79** |
+| | | 10.0 | 1.68 | 2.86 | 2.14 | **0.78** |
+
+**Entre un 9 y un 22 % por debajo de lo que explica el área, y el déficit
+crece con la presión.** Encoger ayuda algo —la eficiencia por área sube
+de 0.75 en la escala 34 a 0.79 en la 22— pero no alcanza a la rendija.
+
+Lo más probable es que **igualar el diámetro de esfera libre sea una
+forma ingenua de igualar poros**. En una rendija de 9 Å, *todo* punto
+está a menos de 4.5 Å de una de las dos paredes. En un canal hexagonal
+cuya esfera inscrita mide 9 Å hay esquinas y, sobre todo, un centro
+lejos de cualquier pared. Ese volumen extra se llena de gas casi libre,
+que cuenta para el absoluto y no para el exceso — y por eso el déficit
+crece con la presión, cuando hay más gas con que llenarlo.
+
+Dicho de otro modo: **la esfera libre mayor es una cota, no una
+descripción de la forma del poro**, y dos poros con la misma cota no son
+el mismo poro. Para esta comparación haría falta algo como la
+distribución de distancias a la pared, que no está medido aquí.
+
 ## Límites
 
 Los mismos que `validacion_superestructuras/`, y uno propio:
@@ -129,6 +187,10 @@ Los mismos que `validacion_superestructuras/`, y uno propio:
   idénticos, que es el propósito de la serie.
 - La rejilla no resuelve dónde está el máximo **dentro** de cada régimen
   de capas, sólo entre cuáles dos puntos cae.
+- Las superestructuras encogidas se comparan con la rendija **igualando
+  la esfera libre mayor**, que es una cota y no la forma del poro (ver
+  arriba). La comparación es por tanto indicativa, y el déficit que mide
+  incluye lo que esa manera de igualar deja fuera.
 - Tres puntos (H = 6, 9 y 16) traen el aviso de deriva del muestreo. Ese
   aviso está señalado como falso positivo en
   `validacion_superestructuras/README.md`: compara el primer bloque de

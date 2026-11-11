@@ -105,6 +105,14 @@ def main() -> int:
         for name, f in (("súper-grafeno", "supergrafeno"),
                         ("superfulereno", "superfulereno"),
                         ("supertubo", "supertubo"))}
+    # The two shrunken super-graphenes belong to the same family and
+    # ride the same colour. They are the point of that series now: they
+    # sit at the slit's best widths and still fall under its curve.
+    for label, name in (("súper-grafeno e22", "supergrafeno_e22_r4"),
+                        ("súper-grafeno e26", "supergrafeno_e26_r5")):
+        got = read_isotherm(HERE / f"{name}.json")
+        if got:
+            supers[label] = got
 
     fig, axes = plt.subplots(1, 3, figsize=(11.5, 4.0), sharey=True)
     fig.patch.set_facecolor("#fcfcfb")
@@ -166,13 +174,19 @@ def main() -> int:
     # panel would be clutter, and the identity carries across.
     first = slits.get(min(slits)) if slits else None
     if first and 1.0 in first:
+        # Low and left, in the empty corner: the band between 3 and
+        # 11 A now carries the slit's own dip, the schwarzite label and
+        # two shrunken super-graphenes.
         axes[0].annotate("rendija de grafeno", xy=first[1.0],
-                         xytext=(6, -16), textcoords="offset points",
+                         xytext=(0, -48), textcoords="offset points",
                          color=SLIT, fontsize=9, fontweight="bold")
     if 1.0 in schwarzites["Schwarz D"]:
+        # Below its dot, not beside it: the shrunken super-graphenes
+        # landed at 9-10 A and the label used to run straight over them.
         axes[0].annotate("schwarzitas", xy=schwarzites["Schwarz D"][1.0],
-                         xytext=(8, -4), textcoords="offset points",
-                         color=SCHWARZITE, fontsize=9, fontweight="bold")
+                         xytext=(0, -20), textcoords="offset points",
+                         ha="center", color=SCHWARZITE, fontsize=9,
+                         fontweight="bold")
     if 1.0 in supers["supertubo"]:
         axes[0].annotate("superestructuras", xy=supers["supertubo"][1.0],
                          xytext=(-10, -20), textcoords="offset points",
