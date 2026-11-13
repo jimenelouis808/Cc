@@ -1711,21 +1711,45 @@ def _panel_gcd_rate_retention(axis, session, spec, palette) -> None:
     """
     from .echem_state import _discharge_current
 
-    pairs = _gcd_pairs(session)
     mass_g = (1e-3 * session.electrode.mass_mg
               if session.electrode.mass_mg else None)
     currents, values = [], []
-    for curve, analysis in pairs:
-        branch = analysis.discharges[-1] if analysis.discharges else None
-        if branch is None or branch.capacitance_f is None or analysis.asymmetric:
-            continue
-        current = float(_discharge_current(curve))
-        value = (analysis.specific_f_per_g if mass_g
-                 else branch.capacitance_f)
-        if value is None or current <= 0:
-            continue
-        currents.append(current / mass_g if mass_g else 1e6 * current)
-        values.append(float(value))
+    spreads: list[float] = []
+
+    # The rate analysis when the session has one, because it and the
+    # table beside it have to be the same number. It picks a cycle by a
+    # stated policy; this panel used to take the LAST discharge of each
+    # file, which is a different choice and on a series that drifts
+    # inside its files a different answer -- 75 % against 78 % on the
+    # measurement this was written against, with nothing on the figure
+    # saying why.
+    analysis = None
+    if hasattr(session, "gcd_rate_capability"):
+        analysis = session.gcd_rate_capability()
+    if analysis is not None and len(analysis.points) >= 2:
+        for point in analysis.points:
+            current = abs(point.current_a)
+            if current <= 0:
+                continue
+            value = (point.specific_f_per_g if mass_g
+                     else point.capacitance_f)
+            if value is None:
+                continue
+            currents.append(current / mass_g if mass_g else 1e6 * current)
+            values.append(float(value))
+            spreads.append(point.spread)
+    else:
+        for curve, one in _gcd_pairs(session):
+            branch = one.discharges[-1] if one.discharges else None
+            if branch is None or branch.capacitance_f is None or one.asymmetric:
+                continue
+            current = float(_discharge_current(curve))
+            value = (one.specific_f_per_g if mass_g
+                     else branch.capacitance_f)
+            if value is None or current <= 0:
+                continue
+            currents.append(current / mass_g if mass_g else 1e6 * current)
+            values.append(float(value))
     if len(values) < 2:
         return
     order = np.argsort(currents)
@@ -1733,8 +1757,26 @@ def _panel_gcd_rate_retention(axis, session, spec, palette) -> None:
     y = np.asarray(values)[order]
     if y[0] <= 0:
         return
-    axis.plot(x, 100.0 * y / y[0], "o-", color=INK, markersize=5,
-              linewidth=1.3, zorder=3, label=session.name or None)
+    retention = 100.0 * y / y[0]
+    # The error bar is what that file's own cycles do. On a series that
+    # drifts it is larger than the difference between two currents, and
+    # a rate curve drawn without it invites a reading its own scatter
+    # does not support.
+    bars = (np.asarray(spreads)[order] * 50.0 * y / y[0]
+            if len(spreads) == len(values) else None)
+    if bars is not None and float(np.max(bars)) > 0:
+        # The label goes on the DATA LINE, not on the container.
+        # `errorbar` keeps it on the ErrorbarContainer and leaves its
+        # Line2D as "_nolegend_", and the figure's data export walks
+        # lines and skips the underscore ones: the panel came back with
+        # nothing but its header.
+        container = axis.errorbar(x, retention, yerr=bars, fmt="o-",
+                                  color=INK, markersize=5, linewidth=1.3,
+                                  capsize=3, elinewidth=0.9, zorder=3)
+        container.lines[0].set_label(session.name or "_nolegend_")
+    else:
+        axis.plot(x, retention, "o-", color=INK, markersize=5,
+                  linewidth=1.3, zorder=3, label=session.name or None)
     axis.axhline(100.0, color=GREY, linewidth=0.7, linestyle=(0, (1, 2)),
                  zorder=1)
     axis.set_xscale("log")

@@ -1,0 +1,7 @@
+velocidad_mv_s,C_mF,dEp_V,Epa_V,ipa_uA,Epc_V,ipc_uA,reversibilidad
+4.99991,1.28022,0.0903759,0.455922,12.5564,0.365546,-12.0093,cuasi-reversible. OJO: sin corrección de caída óhmica, ΔEp crece en proporción a la corriente, y un sistema reversible medido a través de 30 Ω parece cuasi-reversible
+9.99883,1.14076,0.116732,0.468885,24.6992,0.352153,-23.0751,cuasi-reversible. OJO: sin corrección de caída óhmica, ΔEp crece en proporción a la corriente, y un sistema reversible medido a través de 30 Ω parece cuasi-reversible
+19.9977,1.05048,0.168303,0.494893,47.3424,0.326589,-43.1592,cuasi-reversible. OJO: sin corrección de caída óhmica, ΔEp crece en proporción a la corriente, y un sistema reversible medido a través de 30 Ω parece cuasi-reversible
+49.9934,0.963341,0.27806,0.538835,105.972,0.260776,-95.1413,irreversible, o muy limitado por transferencia de carga. OJO: sin corrección de caída óhmica, ΔEp crece en proporción a la corriente, y un sistema reversible medido a través de 30 Ω parece cuasi-reversible
+99.9878,0.892699,0.404219,0.596914,187.562,0.192695,-167.33,irreversible, o muy limitado por transferencia de carga. OJO: sin corrección de caída óhmica, ΔEp crece en proporción a la corriente, y un sistema reversible medido a través de 30 Ω parece cuasi-reversible
+199.987,0.802081,0.572265,0.673931,319.073,0.101666,-286.883,irreversible, o muy limitado por transferencia de carga. OJO: sin corrección de caída óhmica, ΔEp crece en proporción a la corriente, y un sistema reversible medido a través de 30 Ω parece cuasi-reversible

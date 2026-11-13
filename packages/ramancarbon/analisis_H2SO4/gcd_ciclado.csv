@@ -1,0 +1,6 @@
+archivo,I_mA,ciclos,C_inicial_uF,C_final_uF,retencion_pct,perdida_pct_ciclo,eficiencia_media_pct,forma
+GCPL__prueba_ventana_1-0.2_C01,0.04,101,1096.68,1167.02,106.6,-0.06603,100.8,raiz
+GCPL__prueba_ventana_1-0_01_GCPL_C01,0.06,101,1230.72,1227.96,99.68,0.003234,102.3,lineal
+GCPL__prueba_ventana_1-0_02_GCPL_C01,0.02,101,1150.56,1151.58,100.1,-0.001115,105.8,exponencial
+GCPL__prueba_ventana_1-0_03_GCPL_C01,0.01,101,1211.97,1241.2,102.5,-0.02482,113.9,raiz
+GCPL__prueba_ventana_1-0_04_GCPL_C01,0.005,101,1440.67,1632.23,113.4,-0.1338,142.4,lineal

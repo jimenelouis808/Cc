@@ -1,0 +1,260 @@
+{
+  "condiciones": {
+    "electrolito": "H2SO4 0.5 M",
+    "ph": 0.3,
+    "referencia": "Ag/AgCl_sat",
+    "masa_mg": null,
+    "area_cm2": null
+  },
+  "archivos_ilegibles": [
+    "GCPL__prueba_ventana_1-0_06_PEIS-FINAL.mpr: GCPL__prueba_ventana_1-0_06_PEIS-FINAL.mpr: la cabecera de datos declara 0 puntos y 16 columnas"
+  ],
+  "ecsa": {
+    "velocidades_mv_s": [
+      4.999866958791413,
+      9.98939059317236,
+      20.00812491655385,
+      39.96886413931422,
+      79.97758690205936,
+      160.0778311552733
+    ],
+    "cdl_f": 0.00032987261352291096,
+    "ecsa_cm2": 8.246815338072775,
+    "ecsa_intervalo_cm2": [
+      5.497876892048517,
+      16.49363067614555
+    ],
+    "b": [
+      {
+        "potencial_v": -0.02793780602514744,
+        "b": -0.012562017914970235,
+        "error": 0.4707923473665118,
+        "r2": 0.00017796014126403303
+      },
+      {
+        "potencial_v": -0.001674374006688597,
+        "b": 0.8716564158728436,
+        "error": 0.09722379630235166,
+        "r2": 0.9525951428956716
+      },
+      {
+        "potencial_v": 0.024589058011770245,
+        "b": 0.9615644294070871,
+        "error": 0.07315624439753626,
+        "r2": 0.9773709947462434
+      },
+      {
+        "potencial_v": 0.05085249003022908,
+        "b": 0.9788971207739161,
+        "error": 0.05546874015426558,
+        "r2": 0.9873193896103284
+      },
+      {
+        "potencial_v": 0.07711592204868793,
+        "b": 0.9771994468385664,
+        "error": 0.044898659478292274,
+        "r2": 0.9916264729412508
+      }
+    ],
+    "avisos": [
+      "4.99987 mV/s: los 3 ciclos completos del archivo dan 0.601 → 0.5904 → 0.5911 mF, +0.83 % por ciclo",
+      "20.0081 mV/s: los 3 ciclos completos del archivo dan 0.536 → 0.5399 → 0.6947 mF, -13.85 % por ciclo. La caída es MONÓTONA: el ciclo que se informa está sobre una pendiente, no en estado estacionario, y el valor citado depende de cuál se cite. Para una cifra publicable hace falta ciclar hasta que se estabilice",
+      "39.9689 mV/s: los 3 ciclos completos del archivo dan 0.4968 → 0.4873 → 0.4876 mF, +0.94 % por ciclo",
+      "79.9776 mV/s: los 3 ciclos completos del archivo dan 0.4074 → 0.4113 → 0.4116 mF, -0.52 % por ciclo. La caída es MONÓTONA: el ciclo que se informa está sobre una pendiente, no en estado estacionario, y el valor citado depende de cuál se cite. Para una cifra publicable hace falta ciclar hasta que se estabilice",
+      "la recta de C_dl tiene R² = 0.959. Si no es recta, la ventana no era puramente no faradaica y el C_dl lleva dentro corriente de reacción",
+      "el ECSA se ha calculado con Cs = 40 µF/cm², pero la literatura da entre 20 y 60 para el mismo tipo de material. Ese factor de tres pasa entero al área y de ahí a cualquier actividad que normalices por ella: es la magnitud peor determinada de toda la electrocatálisis. Compara ECSA entre TUS muestras, no contra las de un artículo",
+      "en 1 de los 9 potenciales examinados las TRES leyes de i(ν) ajustan igual de bien: «i = a·ν^b», la de Dunn y «i = k_cap·ν + i_par». Con 6 velocidades sobre un factor 32 y dos parámetros no hay con qué elegir ahí, así que en esos potenciales el b no es prueba de difusión: es compatible con ella y también con una corriente constante, que aquí no es una hipótesis — está medida aparte, ⟨i_par⟩ = -1.15 µA con R² = 0.576 a partir de ΔQ, y la ley de fuga pide 2.35 µA en -0.035 V. En el resto la serie SÍ distingue, y entonces la pregunta correcta no es cuál de las tres sino las tres a la vez: el ajuste de 6 velocidades a «k_cap·ν + k_diff·√ν + i_par» determina el término difusivo en 5 de los 9 potenciales"
+    ]
+  },
+  "peis": [
+    {
+      "archivo": "PEIS_incial_C01",
+      "potencial_cd_v": 0.4176141917705536,
+      "amplitud_mv": 10.07222943007946,
+      "rs_ohm": 105.81790924520661,
+      "rs_como": "cruce con el eje real interpolado entre 1.365e+05 y 9.319e+04 Hz",
+      "rct_ohm": 8276.038335838148,
+      "r_ionica_ohm": null,
+      "capacitancia_f": 0.00046813878842877436,
+      "codo_hz": 0.1828587150754294,
+      "circuito": "R0-(R1|Q1)",
+      "forma": "FORMA DEL ESPECTRO (sin circuito)\n──────────────────────────────────────────────\n  R en serie        105.8 Ω\n    cruce con el eje real interpolado entre 1.365e+05 y 9.319e+04 Hz\n  Ápice del arco    no hay: −Z″ sube monótona hasta el final del barrido\n  Codo (-45°)       0.1829 Hz   (τ = 5.469 s)\n  Fase a f mínima   -52.2°\n  Tramo a 45°       0.99 décadas\n  ⚠ Z″ es POSITIVO en 2 punto(s) del extremo alto: eso es inductancia del cableado, no de la muestra. Un circuito sin una L en serie tiene que absorberla en R0, y entonces R0 no es la resistencia de la disolución\n  ⚠ −Z″ no tiene ningún máximo local: sube hasta la frecuencia más baja medida. No hay semicírculo cerrado en estos datos, así que de ellos NO sale ninguna resistencia de transferencia de carga — la que devuelva un ajuste sale del modelo, no de la medida",
+      "kk": true,
+      "avisos": [
+        "Z″ es POSITIVO en 2 punto(s) del extremo alto: eso es inductancia del cableado, no de la muestra. Un circuito sin una L en serie tiene que absorberla en R0, y entonces R0 no es la resistencia de la disolución",
+        "−Z″ no tiene ningún máximo local: sube hasta la frecuencia más baja medida. No hay semicírculo cerrado en estos datos, así que de ellos NO sale ninguna resistencia de transferencia de carga — la que devuelva un ajuste sale del modelo, no de la medida",
+        "la R de transferencia de carga (8276 Ω) sale del circuito y no de los datos: −Z″ no cierra ningún arco dentro del barrido, así que su constante de tiempo está fuera de lo medido. La capacitancia efectiva convertida con ella hereda esa dependencia",
+        "Q1: n = 0.501, muy lejos de 1. Con esa n el elemento ya no describe una doble capa distribuida; mira si lo que hay ahí es difusión (Warburg, n = 0.5)",
+        "Q1: Q = 0.0003615 S·sⁿ NO son faradios. Para dar una capacitancia hace falta convertir con la resistencia en paralelo (echem.eis.cpe_to_capacitance) y citar siempre la n al lado",
+        "el residuo medio es 17.2 %. El circuito no describe estos datos: mira el diagrama de Nyquist y compara la forma, no el número",
+        "a alta frecuencia el espectro entra en la mitad inductiva del plano (−Z″ negativo). Casi siempre son los cables, no la muestra: añade una L en serie al circuito o recorta esas frecuencias"
+      ]
+    },
+    {
+      "archivo": "PEIS_despues_CV_mult_01_PEIS_C01",
+      "potencial_cd_v": 0.2753047049045563,
+      "amplitud_mv": 10.317247360944748,
+      "rs_ohm": 87.54421509933951,
+      "rs_como": "cruce con el eje real interpolado entre 9.319e+04 y 6.361e+04 Hz",
+      "rct_ohm": null,
+      "r_ionica_ohm": 1316.3527158439913,
+      "capacitancia_f": 0.0007870769346807449,
+      "codo_hz": 0.37824523687915285,
+      "circuito": "R0-T1",
+      "forma": "FORMA DEL ESPECTRO (sin circuito)\n──────────────────────────────────────────────\n  R en serie        87.54 Ω\n    cruce con el eje real interpolado entre 9.319e+04 y 6.361e+04 Hz\n  Ápice del arco    no hay: −Z″ sube monótona hasta el final del barrido\n  Codo (-45°)       0.3782 Hz   (τ = 2.644 s)\n  Fase a f mínima   -65.0°   (cola capacitiva)\n  Tramo a 45°       0.50 décadas\n  ⚠ Z″ es POSITIVO en 3 punto(s) del extremo alto: eso es inductancia del cableado, no de la muestra. Un circuito sin una L en serie tiene que absorberla en R0, y entonces R0 no es la resistencia de la disolución\n  ⚠ −Z″ no tiene ningún máximo local: sube hasta la frecuencia más baja medida. No hay semicírculo cerrado en estos datos, así que de ellos NO sale ninguna resistencia de transferencia de carga — la que devuelva un ajuste sale del modelo, no de la medida\n  ⚠ a 0.0999 Hz la fase es -65° y un condensador está en −90°: el barrido no ha llegado al régimen capacitivo, así que la C′ de ese extremo es una cota INFERIOR de lo que almacena el electrodo. Baja más la frecuencia",
+      "kk": true,
+      "avisos": [
+        "Z″ es POSITIVO en 3 punto(s) del extremo alto: eso es inductancia del cableado, no de la muestra. Un circuito sin una L en serie tiene que absorberla en R0, y entonces R0 no es la resistencia de la disolución",
+        "−Z″ no tiene ningún máximo local: sube hasta la frecuencia más baja medida. No hay semicírculo cerrado en estos datos, así que de ellos NO sale ninguna resistencia de transferencia de carga — la que devuelva un ajuste sale del modelo, no de la medida",
+        "a 0.0999 Hz la fase es -65° y un condensador está en −90°: el barrido no ha llegado al régimen capacitivo, así que la C′ de ese extremo es una cota INFERIOR de lo que almacena el electrodo. Baja más la frecuencia",
+        "el residuo medio es 11.0 %. El circuito no describe estos datos: mira el diagrama de Nyquist y compara la forma, no el número",
+        "a alta frecuencia el espectro entra en la mitad inductiva del plano (−Z″ negativo). Casi siempre son los cables, no la muestra: añade una L en serie al circuito o recorta esas frecuencias"
+      ]
+    },
+    {
+      "archivo": "PEIS_despues_CV_mult_02_PEIS_C01",
+      "potencial_cd_v": 0.4997125267982483,
+      "amplitud_mv": 10.318523272871971,
+      "rs_ohm": 84.9927249479484,
+      "rs_como": "cruce con el eje real interpolado entre 6.361e+04 y 4.342e+04 Hz",
+      "rct_ohm": 286.276232226036,
+      "r_ionica_ohm": 0.00012448465909107185,
+      "capacitancia_f": 0.0007971680591505929,
+      "codo_hz": 0.31559358614998123,
+      "circuito": "R0-(R1|Q1)-T1",
+      "forma": "FORMA DEL ESPECTRO (sin circuito)\n──────────────────────────────────────────────\n  R en serie        84.99 Ω\n    cruce con el eje real interpolado entre 6.361e+04 y 4.342e+04 Hz\n  Ápice del arco    no hay: −Z″ sube monótona hasta el final del barrido\n  Codo (-45°)       0.3156 Hz   (τ = 3.169 s)\n  Fase a f mínima   -61.8°   (cola capacitiva)\n  Tramo a 45°       0.66 décadas\n  ⚠ Z″ es POSITIVO en 4 punto(s) del extremo alto: eso es inductancia del cableado, no de la muestra. Un circuito sin una L en serie tiene que absorberla en R0, y entonces R0 no es la resistencia de la disolución\n  ⚠ −Z″ no tiene ningún máximo local: sube hasta la frecuencia más baja medida. No hay semicírculo cerrado en estos datos, así que de ellos NO sale ninguna resistencia de transferencia de carga — la que devuelva un ajuste sale del modelo, no de la medida\n  ⚠ a 0.0999 Hz la fase es -62° y un condensador está en −90°: el barrido no ha llegado al régimen capacitivo, así que la C′ de ese extremo es una cota INFERIOR de lo que almacena el electrodo. Baja más la frecuencia",
+      "kk": false,
+      "avisos": [
+        "Z″ es POSITIVO en 4 punto(s) del extremo alto: eso es inductancia del cableado, no de la muestra. Un circuito sin una L en serie tiene que absorberla en R0, y entonces R0 no es la resistencia de la disolución",
+        "−Z″ no tiene ningún máximo local: sube hasta la frecuencia más baja medida. No hay semicírculo cerrado en estos datos, así que de ellos NO sale ninguna resistencia de transferencia de carga — la que devuelva un ajuste sale del modelo, no de la medida",
+        "a 0.0999 Hz la fase es -62° y un condensador está en −90°: el barrido no ha llegado al régimen capacitivo, así que la C′ de ese extremo es una cota INFERIOR de lo que almacena el electrodo. Baja más la frecuencia",
+        "el espectro no pasa Kramers-Kronig. Los parámetros del circuito que salgan abajo NO son fiables, por muy bien que ajuste",
+        "el circuito elegido (R0-(R1|Q1)-T1) gana por BIC con 2 de sus 7 parámetros sin determinar. Mira la tabla de comparación: un circuito más simple puede tenerlos todos",
+        "el 67 % del residuo del ajuste cae en la mitad de frecuencias donde el residuo de Kramers-Kronig es peor (correlación +0.56): lo que queda NO es un elemento que falte, es la deriva de la celda. Otro circuito bajará el residuo siguiéndola más de cerca. Lo que lo arregla es volver a medir",
+        "la capacitancia del elemento T1 (0.9964 mF) y C′ a la misma frecuencia (0.7972 mF) difieren un +25 %, y a 0.0999 Hz la fase es -62°. Las dos son la misma magnitud solo cuando la respuesta ya es capacitiva: C′ lleva dentro la parte REAL de toda la cadena, así que mientras la fase no se acerque a −90° sale más baja. La que el dispositivo entrega es C′",
+        "la R de transferencia de carga (286.3 Ω) sale del circuito y no de los datos: −Z″ no cierra ningún arco dentro del barrido, así que su constante de tiempo está fuera de lo medido. La capacitancia efectiva convertida con ella hereda esa dependencia",
+        "Q1: Q = 8.548e-05 S·sⁿ NO son faradios. Para dar una capacitancia hace falta convertir con la resistencia en paralelo (echem.eis.cpe_to_capacitance) y citar siempre la n al lado",
+        "R0.R tiene una incertidumbre del 128 %: ese elemento no está determinado por los datos. O sobra en el circuito, o su constante de tiempo cae fuera del rango de frecuencias que mediste",
+        "T1.Ri tiene una incertidumbre del 261516553 %: ese elemento no está determinado por los datos. O sobra en el circuito, o su constante de tiempo cae fuera del rango de frecuencias que mediste",
+        "a alta frecuencia el espectro entra en la mitad inductiva del plano (−Z″ negativo). Casi siempre son los cables, no la muestra: añade una L en serie al circuito o recorta esas frecuencias"
+      ]
+    }
+  ],
+  "velocidad": {
+    "politica": "mediana",
+    "retencion": 0.784814447334756,
+    "razon_corriente": 11.999999627470997,
+    "m": 0.08982222574586582,
+    "m_error": 0.04844519198363834,
+    "r2": 0.5339940794601049,
+    "desvanecimiento_serie": 1.2330281655381328,
+    "retencion_sin_corregir_ir": 0.6400442542551921,
+    "retencion_corregida": null,
+    "ohmico": true,
+    "puntos": [
+      {
+        "corriente_a": 5.000000353902578e-06,
+        "capacitancia_f": 0.0015634514739843923,
+        "ventana_v": 1.185152032972245,
+        "ir_v": 0.014090609550475919,
+        "ciclos": 101,
+        "dispersion": 0.13548694651401408,
+        "retencion_interna": 1.1329677578619213,
+        "orden": 5,
+        "especifica_f_g": null
+      },
+      {
+        "corriente_a": 1.0000000707805157e-05,
+        "capacitancia_f": 0.001234956941466004,
+        "ventana_v": 1.1698578600253684,
+        "ir_v": 0.027543026208877386,
+        "ciclos": 101,
+        "dispersion": 0.030196132333986957,
+        "retencion_interna": 1.0241220445321806,
+        "orden": 4,
+        "especifica_f_g": null
+      },
+      {
+        "corriente_a": 2.0000001415610313e-05,
+        "capacitancia_f": 0.0011502066711197008,
+        "ventana_v": 1.1348152548216515,
+        "ir_v": 0.06042242646295792,
+        "ciclos": 101,
+        "dispersion": 0.006638048333967986,
+        "retencion_interna": 1.0008826887906317,
+        "orden": 3,
+        "especifica_f_g": null
+      },
+      {
+        "corriente_a": 4.0000002831220626e-05,
+        "capacitancia_f": 0.001169456334264316,
+        "ventana_v": 1.0468728382252541,
+        "ir_v": 0.1443183124075752,
+        "ciclos": 101,
+        "dispersion": 0.07156003191906155,
+        "retencion_interna": 1.064132367604986,
+        "orden": 1,
+        "especifica_f_g": null
+      },
+      {
+        "corriente_a": 6.000000238418579e-05,
+        "capacitancia_f": 0.0012270193044897706,
+        "ventana_v": 0.9557698177066357,
+        "ir_v": 0.23011714518070203,
+        "ciclos": 101,
+        "dispersion": 0.004801095986739625,
+        "retencion_interna": 0.9977572694743881,
+        "orden": 2,
+        "especifica_f_g": null
+      }
+    ],
+    "avisos": [
+      "«GCPL__prueba_ventana_1-0_02_GCPL_C01»: la eficiencia culómbica media es 105.77 %, por encima del 100 % en el promedio de todos los ciclos. Eso no es ruido de un ciclo: es carga que sale sin haber entrado, o sea una reacción parásita sostenida durante toda la medida",
+      "«GCPL__prueba_ventana_1-0_03_GCPL_C01»: la eficiencia culómbica media es 113.92 %, por encima del 100 % en el promedio de todos los ciclos. Eso no es ruido de un ciclo: es carga que sale sin haber entrado, o sea una reacción parásita sostenida durante toda la medida",
+      "«GCPL__prueba_ventana_1-0_04_GCPL_C01»: la eficiencia culómbica media es 142.45 %, por encima del 100 % en el promedio de todos los ciclos. Eso no es ruido de un ciclo: es carga que sale sin haber entrado, o sea una reacción parásita sostenida durante toda la medida",
+      "los archivos GANAN un 23.3 % compuesto de capacitancia dentro de sus propios ciclos: el electrodo se está activando, no degradando. Mientras eso pasa la retención frente a la corriente no es sólo velocidad, y el sentido del sesgo lo decide el orden de medida igual que si estuviera cayendo",
+      "la capacitancia de «GCPL__prueba_ventana_1-0_04_GCPL_C01» varía un 14 % entre sus propios ciclos, más que el 10 % admisible. El punto de esa corriente no es un punto, es un intervalo, y el ciclo que se elija de ese archivo cambia la retención",
+      "a 0.06 mA la caída IR se come el 19 % de la excursión, y lo que queda son 0.956 V frente a 1.19 V en la corriente más baja. El salto está descontado de las dos capacitancias, así que no sesga ninguna por sí mismo; lo que no se puede es llamarlas la misma medida a otra velocidad, porque un electrodo cuya capacitancia cambia con el potencial no da lo mismo sobre una ventana un 19 % más corta. Baja la corriente máxima o compénsala"
+    ]
+  },
+  "avisos": [
+    "CV: el archivo tiene 4 ciclos; se ha usado el último. El PRIMERO nunca es representativo: lleva formación irreversible, descomposición de electrolito o acondicionamiento del óxido",
+    "CV: sin masa activa no hay capacitancia específica. Y tiene que ser la masa de material ACTIVO, no la del electrodo: el aglomerante y el carbón conductor suelen ser el 20 %, y usar la masa total rebaja el resultado justo esa fracción",
+    "CV: hay picos redox definidos. Antes de citar una capacitancia en F/g, mira el mecanismo (echem.evaluate): un material con picos almacena CARGA, y expresarlo en faradios dividiendo por la ventana infla el número y no describe lo que hace el material",
+    "velocidades: 4.99991 mV/s: los 3 ciclos completos del archivo dan 1.4 → 1.438 → 1.418 mF, -0.62 % por ciclo",
+    "velocidades: 9.99883 mV/s: los 3 ciclos completos del archivo dan 1.325 → 1.267 → 1.262 mF, +2.43 % por ciclo. La caída es MONÓTONA: el ciclo que se informa está sobre una pendiente, no en estado estacionario, y el valor citado depende de cuál se cite. Para una cifra publicable hace falta ciclar hasta que se estabilice",
+    "velocidades: 19.9977 mV/s: los 3 ciclos completos del archivo dan 1.234 → 1.169 → 1.166 mF, +2.81 % por ciclo. La caída es MONÓTONA: el ciclo que se informa está sobre una pendiente, no en estado estacionario, y el valor citado depende de cuál se cite. Para una cifra publicable hace falta ciclar hasta que se estabilice",
+    "velocidades: 49.9934 mV/s: los 3 ciclos completos del archivo dan 1.149 → 1.07 → 1.069 mF, +3.55 % por ciclo. La caída es MONÓTONA: el ciclo que se informa está sobre una pendiente, no en estado estacionario, y el valor citado depende de cuál se cite. Para una cifra publicable hace falta ciclar hasta que se estabilice",
+    "velocidades: 99.9878 mV/s: los 3 ciclos completos del archivo dan 1.065 → 0.9923 → 0.9909 mF, +3.53 % por ciclo. La caída es MONÓTONA: el ciclo que se informa está sobre una pendiente, no en estado estacionario, y el valor citado depende de cuál se cite. Para una cifra publicable hace falta ciclar hasta que se estabilice",
+    "velocidades: 199.987 mV/s: los 3 ciclos completos del archivo dan 0.9561 → 0.89 → 0.8908 mF, +3.47 % por ciclo",
+    "velocidades: la recta de C_dl tiene R² = 0.977. Si no es recta, la ventana no era puramente no faradaica y el C_dl lleva dentro corriente de reacción",
+    "velocidades: el C_dl y el ECSA se han calculado sin que se haya declarado que la ventana esté libre de corriente faradaica. Elige una región donde no pase nada (típicamente ±50 mV alrededor del potencial de circuito abierto) y vuelve a medir, o estos dos números incluyen reacción",
+    "velocidades: el ECSA se ha calculado con Cs = 40 µF/cm², pero la literatura da entre 20 y 60 para el mismo tipo de material. Ese factor de tres pasa entero al área y de ahí a cualquier actividad que normalices por ella: es la magnitud peor determinada de toda la electrocatálisis. Compara ECSA entre TUS muestras, no contra las de un artículo",
+    "velocidades: en 2 de los 9 potenciales examinados las TRES leyes de i(ν) ajustan igual de bien: «i = a·ν^b», la de Dunn y «i = k_cap·ν + i_par». Con 6 velocidades sobre un factor 40 y dos parámetros no hay con qué elegir ahí, así que en esos potenciales el b no es prueba de difusión: es compatible con ella y también con una corriente constante, que aquí no es una hipótesis — está medida aparte, ⟨i_par⟩ = -0.35 µA con R² = 0.981 a partir de ΔQ, y la ley de fuga pide 0.72 µA en -0.240 V. En el resto la serie SÍ distingue, y entonces la pregunta correcta no es cuál de las tres sino las tres a la vez: el ajuste de 6 velocidades a «k_cap·ν + k_diff·√ν + i_par» determina el término difusivo en 6 de los 9 potenciales",
+    "GCD: los tres convenios de capacitancia difieren un 50 % (2.287 mF frente a 1.133 mF). Eso NO es ruido: es que la descarga no es una recta (R² = 0.967). El de ΔV supone que sí lo es y sobreinforma exactamente lo que la meseta se curva; para un pseudocondensador el defendible es el de ENERGÍA, que es la capacitancia que almacenaría la misma energía en la misma ventana. Elegir el mayor es una elección, no una medida",
+    "GCD: la descarga no es lineal (R² = 0.967): hay meseta de potencial. Una meseta es comportamiento de BATERÍA, y una capacitancia en faradios describe mal a un material así. La magnitud correcta es la capacidad, en C/g o mAh/g, y está calculada arriba",
+    "GCD: la eficiencia culómbica sale 153.0 %, por encima del 100 %. Físicamente imposible en un ciclo aislado: o hay una reacción parásita que aporta carga en la descarga, o el corte de la carga llegó antes de completarse. El exceso equivale a +1.05 µA de corriente parásita, que es la forma de comparar este número entre corrientes distintas: una fuga es una corriente, así que la MISMA fuga sale como un exceso grande a corriente pequeña y pequeño a corriente grande",
+    "velocidad GCD: «GCPL__prueba_ventana_1-0_02_GCPL_C01»: la eficiencia culómbica media es 105.77 %, por encima del 100 % en el promedio de todos los ciclos. Eso no es ruido de un ciclo: es carga que sale sin haber entrado, o sea una reacción parásita sostenida durante toda la medida",
+    "velocidad GCD: «GCPL__prueba_ventana_1-0_03_GCPL_C01»: la eficiencia culómbica media es 113.92 %, por encima del 100 % en el promedio de todos los ciclos. Eso no es ruido de un ciclo: es carga que sale sin haber entrado, o sea una reacción parásita sostenida durante toda la medida",
+    "velocidad GCD: «GCPL__prueba_ventana_1-0_04_GCPL_C01»: la eficiencia culómbica media es 142.45 %, por encima del 100 % en el promedio de todos los ciclos. Eso no es ruido de un ciclo: es carga que sale sin haber entrado, o sea una reacción parásita sostenida durante toda la medida",
+    "velocidad GCD: los archivos GANAN un 23.3 % compuesto de capacitancia dentro de sus propios ciclos: el electrodo se está activando, no degradando. Mientras eso pasa la retención frente a la corriente no es sólo velocidad, y el sentido del sesgo lo decide el orden de medida igual que si estuviera cayendo",
+    "velocidad GCD: la capacitancia de «GCPL__prueba_ventana_1-0_04_GCPL_C01» varía un 14 % entre sus propios ciclos, más que el 10 % admisible. El punto de esa corriente no es un punto, es un intervalo, y el ciclo que se elija de ese archivo cambia la retención",
+    "velocidad GCD: a 0.06 mA la caída IR se come el 19 % de la excursión, y lo que queda son 0.956 V frente a 1.19 V en la corriente más baja. El salto está descontado de las dos capacitancias, así que no sesga ninguna por sí mismo; lo que no se puede es llamarlas la misma medida a otra velocidad, porque un electrodo cuya capacitancia cambia con el potencial no da lo mismo sobre una ventana un 19 % más corta. Baja la corriente máxima o compénsala",
+    "EIS: Z″ es POSITIVO en 3 punto(s) del extremo alto: eso es inductancia del cableado, no de la muestra. Un circuito sin una L en serie tiene que absorberla en R0, y entonces R0 no es la resistencia de la disolución",
+    "EIS: −Z″ no tiene ningún máximo local: sube hasta la frecuencia más baja medida. No hay semicírculo cerrado en estos datos, así que de ellos NO sale ninguna resistencia de transferencia de carga — la que devuelva un ajuste sale del modelo, no de la medida",
+    "EIS: a 0.0999 Hz la fase es -65° y un condensador está en −90°: el barrido no ha llegado al régimen capacitivo, así que la C′ de ese extremo es una cota INFERIOR de lo que almacena el electrodo. Baja más la frecuencia",
+    "EIS: el residuo medio es 11.0 %. El circuito no describe estos datos: mira el diagrama de Nyquist y compara la forma, no el número",
+    "EIS: a alta frecuencia el espectro entra en la mitad inductiva del plano (−Z″ negativo). Casi siempre son los cables, no la muestra: añade una L en serie al circuito o recorta esas frecuencias",
+    "C(ω): a la frecuencia más baja medida (0.0999 Hz) el ángulo de fase es -65°, y un condensador está en −90°. La medida no ha llegado al régimen capacitivo, así que esta capacitancia es un límite INFERIOR: baja más la frecuencia",
+    "C(ω): la capacitancia en serie (−1/ωZ″ = 0.958 mF) y la real (C′ = 0.787 mF) difieren un 22 %: la parte real de la impedancia no es despreciable a esa frecuencia y las dos fórmulas dejan de ser la misma. C′ es la que se puede entregar",
+    "DRT: la inversión es mal condicionada: la regularización no es un detalle de implementación sino una elección sobre cuánta estructura creerse. Aquí λ = 1.11e-05",
+    "DRT: hay picos separados por menos de un factor de tres en τ: a esa distancia la separación depende de λ más que de los datos, y un circuito equivalente los describiría igual de bien con un solo elemento de fase constante",
+    "DRT: hay peso apreciable en el extremo lento: falta frecuencia baja, y la difusión suele estar ahí",
+    "Dunn: en 8 potenciales la corriente de la rama CAMBIA DE SIGNO entre una velocidad y otra (-0.478 a +1.108 V). Ahí la separación no está definida: k₁ν es una fracción de una corriente que no tiene un signo, y la banda capacitiva de la figura puede salirse del lazo por ese motivo y no por el ajuste. Es la firma de un cruce por cero que se mueve con la velocidad — en estos archivos, la rama catódica lleva corriente anódica cerca del límite positivo",
+    "capacitancia: los métodos difieren un 52 %: GCD da 1.632 mF y EIS da 0.7871 mF. No es ruido. Lo habitual es que la de EIS sea la mayor: se mide con una perturbación pequeña alrededor de un punto fijo y ahí no hay nada limitado por velocidad. Entre CV y GCD el orden lo deciden la velocidad y la corriente que se usaran, y compararlas solo vale si son equivalentes; si no lo son, esta diferencia es de las condiciones y no del electrodo",
+    "capacitancia: el número que entrega un dispositivo es el de GCD. Los otros dos son diagnósticos: útiles para entender el electrodo, no para anunciar su prestación",
+    "capacitancia: sin masa activa no hay F/g, que es como se publica casi todo. Ponla en el electrodo: es la masa de material ACTIVO, no la del electrodo entero",
+    "la capacitancia del voltamperograma es sólo 0.78 veces la galvanostática. Suele significar que la ventana del CV era más estrecha, o que la velocidad de barrido era demasiado alta para que el electrodo respondiera entero",
+    "la resistencia de la caída IR (1.4e+03 Ω) y la de alta frecuencia de la impedancia (87.5 Ω) difieren en más de un factor 3. La primera incluye resistencias que a alta frecuencia se cortocircuitan (la de contacto, la del propio material), así que salga mayor es normal; salga menor, no, y entonces alguna de las dos medidas está mal escalada"
+  ]
+}

@@ -231,9 +231,15 @@ class EchemSession:
     answer of a Mott-Schottky depends on the frequency, and the only way
     to find out how much is to do it at several."""
     ms_temperature_k: float = 298.15
-    gcd_measured_order: list[str] = field(default_factory=list)
-    """Names of the galvanostatic files in the order they were LOADED,
-    taken to be the order they were measured in.
+    gcd_measured_order: list[int] = field(default_factory=list)
+    """``id()`` of the galvanostatic curves in the order they were
+    LOADED, taken to be the order they were measured in.
+
+    By identity and not by name because a reader that gives every file
+    of a technique the same name -- EC-Lab's does, every ``.mpr`` comes
+    back as "GCD (EC-Lab)" -- makes names useless as keys, and silently:
+    the order would look unavailable and the bias warning would go
+    missing rather than fail.
 
     Kept because :attr:`gcd_series` is sorted by discharge current the
     moment a file is added, which is what the tables and the plots want
@@ -440,8 +446,12 @@ class EchemSession:
         except (OSError, ValueError, EchemIOError) as exc:
             self.log("error", f"{Path(path).name}: {exc}")
             return False
+        # Every .mpr of a technique comes back under the same name, so a
+        # warning that quotes it names nothing. The file is what the user
+        # can act on, so the file is what goes on the curve.
+        curve.name = Path(path).stem
         self.gcd_series.append(curve)
-        self.gcd_measured_order.append(curve.name)
+        self.gcd_measured_order.append(id(curve))
         # By the DISCHARGE current: that is the current a rate point is
         # at, and the median over the whole record returns 40 uA for a
         # curve that charges at 60 and discharges at 20.
@@ -1367,13 +1377,12 @@ class EchemSession:
         script building the series by hand -- and then the order is the
         list's own and is reported as unknown rather than guessed.
         """
-        names = list(self.gcd_measured_order)
-        if len(names) != len(curves) or len(set(names)) != len(names):
+        order = list(self.gcd_measured_order)
+        if len(order) != len(curves) or len(set(order)) != len(order):
             return list(curves), False
-        try:
-            return sorted(curves, key=lambda c: names.index(c.name)), True
-        except ValueError:
+        if {id(c) for c in curves} != set(order):
             return list(curves), False
+        return sorted(curves, key=lambda c: order.index(id(c))), True
 
     def gcd_rate_rows(self) -> list[tuple[str, ...]]:
         """One row per current: the rate curve, with its uncertainty.

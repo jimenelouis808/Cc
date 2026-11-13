@@ -1,0 +1,23 @@
+Capacidad de velocidad (5 corrientes, 0.005–0.06 mA)
+  ciclo representativo de cada archivo: mediana
+
+     0.005 mA       1.563 mF   ±13.5 %   IR   14.1 mV ( 1.2 % de la excursión)
+      0.01 mA       1.235 mF   ± 3.0 %   IR   27.5 mV ( 2.3 % de la excursión)
+      0.02 mA        1.15 mF   ± 0.7 %   IR   60.4 mV ( 5.1 % de la excursión)
+      0.04 mA       1.169 mF   ± 7.2 %   IR    144 mV (12.1 % de la excursión)
+      0.06 mA       1.227 mF   ± 0.5 %   IR    230 mV (19.4 % de la excursión)
+
+  Retención: 78.5 % a 12× la corriente
+  ⚠ esa retención incluye activación: los archivos GANAN un 23.3 % compuesto en sus propios ciclos
+
+  C = a·I^-m con m = 0.090 ± 0.048 (R² = 0.5340) — mixto: parte de la capacitancia sólo responde despacio
+
+  Sin descontar la caída IR la retención saldría 64.0 %, o sea que +14.5 puntos de la caída aparente son la resistencia de la celda y no el electrodo.
+  La mayor parte de lo que un análisis sin corregir llamaría capacidad de velocidad es la ESR.
+
+  ⚠ «GCPL__prueba_ventana_1-0_02_GCPL_C01»: la eficiencia culómbica media es 105.77 %, por encima del 100 % en el promedio de todos los ciclos. Eso no es ruido de un ciclo: es carga que sale sin haber entrado, o sea una reacción parásita sostenida durante toda la medida
+  ⚠ «GCPL__prueba_ventana_1-0_03_GCPL_C01»: la eficiencia culómbica media es 113.92 %, por encima del 100 % en el promedio de todos los ciclos. Eso no es ruido de un ciclo: es carga que sale sin haber entrado, o sea una reacción parásita sostenida durante toda la medida
+  ⚠ «GCPL__prueba_ventana_1-0_04_GCPL_C01»: la eficiencia culómbica media es 142.45 %, por encima del 100 % en el promedio de todos los ciclos. Eso no es ruido de un ciclo: es carga que sale sin haber entrado, o sea una reacción parásita sostenida durante toda la medida
+  ⚠ los archivos GANAN un 23.3 % compuesto de capacitancia dentro de sus propios ciclos: el electrodo se está activando, no degradando. Mientras eso pasa la retención frente a la corriente no es sólo velocidad, y el sentido del sesgo lo decide el orden de medida igual que si estuviera cayendo
+  ⚠ la capacitancia de «GCPL__prueba_ventana_1-0_04_GCPL_C01» varía un 14 % entre sus propios ciclos, más que el 10 % admisible. El punto de esa corriente no es un punto, es un intervalo, y el ciclo que se elija de ese archivo cambia la retención
+  ⚠ a 0.06 mA la caída IR se come el 19 % de la excursión, y lo que queda son 0.956 V frente a 1.19 V en la corriente más baja. El salto está descontado de las dos capacitancias, así que no sesga ninguna por sí mismo; lo que no se puede es llamarlas la misma medida a otra velocidad, porque un electrodo cuya capacitancia cambia con el potencial no da lo mismo sobre una ventana un 19 % más corta. Baja la corriente máxima o compénsala

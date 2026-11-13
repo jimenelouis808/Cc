@@ -4850,3 +4850,24 @@ def test_the_window_does_not_invent_a_bias_from_its_own_sort():
     # and the session admits it rather than trusting its sorted list.
     assert known is bool(loaded)
     assert len(ordered) == 4
+
+
+def test_an_asymmetric_pair_is_not_a_point_on_a_current_axis():
+    """A file that charges at 60 µA and discharges at 20 has no single
+    current density, so it cannot sit on an axis that IS a current. That
+    is the ``aparte`` policy, and the rate curve is one of the two places
+    the policy names."""
+    from ramancarbon.echem.gcd import rate_capability
+
+    series = _rate_series((5e-6, 10e-6, 20e-6))
+    broken = _gcd_curve(charge_a=60e-6, discharge_a=-20e-6, cycles=4,
+                        points_per_branch=60)
+    broken.name = "60/-20 uA"
+    series.append(broken)
+
+    result = rate_capability(series)
+
+    assert len(result.points) == 3
+    assert all(p.name != "60/-20 uA" for p in result.points)
+    assert any("no tiene UNA densidad de corriente" in w
+               for w in result.warnings)

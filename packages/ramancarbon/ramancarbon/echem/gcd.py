@@ -1019,6 +1019,23 @@ RATE_SPREAD_LIMIT = 0.10
 #: through two points.
 MIN_RATE_POINTS = 3
 
+#: Retention points, between corrected and uncorrected, above which the
+#: fade is mostly the cell's resistance.
+#:
+#: Five points of retention. Below that the IR correction is a detail;
+#: above it, an analysis that skipped the correction is reporting the
+#: ESR as a property of the material.
+RATE_OHMIC_MARGIN = 0.05
+
+#: Fraction of the potential excursion the IR jump may eat at the
+#: highest current before the capacitances are not over the same window.
+#:
+#: Ten per cent. The jump is removed from every capacitance, so it does
+#: not bias one on its own -- but the window LEFT is then materially
+#: smaller, and for an electrode whose capacitance varies across the
+#: window that is a different measurement, not the same one faster.
+RATE_IR_SHARE_LIMIT = 0.10
+
 #: Compounded within-file fade below which the series is NOT at constant
 #: state of health and its retention carries a degradation bias.
 #:
@@ -1107,9 +1124,17 @@ class RateCapability:
     """The retention with that compounded fade divided out of the
     reference point. An estimate, not a measurement: it assumes the fade
     went on between files at the rate measured inside them."""
+    retention_uncorrected: Optional[float] = None
+    """The retention an analysis that left the IR jump INSIDE the window
+    would have reported. The difference between it and
+    :attr:`retention` is how much of the apparent fade is the cell's
+    resistance rather than the electrode, and it is the one number that
+    settles the question -- not the size of the jump, which says nothing
+    on its own."""
     ohmic: bool = False
-    """Whether the IR jump alone accounts for the fade. It usually does
-    not, and when it does the electrode is not the problem."""
+    """Whether removing the IR jump changed the retention by more than
+    :data:`RATE_OHMIC_MARGIN`. When it did, most of what an uncorrected
+    analysis calls rate capability is the ESR."""
     warnings: list[str] = field(default_factory=list)
 
     @property
@@ -1147,6 +1172,12 @@ class RateCapability:
                 f"pierden un {100 * (1 - self.series_fade):.1f} % "
                 "compuesto en sus propios ciclos"
             )
+        elif self.series_fade is not None and self.series_fade > 1.01:
+            lines.append(
+                f"  ⚠ esa retención incluye activación: los archivos GANAN "
+                f"un {100 * (self.series_fade - 1):.1f} % compuesto en sus "
+                "propios ciclos"
+            )
             if self.retention_corrected is not None:
                 lines.append(
                     f"    descontándola saldría ~{100 * self.retention_corrected:.1f} %, "
@@ -1162,21 +1193,43 @@ class RateCapability:
                 f"  C = a·I^-m con m = {self.exponent:.3f}{error} "
                 f"(R² = {self.r_squared:.4f}) — {self.interpretation}"
             )
-        if self.retention is not None and self.retention < 0.98:
+        if (self.retention is not None
+                and self.retention_uncorrected is not None):
             lines.append("")
+            points_of_ir = 100 * (self.retention - self.retention_uncorrected)
             lines.append(
-                "  La caída IR ya está descontada de cada capacitancia, así "
-                "que lo que queda arriba "
-                + ("SÍ lo explica la resistencia: el salto ohmico se come la "
-                   "ventana en la misma proporción"
-                   if self.ohmic else
-                   "NO lo explica la resistencia. Es cinética o difusión "
-                   "dentro del material, y bajar la ESR no lo arregla")
+                f"  Sin descontar la caída IR la retención saldría "
+                f"{100 * self.retention_uncorrected:.1f} %, o sea que "
+                f"{points_of_ir:+.1f} puntos de la caída aparente son la "
+                "resistencia de la celda y no el electrodo."
+            )
+            lines.append(
+                "  " + ("La mayor parte de lo que un análisis sin corregir "
+                        "llamaría capacidad de velocidad es la ESR."
+                        if self.ohmic else
+                        "Aun descontándola queda caída, así que es cinética "
+                        "o difusión dentro del material y bajar la ESR no "
+                        "lo arregla.")
             )
         if self.warnings:
             lines.append("")
             lines.extend("  ⚠ " + w for w in self.warnings)
         return "\n".join(lines)
+
+
+def _is_asymmetric(curve: ChargeDischarge) -> bool:
+    """Whether the charge and discharge currents differ meaningfully."""
+    halves = half_cycles(curve)
+    charge = [abs(h.current_a) for h in halves if h.kind == "carga"]
+    discharge = [abs(h.current_a) for h in halves if h.kind == "descarga"]
+    if not charge or not discharge:
+        return False
+    up = float(np.median(charge))
+    down = float(np.median(discharge))
+    largest = max(up, down)
+    if largest <= 0:
+        return False
+    return abs(up - down) / largest > ASYMMETRY_TOLERANCE
 
 
 def _rate_representative(values: list[float], policy: str) -> tuple[float, float]:
@@ -1280,8 +1333,20 @@ def rate_capability(
             f"{', '.join(RATE_CYCLE_POLICIES)}"
         )
     result = RateCapability(policy=policy)
-    windows: list[float] = []
     for order, curve in enumerate(curves, start=1):
+        # A pair that charges at one current and discharges at another
+        # has no single current density, so it cannot be a point on an
+        # axis that IS a current. This is the "aparte" policy of
+        # :data:`ASYMMETRY_POLICIES` and it is not optional here: the
+        # rate curve and the Ragone plot are the two places that
+        # paragraph names.
+        if _is_asymmetric(curve):
+            result.warnings.append(
+                f"«{curve.name}» carga y descarga a corrientes distintas, "
+                "así que no tiene UNA densidad de corriente y queda fuera "
+                "de la curva de velocidad. Se analiza aparte"
+            )
+            continue
         cycling = cycling_from_curve(curve)
         if not cycling.capacitance_f:
             result.warnings.append(
@@ -1300,7 +1365,6 @@ def rate_capability(
         if len(values) >= 2 and values[0] > 0:
             within = values[-1] / values[0]
         window = capacity / capacitance if capacitance > 0 else 0.0
-        windows.append(window)
         point = RatePoint(
             current_a=float(np.median(currents)),
             capacitance_f=capacitance,
@@ -1332,14 +1396,13 @@ def rate_capability(
 
     measured = list(result.points)
     result.points.sort(key=lambda p: abs(p.current_a))
-    _finish_rate(result, measured, windows, order_known)
+    _finish_rate(result, measured, order_known)
     return result
 
 
 def _finish_rate(
     result: RateCapability,
     measured: list[RatePoint],
-    windows: list[float],
     order_known: bool = True,
 ) -> None:
     """Retention, exponent, the degradation bias and the warnings."""
@@ -1364,17 +1427,26 @@ def _finish_rate(
             product *= value
         result.series_fade = product
 
-    # Is the fade ohmic? Every capacitance here already has the IR jump
-    # removed, so the question is whether the jump is nonetheless large
-    # enough to be the whole story -- which it is only if the window it
-    # ate scales like the capacitance lost.
-    if (result.retention is not None and result.retention < 0.98
-            and slow.window_v > 0):
-        ohmic_prediction = (
-            slow.window_v / fast.window_v if fast.window_v > 0 else None
+    # How much of the fade is the cell's resistance. Not the size of the
+    # IR jump, which answers nothing: the jump is already out of every
+    # capacitance here, so the question is what the SAME series would
+    # have given with it left in. The first version of this compared the
+    # window ratio against the retention, which are not comparable
+    # quantities -- a jump that only shrinks the window leaves the
+    # capacitance Q/DV unchanged, by construction.
+    uncorrected = []
+    for point in (slow, fast):
+        total = point.window_v + point.ir_drop_v
+        uncorrected.append(
+            point.capacity_c / total if total > 0 else None
         )
-        if ohmic_prediction is not None:
-            result.ohmic = abs(ohmic_prediction - result.retention) < 0.05
+    if all(v is not None and v > 0 for v in uncorrected):
+        result.retention_uncorrected = uncorrected[1] / uncorrected[0]
+        if result.retention is not None:
+            result.ohmic = (
+                result.retention - result.retention_uncorrected
+                > RATE_OHMIC_MARGIN
+            )
 
     # The degradation bias, with its sign.
     if (result.retention is not None and result.series_fade
@@ -1406,6 +1478,15 @@ def _finish_rate(
                 "degradación acumulada entre los dos extremos"
             )
 
+    if result.series_fade is not None and result.series_fade > 1.01:
+        result.warnings.append(
+            f"los archivos GANAN un {100 * (result.series_fade - 1):.1f} % "
+            "compuesto de capacitancia dentro de sus propios ciclos: el "
+            "electrodo se está activando, no degradando. Mientras eso pasa "
+            "la retención frente a la corriente no es sólo velocidad, y el "
+            "sentido del sesgo lo decide el orden de medida igual que si "
+            "estuviera cayendo"
+        )
     if len(points) < MIN_RATE_POINTS:
         result.warnings.append(
             f"sólo {len(points)} corrientes. Con menos de {MIN_RATE_POINTS} el "
@@ -1421,15 +1502,36 @@ def _finish_rate(
             "corriente no es un punto, es un intervalo, y el ciclo que se "
             "elija de ese archivo cambia la retención"
         )
-    if windows:
-        span = np.asarray(windows, dtype=float)
-        if span.max() > 0 and (span.max() - span.min()) / span.max() > 0.10:
+    # The window the OPERATOR set is the excursion INCLUDING the jump.
+    # Comparing the corrected windows instead flags every series with a
+    # real resistance as "two experiments", which is wrong: the jump
+    # shrinking the window is the rate study, not a change of protocol.
+    excursions = np.array([p.window_v + p.ir_drop_v for p in points],
+                          dtype=float)
+    if excursions.size and excursions.max() > 0:
+        change = (excursions.max() - excursions.min()) / excursions.max()
+        if change > 0.10:
             result.warnings.append(
                 f"la ventana de potencial no es la misma en toda la serie "
-                f"({span.min():.3g} a {span.max():.3g} V). Una capacitancia "
-                "medida sobre ventanas distintas no se compara consigo misma, "
-                "y esto no es un estudio de velocidad sino dos experimentos"
+                f"({excursions.min():.3g} a {excursions.max():.3g} V de "
+                "excursión, caída IR incluida). Una capacitancia medida "
+                "sobre ventanas distintas no se compara consigo misma, y "
+                "esto no es un estudio de velocidad sino dos experimentos"
             )
+    worst_ir = max(points, key=lambda p: p.ir_fraction)
+    if worst_ir.ir_fraction > RATE_IR_SHARE_LIMIT:
+        result.warnings.append(
+            f"a {1e3 * abs(worst_ir.current_a):.4g} mA la caída IR se come el "
+            f"{100 * worst_ir.ir_fraction:.0f} % de la excursión, y lo que "
+            f"queda son {worst_ir.window_v:.3g} V frente a "
+            f"{slow.window_v:.3g} V en la corriente más baja. El salto está "
+            "descontado de las dos capacitancias, así que no sesga ninguna "
+            "por sí mismo; lo que no se puede es llamarlas la misma medida "
+            "a otra velocidad, porque un electrodo cuya capacitancia cambia "
+            "con el potencial no da lo mismo sobre una ventana un "
+            f"{100 * (1 - worst_ir.window_v / slow.window_v):.0f} % más "
+            "corta. Baja la corriente máxima o compénsala"
+        )
     if result.retention is not None and result.retention > 1.0:
         result.warnings.append(
             f"la capacitancia SUBE con la corriente (retención "
@@ -1464,6 +1566,8 @@ __all__ = [
     "MIN_SHAPE_POINTS",
     "RATE_CYCLE_POLICIES",
     "RATE_FADE_FLOOR",
+    "RATE_IR_SHARE_LIMIT",
+    "RATE_OHMIC_MARGIN",
     "RATE_SPREAD_LIMIT",
     "Branch",
     "CyclingResult",
