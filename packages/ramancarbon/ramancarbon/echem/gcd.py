@@ -808,6 +808,12 @@ class CyclingResult:
     current_a: list[float] = field(default_factory=list)
     """The discharge current of each cycle, so a file that changes current
     part way through can still be read."""
+    ir_drop_v: list[float] = field(default_factory=list)
+    """The IR jump at the start of each discharge, in volts. Kept per
+    cycle because a resistance that grows while the capacitance falls is
+    a different failure from one that does not, and because
+    :func:`rate_capability` needs it to say whether a rate penalty is
+    ohmic."""
     retention: Optional[float] = None
     fade_per_cycle: Optional[float] = None
     source: str = ""
@@ -885,6 +891,7 @@ def cycling_from_curve(curve: ChargeDischarge) -> CyclingResult:
         result.capacity_c.append(charge)
         result.capacitance_f.append(charge / span)
         result.current_a.append(half.current_a)
+        result.ir_drop_v.append(drop)
         if pending_charge is not None:
             given = abs(pending_charge.current_a) * pending_charge.duration_s
             if given > 0.0:
@@ -974,6 +981,7 @@ def analyse_cycling(curves: Sequence[ChargeDischarge]) -> CyclingResult:
         result.cycles.append(index)
         result.capacity_c.append(chosen.charge_c)
         result.current_a.append(chosen.current_a)
+        result.ir_drop_v.append(abs(chosen.ir_drop_v))
         if chosen.capacitance_f is not None:
             result.capacitance_f.append(chosen.capacitance_f)
         if analysis.coulombic_efficiency is not None:
@@ -983,20 +991,489 @@ def analyse_cycling(curves: Sequence[ChargeDischarge]) -> CyclingResult:
     return result
 
 
+# -- rate capability --------------------------------------------------
+
+
+#: Which cycle of a multi-cycle file stands for its rate.
+#:
+#: ``"mediana"`` takes the median of the file's own cycles, which is the
+#: defensible choice when a file holds a hundred of them and loses
+#: capacitance across them: the last cycle is then the most degraded one
+#: and the first is formation. ``"ultimo"`` is the convention for a rate
+#: study designed as one -- a few cycles per current, the stabilised one
+#: reported -- and ``"primero"`` is there to bound the degradation from
+#: the other side. The three are offered rather than one being imposed
+#: because which is right depends on how the series was run, and the
+#: spread between them is reported either way.
+RATE_CYCLE_POLICIES = ("mediana", "ultimo", "primero")
+
+#: Relative spread of a file's own cycles above which its rate point is
+#: not a point.
+#:
+#: Ten per cent: below any rate effect worth reporting over a decade of
+#: current, and above the cycle-to-cycle scatter of a cell that is
+#: holding still.
+RATE_SPREAD_LIMIT = 0.10
+
+#: Fewest currents before a rate exponent is a fit rather than a line
+#: through two points.
+MIN_RATE_POINTS = 3
+
+#: Compounded within-file fade below which the series is NOT at constant
+#: state of health and its retention carries a degradation bias.
+#:
+#: One per cent over the whole series. Below that the bias is smaller
+#: than the cycle-to-cycle scatter of any real cell and reporting it
+#: would be noise; above it the bias has a sign, and the sign is decided
+#: by the order the currents were run in.
+RATE_FADE_FLOOR = 0.99
+
+
+@dataclass
+class RatePoint:
+    """One current of a rate series."""
+
+    current_a: float
+    capacitance_f: float
+    capacity_c: float
+    window_v: float
+    """``Q/C``: the window the capacitance was taken over, IR jump
+    already removed."""
+    ir_drop_v: float
+    """Median IR jump of the cycles this point came from."""
+    cycles: int
+    spread: float
+    """``(max-min)/median`` of the capacitance over the file's own
+    cycles. This is the uncertainty on the point, and it is usually
+    larger than anyone quotes."""
+    within_retention: Optional[float]
+    """Last cycle over first cycle WITHIN this file. The rate series did
+    not happen at constant state of health, and this says how much it
+    moved while this one current was being measured."""
+    order: int
+    """Position in the measured sequence, from one."""
+    name: str
+    specific_f_per_g: Optional[float] = None
+    current_a_per_g: Optional[float] = None
+
+    @property
+    def ir_fraction(self) -> float:
+        """How much of the total potential excursion was the IR jump."""
+        total = self.window_v + self.ir_drop_v
+        return self.ir_drop_v / total if total > 0 else 0.0
+
+    def __str__(self) -> str:
+        line = (
+            f"{1e3 * abs(self.current_a):8.4g} mA   "
+            f"{1e3 * self.capacitance_f:9.4g} mF"
+        )
+        if self.specific_f_per_g is not None:
+            line += f" ({self.specific_f_per_g:8.4g} F/g)"
+        line += (
+            f"   ±{100 * self.spread:4.1f} %   "
+            f"IR {1e3 * self.ir_drop_v:6.3g} mV "
+            f"({100 * self.ir_fraction:4.1f} % de la excursión)"
+        )
+        return line
+
+
+@dataclass
+class RateCapability:
+    """Capacitance retention across a series of CURRENTS.
+
+    Not to be confused with :class:`CyclingResult`, which is retention
+    across a series of CYCLES. Both are called "retention" and they
+    answer different questions: cycling asks whether the electrode
+    survives use, and this asks whether it still works when the use is
+    fast. A material can pass either and fail the other.
+    """
+
+    points: list[RatePoint] = field(default_factory=list)
+    policy: str = ""
+    retention: Optional[float] = None
+    """Capacitance at the highest current over capacitance at the
+    lowest. The number quoted as "retains X % at Nx the current"."""
+    current_ratio: Optional[float] = None
+    exponent: Optional[float] = None
+    """``m`` in ``C = a·I^-m``, fitted in logs. Zero means no rate
+    penalty at all."""
+    exponent_error: Optional[float] = None
+    r_squared: Optional[float] = None
+    series_fade: Optional[float] = None
+    """What the series lost to cycling, from the per-file fades
+    compounded: the product of every file's own last-over-first. The
+    retention above includes this, and it is not a rate effect."""
+    retention_corrected: Optional[float] = None
+    """The retention with that compounded fade divided out of the
+    reference point. An estimate, not a measurement: it assumes the fade
+    went on between files at the rate measured inside them."""
+    ohmic: bool = False
+    """Whether the IR jump alone accounts for the fade. It usually does
+    not, and when it does the electrode is not the problem."""
+    warnings: list[str] = field(default_factory=list)
+
+    @property
+    def interpretation(self) -> str:
+        if self.exponent is None:
+            return "sin ajuste"
+        if self.exponent < 0.02:
+            return "sin penalización de velocidad: la carga es toda de superficie"
+        if self.exponent < 0.08:
+            return "penalización pequeña, propia de un electrodo de doble capa"
+        if self.exponent < 0.20:
+            return "mixto: parte de la capacitancia sólo responde despacio"
+        return "limitado por difusión: la mayor parte no llega a la corriente alta"
+
+    def summary(self) -> str:
+        if not self.points:
+            return "Sin serie de corrientes que analizar."
+        lines = [
+            f"Capacidad de velocidad ({len(self.points)} corrientes, "
+            f"{1e3 * min(abs(p.current_a) for p in self.points):g}–"
+            f"{1e3 * max(abs(p.current_a) for p in self.points):g} mA)",
+            f"  ciclo representativo de cada archivo: {self.policy}",
+            "",
+        ]
+        lines.extend("  " + str(p) for p in self.points)
+        if self.retention is not None:
+            lines.append("")
+            lines.append(
+                f"  Retención: {100 * self.retention:.1f} % a "
+                f"{self.current_ratio:.3g}× la corriente"
+            )
+        if self.series_fade is not None and self.series_fade < RATE_FADE_FLOOR:
+            lines.append(
+                f"  ⚠ esa retención incluye degradación: los archivos "
+                f"pierden un {100 * (1 - self.series_fade):.1f} % "
+                "compuesto en sus propios ciclos"
+            )
+            if self.retention_corrected is not None:
+                lines.append(
+                    f"    descontándola saldría ~{100 * self.retention_corrected:.1f} %, "
+                    "que es una estimación, no una medida"
+                )
+        if self.exponent is not None:
+            error = (
+                f" ± {self.exponent_error:.3f}"
+                if self.exponent_error is not None else ""
+            )
+            lines.append("")
+            lines.append(
+                f"  C = a·I^-m con m = {self.exponent:.3f}{error} "
+                f"(R² = {self.r_squared:.4f}) — {self.interpretation}"
+            )
+        if self.retention is not None and self.retention < 0.98:
+            lines.append("")
+            lines.append(
+                "  La caída IR ya está descontada de cada capacitancia, así "
+                "que lo que queda arriba "
+                + ("SÍ lo explica la resistencia: el salto ohmico se come la "
+                   "ventana en la misma proporción"
+                   if self.ohmic else
+                   "NO lo explica la resistencia. Es cinética o difusión "
+                   "dentro del material, y bajar la ESR no lo arregla")
+            )
+        if self.warnings:
+            lines.append("")
+            lines.extend("  ⚠ " + w for w in self.warnings)
+        return "\n".join(lines)
+
+
+def _rate_representative(values: list[float], policy: str) -> tuple[float, float]:
+    """The value standing for a file, and the spread of its cycles."""
+    array = np.asarray(values, dtype=float)
+    array = array[np.isfinite(array) & (array > 0)]
+    if array.size == 0:
+        return float("nan"), 0.0
+    middle = float(np.median(array))
+    if policy == "mediana":
+        chosen = middle
+    elif policy == "ultimo":
+        chosen = float(array[-1])
+    else:
+        chosen = float(array[0])
+    spread = (
+        float(array.max() - array.min()) / middle if middle > 0 else 0.0
+    )
+    return chosen, spread
+
+
+def _rate_exponent(
+    currents: np.ndarray, capacitances: np.ndarray
+) -> tuple[Optional[float], Optional[float], Optional[float]]:
+    """Fit ``C = a·I^-m`` in logs. Returns ``(m, error, r2)``."""
+    if currents.size < 2:
+        return None, None, None
+    x = np.log(currents)
+    y = np.log(capacitances)
+    slope, intercept = np.polyfit(x, y, 1)
+    fit = slope * x + intercept
+    residual = y - fit
+    total = y - y.mean()
+    ss_res = float(residual @ residual)
+    ss_tot = float(total @ total)
+    r2 = 1.0 - ss_res / ss_tot if ss_tot > 0 else 1.0
+    error: Optional[float] = None
+    if currents.size > 2:
+        spread = float(((x - x.mean()) ** 2).sum())
+        if spread > 0:
+            error = float(np.sqrt(ss_res / (currents.size - 2) / spread))
+    return float(-slope), error, r2
+
+
+def rate_capability(
+    curves: Sequence[ChargeDischarge],
+    policy: str = "mediana",
+    order_known: bool = True,
+) -> RateCapability:
+    """Capacitance against current, over a series of measurements.
+
+    This is the other retention. :func:`cycling_from_curve` asks what the
+    electrode has left after a thousand cycles; this asks what it has
+    left when the thousand cycles are run twelve times faster. The two
+    get reported under the same word and a cell can pass one and fail the
+    other, so they are separate functions here and the summary of each
+    says which it is.
+
+    Three things make the number quoted in the literature wrong more
+    often than not, and all three are reported:
+
+    - **The reference point is not a constant.** A rate series is run
+      one current after another, and the electrode degrades while that
+      happens. If the slowest current was measured last its capacitance
+      is already down, the ratio to it is flattered, and the paper
+      reports a rate capability that is partly a degradation it did not
+      measure. The per-file fades are compounded here and quoted
+      alongside.
+    - **The window is not a constant either.** At a higher current the
+      IR jump eats more of the excursion. That jump is removed from
+      every capacitance here, which means the remaining fade cannot be
+      blamed on the ESR -- and that is usually where it does get blamed.
+    - **A point from a multi-cycle file is a choice.** With a hundred
+      cycles in one file the first, the median and the last are three
+      different answers; the spread between them is on every line.
+
+    Parameters
+    ----------
+    curves:
+        The measurements, **in the order they were run**. The order is
+        not deducible from the files -- EC-Lab writes no usable
+        timestamp -- and it decides the sign of the degradation bias, so
+        it is taken from the caller and reported as given.
+    policy:
+        One of :data:`RATE_CYCLE_POLICIES`.
+    order_known:
+        Whether ``curves`` really is in the measured order. Clear it when
+        the list came from somewhere that sorted it -- a window that
+        orders its files by current, a glob -- and the signed bias
+        warning is replaced by one saying the sign is unknown. Claiming a
+        direction from a list that was sorted by current is worse than
+        claiming nothing: the sign would be an artefact of the sort.
+
+    Returns
+    -------
+    RateCapability
+    """
+    if policy not in RATE_CYCLE_POLICIES:
+        raise ValueError(
+            f"la política «{policy}» no existe; las que hay son "
+            f"{', '.join(RATE_CYCLE_POLICIES)}"
+        )
+    result = RateCapability(policy=policy)
+    windows: list[float] = []
+    for order, curve in enumerate(curves, start=1):
+        cycling = cycling_from_curve(curve)
+        if not cycling.capacitance_f:
+            result.warnings.append(
+                f"«{curve.name}» no da ni un ciclo completo y queda fuera "
+                "de la curva de velocidad"
+            )
+            continue
+        capacitance, spread = _rate_representative(cycling.capacitance_f, policy)
+        capacity, _ = _rate_representative(cycling.capacity_c, policy)
+        if not np.isfinite(capacitance) or capacitance <= 0:
+            continue
+        currents = np.abs(np.asarray(cycling.current_a, dtype=float))
+        drops = np.asarray(cycling.ir_drop_v, dtype=float)
+        within: Optional[float] = None
+        values = [v for v in cycling.capacitance_f if v > 0]
+        if len(values) >= 2 and values[0] > 0:
+            within = values[-1] / values[0]
+        window = capacity / capacitance if capacitance > 0 else 0.0
+        windows.append(window)
+        point = RatePoint(
+            current_a=float(np.median(currents)),
+            capacitance_f=capacitance,
+            capacity_c=capacity,
+            window_v=window,
+            ir_drop_v=float(np.median(drops)) if drops.size else 0.0,
+            cycles=len(cycling.cycles),
+            spread=spread,
+            within_retention=within,
+            order=order,
+            name=curve.name,
+        )
+        mass_mg = curve.electrode.mass_mg
+        if mass_mg:
+            mass_g = mass_mg / 1e3
+            point.specific_f_per_g = capacitance / mass_g
+            point.current_a_per_g = abs(point.current_a) / mass_g
+        result.points.append(point)
+        result.warnings.extend(
+            f"«{curve.name}»: {w}" for w in cycling.warnings
+            if "sólo" not in w
+        )
+
+    if not result.points:
+        result.warnings.append(
+            "ningún archivo de la serie da una capacitancia utilizable"
+        )
+        return result
+
+    measured = list(result.points)
+    result.points.sort(key=lambda p: abs(p.current_a))
+    _finish_rate(result, measured, windows, order_known)
+    return result
+
+
+def _finish_rate(
+    result: RateCapability,
+    measured: list[RatePoint],
+    windows: list[float],
+    order_known: bool = True,
+) -> None:
+    """Retention, exponent, the degradation bias and the warnings."""
+    points = result.points
+    slow, fast = points[0], points[-1]
+    if len(points) >= 2 and slow.capacitance_f > 0:
+        result.retention = fast.capacitance_f / slow.capacitance_f
+        result.current_ratio = abs(fast.current_a) / max(abs(slow.current_a), 1e-30)
+
+    currents = np.array([abs(p.current_a) for p in points], dtype=float)
+    capacitances = np.array([p.capacitance_f for p in points], dtype=float)
+    if len(points) >= 2:
+        result.exponent, result.exponent_error, result.r_squared = _rate_exponent(
+            currents, capacitances
+        )
+
+    # What the series lost to cycling, compounded over the files.
+    fades = [p.within_retention for p in measured if p.within_retention]
+    if fades:
+        product = 1.0
+        for value in fades:
+            product *= value
+        result.series_fade = product
+
+    # Is the fade ohmic? Every capacitance here already has the IR jump
+    # removed, so the question is whether the jump is nonetheless large
+    # enough to be the whole story -- which it is only if the window it
+    # ate scales like the capacitance lost.
+    if (result.retention is not None and result.retention < 0.98
+            and slow.window_v > 0):
+        ohmic_prediction = (
+            slow.window_v / fast.window_v if fast.window_v > 0 else None
+        )
+        if ohmic_prediction is not None:
+            result.ohmic = abs(ohmic_prediction - result.retention) < 0.05
+
+    # The degradation bias, with its sign.
+    if (result.retention is not None and result.series_fade
+            and result.series_fade < RATE_FADE_FLOOR):
+        order_of_slow = slow.order
+        order_of_fast = fast.order
+        if not order_known:
+            result.warnings.append(
+                f"los archivos pierden un "
+                f"{100 * (1 - result.series_fade):.1f} % compuesto en sus "
+                "propios ciclos, así que la retención lleva degradación "
+                "dentro. En qué dirección no se puede decir: esta lista no "
+                "viene en el orden en que se midió, y el signo del sesgo lo "
+                "decide ese orden"
+            )
+        elif order_of_slow > order_of_fast:
+            result.retention_corrected = result.retention * result.series_fade
+            result.warnings.append(
+                "la corriente más baja se midió DESPUÉS de la más alta, así "
+                "que su capacitancia ya venía degradada y la retención sale "
+                "mejor de lo que es: el cociente se toma contra una "
+                "referencia hundida"
+            )
+        elif order_of_slow < order_of_fast:
+            result.retention_corrected = result.retention / result.series_fade
+            result.warnings.append(
+                "la corriente más alta se midió DESPUÉS de la más baja, así "
+                "que la retención sale peor de lo que es: incluye la "
+                "degradación acumulada entre los dos extremos"
+            )
+
+    if len(points) < MIN_RATE_POINTS:
+        result.warnings.append(
+            f"sólo {len(points)} corrientes. Con menos de {MIN_RATE_POINTS} el "
+            "exponente es una recta por dos puntos y no tiene error"
+        )
+    noisy = [p for p in points if p.spread > RATE_SPREAD_LIMIT]
+    if noisy:
+        worst = max(noisy, key=lambda p: p.spread)
+        result.warnings.append(
+            f"la capacitancia de «{worst.name}» varía un "
+            f"{100 * worst.spread:.0f} % entre sus propios ciclos, más que el "
+            f"{100 * RATE_SPREAD_LIMIT:.0f} % admisible. El punto de esa "
+            "corriente no es un punto, es un intervalo, y el ciclo que se "
+            "elija de ese archivo cambia la retención"
+        )
+    if windows:
+        span = np.asarray(windows, dtype=float)
+        if span.max() > 0 and (span.max() - span.min()) / span.max() > 0.10:
+            result.warnings.append(
+                f"la ventana de potencial no es la misma en toda la serie "
+                f"({span.min():.3g} a {span.max():.3g} V). Una capacitancia "
+                "medida sobre ventanas distintas no se compara consigo misma, "
+                "y esto no es un estudio de velocidad sino dos experimentos"
+            )
+    if result.retention is not None and result.retention > 1.0:
+        result.warnings.append(
+            f"la capacitancia SUBE con la corriente (retención "
+            f"{100 * result.retention:.1f} %). Eso no lo hace un electrodo: o "
+            "la serie se midió de rápido a lento mientras la celda se "
+            "activaba, o la ventana no es la misma, o la corriente más baja "
+            "está dominada por una fuga que no es almacenamiento"
+        )
+    repeated = {}
+    for point in points:
+        key = round(abs(point.current_a), 12)
+        repeated.setdefault(key, []).append(point)
+    for key, group in repeated.items():
+        if len(group) > 1:
+            values = [p.capacitance_f for p in group]
+            change = (max(values) - min(values)) / max(values)
+            result.warnings.append(
+                f"hay {len(group)} medidas a {1e3 * key:.4g} mA y difieren un "
+                f"{100 * change:.1f} %. Esa diferencia es degradación medida "
+                "directamente, no velocidad, y acota lo que vale el resto de "
+                "la curva"
+            )
+
 __all__ = [
     "ASYMMETRY_POLICIES",
-    "CYCLE_STEP_LIMIT",
     "ASYMMETRY_TOLERANCE",
+    "CYCLE_STEP_LIMIT",
     "EFFICIENCY_LIMITS",
     "IR_POINTS",
     "MIN_HALFCYCLE_POINTS",
+    "MIN_RATE_POINTS",
     "MIN_SHAPE_POINTS",
+    "RATE_CYCLE_POLICIES",
+    "RATE_FADE_FLOOR",
+    "RATE_SPREAD_LIMIT",
     "Branch",
     "CyclingResult",
     "GCDResult",
     "Halfcycle",
+    "RateCapability",
+    "RatePoint",
     "analyse_cycling",
     "analyse_gcd",
     "cycling_from_curve",
     "half_cycles",
+    "rate_capability",
 ]

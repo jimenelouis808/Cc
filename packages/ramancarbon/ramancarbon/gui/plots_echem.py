@@ -388,30 +388,69 @@ def plot_polarisation(ax, result, palette: Palette) -> None:
     ax.legend(loc="lower right", frameon=False, fontsize=8)
 
 
-def plot_capacitance_vs_current(ax, points, palette: Palette) -> None:
+def plot_capacitance_vs_current(ax, points, palette: Palette,
+                                analysis=None) -> None:
     """Specific capacitance against current, the rate-capability plot.
 
     The number that gets published is the one at the lowest current, and
     the number that matters for a device is how much of it survives at
     the highest. Drawing both, with the retention written on, is the
     whole content of a rate study.
+
+    With a :class:`~ramancarbon.echem.gcd.RateCapability` the plot stops
+    being two points and a ratio: the error bar on each point is the
+    spread of that file's own cycles, and the fitted ``C = a·I^-m`` is
+    drawn through all of them. Without mass the F/g points do not exist,
+    and the analysis is then the only thing there is to draw, in µF.
     """
+    if not points and analysis is not None and analysis.points:
+        points = [(1e3 * abs(p.current_a), 1e6 * p.capacitance_f,
+                   f"{1e3 * abs(p.current_a):.3g} mA")
+                  for p in analysis.points]
+        ax.set_ylabel("Capacitancia (µF)")
     if not points:
         placeholder(ax, "Carga varias curvas de carga-descarga", palette)
         return
     currents = [c for c, _, _ in points]
     values = [v for _, v, _ in points]
-    ax.plot(currents, values, "o-", color=palette.data, markersize=5,
-            linewidth=1.2)
+    spreads = None
+    if analysis is not None and len(analysis.points) == len(points):
+        # Half the spread each way: the bar is what the file's own cycles
+        # do, which is the only honest error on a rate point.
+        spreads = [0.5 * p.spread * v
+                   for p, v in zip(analysis.points, values)]
+    if spreads and any(s > 0 for s in spreads):
+        ax.errorbar(currents, values, yerr=spreads, fmt="o-",
+                    color=palette.data, markersize=5, linewidth=1.2,
+                    capsize=3, elinewidth=0.9)
+    else:
+        ax.plot(currents, values, "o-", color=palette.data, markersize=5,
+                linewidth=1.2)
     for current, value, label in points:
         ax.annotate(label, xy=(current, value), xytext=(0, 7),
                     textcoords="offset points", fontsize=7, ha="center",
                     color=palette.text_muted)
     ax.set_xlabel("Corriente (mA)")
-    ax.set_ylabel("C específica (F/g)")
+    if not ax.get_ylabel():
+        ax.set_ylabel("C específica (F/g)")
     ax.set_xscale("log")
     ax.grid(True, which="both", alpha=0.2)
-    if len(values) > 1 and values[0] > 0:
+    if analysis is not None and analysis.exponent is not None and len(values) > 1:
+        import numpy as np
+
+        grid = np.logspace(np.log10(min(currents)), np.log10(max(currents)), 50)
+        scale = values[0] * (grid / currents[0]) ** -analysis.exponent
+        ax.plot(grid, scale, "--", color=palette.accent, linewidth=1.0,
+                label=f"m = {analysis.exponent:.3f}")
+        ax.legend(loc="lower left", frameon=False, fontsize=8)
+        title = (f"retención {100 * analysis.retention:.0f} % a "
+                 f"{analysis.current_ratio:.3g}× la corriente")
+        if (analysis.retention_corrected is not None
+                and abs(analysis.retention_corrected - analysis.retention) > 0.01):
+            title += (f" (~{100 * analysis.retention_corrected:.0f} % "
+                      "sin la degradación)")
+        ax.set_title(title, fontsize=9)
+    elif len(values) > 1 and values[0] > 0:
         retention = 100.0 * values[-1] / values[0]
         ax.set_title(
             f"retención {retention:.0f} % de {currents[0]:g} a "

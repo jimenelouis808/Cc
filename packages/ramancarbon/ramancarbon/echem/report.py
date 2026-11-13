@@ -29,7 +29,7 @@ from .cv import (CVResult, DunnAnalysis, RateStudy, analyse_cv,
 from .eis import DRTResult, EISResult, analyse_eis, drt
 from .evaluate import CatalysisResult, StorageVerdict, analyse_catalysis, classify_storage
 from .curve import CurveError
-from .gcd import GCDResult, analyse_gcd
+from .gcd import GCDResult, RateCapability, analyse_gcd, rate_capability
 
 
 @dataclass
@@ -40,6 +40,13 @@ class EchemResult:
     cv: Optional[CVResult] = None
     rates: Optional[RateStudy] = None
     gcd: Optional[GCDResult] = None
+    rate_capability: Optional[RateCapability] = None
+    """Capacitance against CURRENT, over a series of galvanostatic files.
+
+    The other retention. :attr:`gcd` is one measurement and this is what
+    happens to it when the current is raised, which is the number a
+    supercapacitor is sold on and the one most often quoted with a
+    degradation baked into it."""
     eis: Optional[EISResult] = None
     catalysis: Optional[CatalysisResult] = None
     storage: Optional[StorageVerdict] = None
@@ -85,6 +92,13 @@ class EchemResult:
             row["E_Wh_kg"] = self.gcd.energy_wh_per_kg
             row["P_W_kg"] = self.gcd.power_w_per_kg
             row["R_IR_ohm"] = self.gcd.resistance_ohm
+        if self.rate_capability and self.rate_capability.retention is not None:
+            row["retencion_velocidad"] = self.rate_capability.retention
+            row["razon_corriente"] = self.rate_capability.current_ratio
+            row["m_velocidad"] = self.rate_capability.exponent
+            row["retencion_velocidad_corregida"] = (
+                self.rate_capability.retention_corrected
+            )
         if self.dunn and self.dunn.fractions:
             fastest = max(self.dunn.fractions)
             slowest = min(self.dunn.fractions)
@@ -125,6 +139,8 @@ def analyse_sample(
     cv: Optional[Voltammogram] = None,
     rate_series: Optional[Sequence[Voltammogram]] = None,
     gcd: Optional[ChargeDischarge] = None,
+    gcd_series: Optional[Sequence[ChargeDischarge]] = None,
+    gcd_rate_policy: str = "mediana",
     eis: Optional[Impedance] = None,
     catalysis_curve: Optional[Voltammogram] = None,
     reaction: str = "OER",
@@ -156,6 +172,14 @@ def analyse_sample(
     reported — every one of them ends up in the result's text — because a
     decision nobody can see is indistinguishable from a bug.
 
+    ``gcd_series`` is a LIST of galvanostatic measurements at different
+    currents, and it must be passed **in the order they were run**. That
+    order is not in the files — EC-Lab writes no timestamp this reader
+    can use — and it decides whether the rate capability that comes out
+    is optimistic or pessimistic, so it is taken from the caller rather
+    than guessed. ``gcd_rate_policy`` chooses which cycle of each file
+    stands for its current; see :data:`~ramancarbon.echem.gcd.RATE_CYCLE_POLICIES`.
+
     ``subtract_parasitic`` removes, from the rate series only, the constant
     anodic current that the CHARGE BALANCE measures. It exists to answer
     "does b come back to 1 once the leak is gone?", and it only answers
@@ -165,7 +189,7 @@ def analyse_sample(
     """
     result = EchemResult(name=name)
     for measurement in (cv, gcd, eis, catalysis_curve,
-                        *(rate_series or ())):
+                        *(rate_series or ()), *(gcd_series or ())):
         if measurement is not None and getattr(measurement, "electrode", None):
             result.electrode = measurement.electrode
             break
@@ -196,6 +220,16 @@ def analyse_sample(
     if gcd is not None:
         result.gcd = analyse_gcd(gcd)
         result.warnings.extend(f"GCD: {w}" for w in result.gcd.warnings)
+    if gcd_series:
+        # The order matters and is taken as given: it decides the sign of
+        # the degradation bias on the retention, and the files do not
+        # record it.
+        result.rate_capability = rate_capability(
+            gcd_series, policy=gcd_rate_policy)
+        result.warnings.extend(
+            f"velocidad GCD: {w}" for w in result.rate_capability.warnings)
+        if result.gcd is None and len(gcd_series) == 1:
+            result.gcd = analyse_gcd(gcd_series[0])
     if eis is not None:
         result.eis = analyse_eis(eis, circuit=circuit, initial=circuit_initial,
                                  fixed=circuit_fixed)
@@ -384,6 +418,14 @@ def build_report(result: EchemResult, verbose: bool = True) -> str:
     if result.gcd:
         lines.append(section("CARGA-DESCARGA GALVANOSTÁTICA"))
         lines.append(result.gcd.summary())
+    if result.rate_capability and result.rate_capability.points:
+        lines.append(section("CAPACIDAD DE VELOCIDAD (GCD)"))
+        lines.append(
+            "Retención frente a la CORRIENTE, que no es la retención frente "
+            "al CICLADO. Las dos se citan con la misma palabra."
+        )
+        lines.append("")
+        lines.append(result.rate_capability.summary())
     if result.eis:
         lines.append(section("IMPEDANCIA"))
         lines.append(result.eis.summary())

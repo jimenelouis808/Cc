@@ -52,6 +52,19 @@ ASYMMETRY_LABELS: tuple[tuple[str, str], ...] = (
     ("incluir", "Incluir tal cual"),
 )
 
+#: Which cycle of a multi-cycle file stands for its current.
+RATE_POLICY_LABELS: tuple[tuple[str, str], ...] = (
+    ("mediana", "La mediana de sus ciclos"),
+    ("ultimo", "El último ciclo"),
+    ("primero", "El primero"),
+)
+
+#: One row per current of the rate curve.
+GCD_RATE_COLUMNS: tuple[str, ...] = (
+    "I (mA)", "C (µF)", "C (F/g)", "± entre ciclos (%)", "IR (mV)",
+    "retención (%)", "ciclos", "orden",
+)
+
 #: One row per charge-discharge curve.
 GCD_SERIES_COLUMNS: tuple[str, ...] = (
     "corriente", "C (µF)", "C (F/g)", "C (µF/cm²)", "R (Ω)",
@@ -484,6 +497,15 @@ class EchemApp(SectionApp):
             values=[label for _, label in ASYMMETRY_LABELS]))
         self.gcd_asymmetry_var.trace_add("write",
                                          lambda *_: self._refresh_gcd_series())
+        self.gcd_rate_policy_var = self.tk.StringVar(
+            value=RATE_POLICY_LABELS[0][1])
+        labelled(setup, "Ciclo para la curva de velocidad",
+                 lambda p: ttk.Combobox(
+                     p, textvariable=self.gcd_rate_policy_var, width=30,
+                     state="readonly",
+                     values=[label for _, label in RATE_POLICY_LABELS]))
+        self.gcd_rate_policy_var.trace_add(
+            "write", lambda *_: self._refresh_gcd_series())
         self.gcd_cycle_var = self.tk.StringVar(value="-1")
         labelled(setup, "Ciclo que se informa", lambda p: ttk.Spinbox(
             p, from_=-1, to=100000, width=8,
@@ -525,13 +547,20 @@ class EchemApp(SectionApp):
             series_row, GCD_SERIES_COLUMNS, height=6)
         self.gcd_cycling_table = table(
             series_row, GCD_CYCLING_COLUMNS, height=6)
+        self.gcd_rate_table = table(
+            info_body, GCD_RATE_COLUMNS, height=6)
         hint(info_body,
              "La fuga es el exceso culómbico dividido por el ciclo ENTERO, "
              "que es lo único comparable entre corrientes: la misma fuga "
              "sale como un exceso grande a corriente pequeña y pequeño a "
              "corriente grande. Si esa columna es constante, es una fuga; "
              "si no, no lo es.   La retención es de un SOLO archivo: un "
-             "GCPL guarda sus ciclos dentro de uno.",
+             "GCPL guarda sus ciclos dentro de uno.   La tabla de abajo "
+             "es la otra retención, la que va contra la CORRIENTE. La "
+             "columna «± entre ciclos» es la que hay que leer antes que "
+             "la de retención: si una corriente se mueve un 20 % entre "
+             "sus propios ciclos, su punto no es un punto, y el ciclo "
+             "que se elija arriba cambia la respuesta.",
              wrap=560)
 
         branches, branch_body = card(bottom, "Ramas del ciclo informado")
@@ -1130,6 +1159,8 @@ class EchemApp(SectionApp):
                    self.session.gcd_rows())
         fill_table(self.gcd_cycling_table, GCD_CYCLING_COLUMNS,
                    self.session.gcd_cycling_rows())
+        fill_table(self.gcd_rate_table, GCD_RATE_COLUMNS,
+                   self.session.gcd_rate_rows())
 
     def _refresh_gcd_series(self) -> None:
         """Re-read the asymmetry policy and the cycle, and redraw."""
@@ -1137,6 +1168,10 @@ class EchemApp(SectionApp):
         self.session.gcd_asymmetry = next(
             (key for key, text in ASYMMETRY_LABELS if text == label),
             "aparte")
+        policy = self.gcd_rate_policy_var.get()
+        self.session.gcd_rate_policy = next(
+            (key for key, text in RATE_POLICY_LABELS if text == policy),
+            "mediana")
         try:
             self.session.gcd_cycle = int(self.gcd_cycle_var.get())
         except (TypeError, ValueError):
@@ -1928,7 +1963,8 @@ class EchemApp(SectionApp):
 
         ax = figure.add_subplot(111)
         plot_capacitance_vs_current(ax, self.session.capacitance_vs_current(),
-                                    self.figure_palette)
+                                    self.figure_palette,
+                                    self.session.gcd_rate_capability())
 
     def _draw_nyquist(self, figure) -> None:
         from .plots_echem import plot_nyquist

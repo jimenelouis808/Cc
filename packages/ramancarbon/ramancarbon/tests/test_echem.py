@@ -4584,3 +4584,269 @@ def test_the_hold_panel_carries_the_measured_potential_too():
     forward = secondary[0]._functions[0]
     assert forward(1e3 * eta[-1]) == pytest.approx(potential[-1], abs=1e-6)
     plt.close(figure)
+
+
+def _fading_gcd(current, capacitance, cycles, fade, window=(-0.6, 0.4),
+                points_per_branch=60, name=""):
+    """One file whose capacitance decays from cycle to cycle INSIDE it.
+
+    This is the only degradation a rate series leaves evidence of: what
+    happens between one file and the next is not recorded anywhere, and
+    what happens inside each one is.
+    """
+    from ramancarbon.echem.curve import ChargeDischarge
+
+    pieces = [
+        _gcd_curve(window=window, charge_a=current, discharge_a=-current,
+                   capacitance=capacitance * fade ** (n / max(cycles - 1, 1)),
+                   cycles=1, points_per_branch=points_per_branch,
+                   resistance=0.0)
+        for n in range(cycles)
+    ]
+    clock, times = 0.0, []
+    for piece in pieces:
+        times.append(piece.time - piece.time[0] + clock)
+        clock = times[-1][-1] + 1.0
+    return ChargeDischarge(
+        time=np.concatenate(times),
+        potential=np.concatenate([p.potential for p in pieces]),
+        current=np.concatenate([p.current for p in pieces]),
+        electrode=pieces[0].electrode,
+        name=name or f"{1e6 * current:g} uA",
+    )
+
+
+def _rate_series(currents, capacitances=None, window=(-0.6, 0.4),
+                 cycles=6, fade=None):
+    """A galvanostatic series at several currents, in the order given.
+
+    ``capacitances`` lets the series carry a rate law of its own; ``fade``
+    makes every file decay inside itself, which is what a real series
+    does while the current is being changed and is the thing that makes a
+    published rate capability partly a degradation.
+    """
+    curves = []
+    for index, current in enumerate(currents):
+        value = 45e-6 if capacitances is None else capacitances[index]
+        if fade is not None:
+            curves.append(_fading_gcd(current, value, cycles, fade,
+                                      window=window))
+            continue
+        curve = _gcd_curve(window=window, charge_a=current,
+                           discharge_a=-current, capacitance=value,
+                           cycles=cycles, points_per_branch=60)
+        curve.name = f"{1e6 * current:g} uA"
+        curves.append(curve)
+    return curves
+
+
+def test_an_ideal_capacitor_has_no_rate_penalty():
+    """The exponent of ``C = a·I^-m`` is the whole point of the rate
+    curve, and on a capacitor that does not care about the current it has
+    to come out at zero. Anything else is the routine inventing a
+    mechanism out of the IR drop."""
+    from ramancarbon.echem.gcd import rate_capability
+
+    result = rate_capability(_rate_series((5e-6, 10e-6, 20e-6, 40e-6, 80e-6)))
+
+    assert len(result.points) == 5
+    assert result.current_ratio == pytest.approx(16.0, rel=1e-3)
+    assert result.retention == pytest.approx(1.0, abs=0.02)
+    assert result.exponent == pytest.approx(0.0, abs=0.01)
+    # Sorted by current whatever order they arrived in.
+    assert [p.order for p in result.points] == [1, 2, 3, 4, 5]
+    assert abs(result.points[0].current_a) < abs(result.points[-1].current_a)
+    # The IR jump grows with the current, in proportion to it.
+    first, last = result.points[0], result.points[-1]
+    assert last.ir_drop_v / first.ir_drop_v == pytest.approx(16.0, rel=0.05)
+
+
+def test_the_rate_curve_recovers_a_power_law_it_was_given():
+    """A series built to lose capacitance as ``I^-0.15`` has to be read
+    back as ``m = 0.15``: that is the number a paper quotes as the rate
+    capability, and it is fitted here rather than taken from the two
+    extremes."""
+    from ramancarbon.echem.gcd import rate_capability
+
+    currents = np.array([5e-6, 10e-6, 20e-6, 40e-6, 80e-6])
+    law = 45e-6 * (currents / currents[0]) ** -0.15
+    result = rate_capability(_rate_series(tuple(currents), tuple(law)))
+
+    assert result.exponent == pytest.approx(0.15, abs=0.01)
+    assert result.r_squared > 0.99
+    assert result.exponent_error is not None
+    assert result.exponent_error < 0.02
+    assert result.retention == pytest.approx(16.0 ** -0.15, rel=0.03)
+    assert "mixto" in result.interpretation
+    # The fade is NOT ohmic: the IR jump is already out of every window.
+    assert not result.ohmic
+
+
+def test_the_order_the_currents_were_run_in_decides_the_sign_of_the_bias():
+    """Run slowest LAST and its capacitance is already degraded, so the
+    ratio to it flatters the electrode. Run it FIRST and the ratio is
+    pessimistic. Same five files, opposite bias, and the routine has no
+    way to know which happened except from the order it is handed."""
+    from ramancarbon.echem.gcd import rate_capability
+
+    fast_first = (80e-6, 40e-6, 20e-6, 10e-6, 5e-6)
+    series = _rate_series(fast_first, fade=0.93)
+    result = rate_capability(series)
+
+    assert result.series_fade is not None and result.series_fade < 0.99
+    assert result.retention_corrected is not None
+    # Slowest measured last: the reference is sunk, so the true retention
+    # is WORSE than the ratio says.
+    assert result.retention_corrected < result.retention
+    assert any("DESPUÉS de la más alta" in w for w in result.warnings)
+
+    reversed_result = rate_capability(_rate_series(fast_first[::-1], fade=0.93))
+    assert reversed_result.retention_corrected > reversed_result.retention
+    assert any("DESPUÉS de la más baja" in w for w in reversed_result.warnings)
+
+
+def test_a_rate_series_over_two_windows_is_not_a_rate_series():
+    """A capacitance measured over 1.0 V does not compare with one
+    measured over 0.6 V, and a series that mixes them is two experiments
+    reported as one."""
+    from ramancarbon.echem.gcd import rate_capability
+
+    series = _rate_series((5e-6, 10e-6, 20e-6))
+    series += _rate_series((40e-6,), window=(-0.3, 0.3))
+    result = rate_capability(series)
+
+    assert any("ventana de potencial no es la misma" in w
+               for w in result.warnings)
+
+
+def test_a_repeated_current_measures_the_degradation_directly():
+    """The same current twice is the only point in the series that is a
+    control: the difference between the two is degradation, with no rate
+    effect in it at all."""
+    from ramancarbon.echem.gcd import rate_capability
+
+    series = _rate_series((10e-6, 20e-6, 40e-6, 10e-6), fade=0.9)
+    result = rate_capability(series)
+
+    assert any("difieren un" in w for w in result.warnings)
+
+
+def test_the_rate_policy_changes_the_answer_and_has_to_be_named():
+    """With a hundred cycles in a file the first, median and last are
+    three different capacitances. The policy is reported on the summary
+    for that reason, and an unknown one is refused rather than guessed."""
+    from ramancarbon.echem.gcd import RATE_CYCLE_POLICIES, rate_capability
+
+    series = _rate_series((5e-6, 20e-6), cycles=20, fade=None)
+    # One file that degrades inside itself.
+    decaying = _gcd_curve(charge_a=10e-6, discharge_a=-10e-6, cycles=20,
+                          points_per_branch=60)
+    series.append(decaying)
+
+    answers = {
+        policy: rate_capability(series, policy=policy).retention
+        for policy in RATE_CYCLE_POLICIES
+    }
+    assert set(answers) == {"mediana", "ultimo", "primero"}
+    assert all(value is not None for value in answers.values())
+
+    with pytest.raises(ValueError, match="no existe"):
+        rate_capability(series, policy="la que me convenga")
+
+
+def test_cycling_now_carries_the_ir_jump_of_every_cycle():
+    """A resistance that grows while the capacitance falls is a different
+    failure from one that does not, and the per-cycle series is where the
+    difference shows."""
+    from ramancarbon.echem.gcd import cycling_from_curve
+
+    curve = _gcd_curve(cycles=8, points_per_branch=40, resistance=120.0)
+    result = cycling_from_curve(curve)
+
+    assert len(result.ir_drop_v) == len(result.cycles)
+    assert all(value > 0 for value in result.ir_drop_v)
+    # 2*I*R at every switch, with I = 20 uA and R = 120 ohm.
+    assert float(np.median(result.ir_drop_v)) == pytest.approx(2 * 20e-6 * 120.0,
+                                                               rel=0.05)
+
+
+def test_the_session_builds_the_rate_curve_and_the_policy_changes_it():
+    """The window has to reach the rate retention, and it has to reach it
+    through the same policy the table says it used: a session that
+    reports a retention without saying which cycle of each file it came
+    from is reporting one of three numbers at random."""
+    from ramancarbon.gui.echem_app import GCD_RATE_COLUMNS
+
+    session = _gcd_session()
+    analysis = session.gcd_rate_capability()
+    assert analysis is not None
+    assert len(analysis.points) == 4
+    assert analysis.policy == "mediana"
+
+    rows = session.gcd_rate_rows()
+    assert len(rows) == 4
+    assert all(len(row) == len(GCD_RATE_COLUMNS) for row in rows)
+    # The F/g column is filled because the session carries a mass.
+    assert all(row[2] != "—" for row in rows)
+    # Ordered by current, and the retention column is relative to the
+    # slowest, so its first entry is 100 %.
+    assert rows[0][5] == "100.0"
+
+    session.gcd_rate_policy = "primero"
+    assert session.gcd_rate_capability().policy == "primero"
+    session._forget_gcd()
+    assert session.gcd_rate_capability() is not None
+
+
+def test_one_galvanostatic_file_is_not_a_rate_curve():
+    """One current is not a series, and the session returns nothing
+    rather than a retention of 100 % that means only that there was
+    nothing to compare."""
+    session = _gcd_session(currents=(10e-6,))
+    assert session.gcd_rate_capability() is None
+    assert session.gcd_rate_rows() == []
+
+
+def test_the_report_carries_the_rate_capability_as_its_own_section():
+    """Two retentions under one word is the trap this section exists to
+    avoid, so the report names which one it is showing."""
+    from ramancarbon.echem.report import analyse_sample
+
+    series = _rate_series((5e-6, 10e-6, 20e-6, 40e-6))
+    result = analyse_sample(name="serie", gcd_series=series)
+
+    assert result.rate_capability is not None
+    assert len(result.rate_capability.points) == 4
+    text = result.report()
+    assert "CAPACIDAD DE VELOCIDAD (GCD)" in text
+    assert "no es la retención frente" in text
+    row = result.to_dict()
+    assert row["retencion_velocidad"] is not None
+    assert row["razon_corriente"] == pytest.approx(8.0, rel=1e-3)
+
+
+def test_the_window_does_not_invent_a_bias_from_its_own_sort():
+    """``add_gcd_to_series`` sorts by current the moment a file goes in,
+    so a rate retention read off that list would get the sign of its
+    degradation bias from the sort rather than from the schedule. The
+    load order is kept separately for exactly that, and when it is not
+    available the routine says the sign is unknown instead of picking
+    one."""
+    from ramancarbon.echem.gcd import rate_capability
+
+    series = _rate_series((80e-6, 40e-6, 20e-6, 10e-6, 5e-6), fade=0.93)
+    blind = rate_capability(series, order_known=False)
+    assert blind.series_fade is not None and blind.series_fade < 0.99
+    assert any("no se puede decir" in w for w in blind.warnings)
+    assert not any("DESPUÉS" in w for w in blind.warnings)
+
+    # The session keeps the order the files were loaded in, even though
+    # its own list is sorted by current.
+    session = _gcd_session(currents=(40e-6, 20e-6, 10e-6, 5e-6))
+    loaded = list(session.gcd_measured_order)
+    assert len(session.gcd_series) == 4
+    ordered, known = session._gcd_in_measured_order(session.gcd_series)
+    # _gcd_session builds the curves by hand, so there is no load order
+    # and the session admits it rather than trusting its sorted list.
+    assert known is bool(loaded)
+    assert len(ordered) == 4

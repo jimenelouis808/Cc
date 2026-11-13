@@ -231,6 +231,22 @@ class EchemSession:
     answer of a Mott-Schottky depends on the frequency, and the only way
     to find out how much is to do it at several."""
     ms_temperature_k: float = 298.15
+    gcd_measured_order: list[str] = field(default_factory=list)
+    """Names of the galvanostatic files in the order they were LOADED,
+    taken to be the order they were measured in.
+
+    Kept because :attr:`gcd_series` is sorted by discharge current the
+    moment a file is added, which is what the tables and the plots want
+    and destroys the one thing the rate retention needs: the sign of its
+    degradation bias is decided by whether the slowest current was run
+    first or last, and a list sorted by current would answer that
+    question with its own sort."""
+    gcd_rate_policy: str = "mediana"
+    """Which cycle of each galvanostatic file stands for its current in
+    the rate curve. One of
+    :data:`~ramancarbon.echem.gcd.RATE_CYCLE_POLICIES`, and a choice
+    rather than a constant: with a hundred cycles in a file the first,
+    the median and the last are three different capacitances."""
     gcd_asymmetry: str = "aparte"
     """What to do with a charge-discharge pair whose two currents differ.
 
@@ -366,6 +382,8 @@ class EchemSession:
     _gcd_key: tuple = field(default=(), repr=False)
     _cyclings: Optional[list] = field(default=None, repr=False)
     _cycling_key: tuple = field(default=(), repr=False)
+    _rate_capability: Optional[object] = field(default=None, repr=False)
+    _rate_key: tuple = field(default=(), repr=False)
     """Cache for :meth:`eis_analyses`. Every impedance panel needs the
     same per-spectrum analysis and each one costs a circuit comparison,
     so a six-panel figure would run it six times per spectrum."""
@@ -423,6 +441,7 @@ class EchemSession:
             self.log("error", f"{Path(path).name}: {exc}")
             return False
         self.gcd_series.append(curve)
+        self.gcd_measured_order.append(curve.name)
         # By the DISCHARGE current: that is the current a rate point is
         # at, and the median over the whole record returns 40 uA for a
         # curve that charges at 60 and discharges at 20.
@@ -1018,6 +1037,8 @@ class EchemSession:
         self._gcd_key = ()
         self._cyclings = None
         self._cycling_key = ()
+        self._rate_capability = None
+        self._rate_key = ()
 
     @property
     def loaded(self) -> dict[str, str]:
@@ -1064,6 +1085,8 @@ class EchemSession:
             cv=self.cv,
             rate_series=self.rate_series or None,
             gcd=self.gcd,
+            gcd_series=self.gcd_series or None,
+            gcd_rate_policy=self.gcd_rate_policy,
             eis=self.eis,
             catalysis_curve=self.lsv,
             reaction=self.reaction,
@@ -1305,6 +1328,80 @@ class EchemSession:
         self._cyclings = out
         self._cycling_key = key
         return out
+
+    def gcd_rate_capability(self):
+        """The rate curve over every loaded galvanostatic file, cached.
+
+        The order is the order the files were loaded in, which is taken
+        to be the order they were measured in: it decides the sign of
+        the degradation bias on the retention and nothing in a ``.mpr``
+        records it. Load them out of order and the bias warning points
+        the wrong way, which is why the summary says the order it used.
+        """
+        from ..echem.gcd import rate_capability
+
+        curves = self.gcd_curves()
+        key = tuple(id(c) for c in curves) + (self.gcd_rate_policy,)
+        if self._rate_key == key and self._rate_capability is not None:
+            return self._rate_capability
+        if len(curves) < 2:
+            self._rate_capability = None
+            self._rate_key = key
+            return None
+        ordered, known = self._gcd_in_measured_order(curves)
+        try:
+            analysis = rate_capability(ordered, policy=self.gcd_rate_policy,
+                                       order_known=known)
+        except (ValueError, ZeroDivisionError) as exc:
+            self.log("warning", f"capacidad de velocidad: {exc}")
+            analysis = None
+        self._rate_capability = analysis
+        self._rate_key = key
+        return analysis
+
+    def _gcd_in_measured_order(self, curves) -> tuple[list, bool]:
+        """The curves back in load order, and whether that succeeded.
+
+        It fails when files were put in by something other than
+        :meth:`add_gcd_to_series` -- :meth:`add_curves`, a test, a
+        script building the series by hand -- and then the order is the
+        list's own and is reported as unknown rather than guessed.
+        """
+        names = list(self.gcd_measured_order)
+        if len(names) != len(curves) or len(set(names)) != len(names):
+            return list(curves), False
+        try:
+            return sorted(curves, key=lambda c: names.index(c.name)), True
+        except ValueError:
+            return list(curves), False
+
+    def gcd_rate_rows(self) -> list[tuple[str, ...]]:
+        """One row per current: the rate curve, with its uncertainty.
+
+        The spread column is the one worth reading. It is how much the
+        capacitance of that one file moves across its own cycles, and
+        when it is comparable to the difference between two currents the
+        rate curve is not resolving a rate.
+        """
+        analysis = self.gcd_rate_capability()
+        if analysis is None:
+            return []
+        rows: list[tuple[str, ...]] = []
+        reference = analysis.points[0].capacitance_f if analysis.points else 0.0
+        for point in analysis.points:
+            rows.append((
+                f"{1e3 * abs(point.current_a):.4g}",
+                f"{1e6 * point.capacitance_f:.4g}",
+                (f"{point.specific_f_per_g:.4g}"
+                 if point.specific_f_per_g is not None else "—"),
+                f"{100 * point.spread:.1f}",
+                f"{1e3 * point.ir_drop_v:.3g}",
+                (f"{100 * point.capacitance_f / reference:.1f}"
+                 if reference > 0 else "—"),
+                str(point.cycles),
+                str(point.order),
+            ))
+        return rows
 
     def gcd_label(self, curve: ChargeDischarge) -> str:
         """A legend entry naming the current, and both when they differ."""
