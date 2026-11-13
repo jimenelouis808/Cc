@@ -1,0 +1,11 @@
+serie,x,y
+IR drop / mV,5,13.9817
+IR drop / mV,10,27.3998
+IR drop / mV,20,60.3517
+IR drop / mV,40,144.374
+IR drop / mV,60,230.887
+ESR / $\Omega$,5,1398.17
+ESR / $\Omega$,10,1369.99
+ESR / $\Omega$,20,1508.79
+ESR / $\Omega$,40,1804.67
+ESR / $\Omega$,60,1924.06

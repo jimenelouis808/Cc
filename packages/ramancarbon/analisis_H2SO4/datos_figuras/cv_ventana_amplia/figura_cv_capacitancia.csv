@@ -1,0 +1,13 @@
+serie,x,y
+loop $\div\ 2\nu\Delta V$  (leak included),4.99991,70.8888
+loop $\div\ 2\nu\Delta V$  (leak included),9.99883,63.0876
+loop $\div\ 2\nu\Delta V$  (leak included),19.9977,58.3005
+loop $\div\ 2\nu\Delta V$  (leak included),49.9934,53.4539
+loop $\div\ 2\nu\Delta V$  (leak included),99.9878,49.5433
+loop $\div\ 2\nu\Delta V$  (leak included),199.987,44.5414
+reduction charge $\div\ \Delta V$,4.99991,74.9299
+reduction charge $\div\ \Delta V$,9.99883,65.7138
+reduction charge $\div\ \Delta V$,19.9977,60.0791
+reduction charge $\div\ \Delta V$,49.9934,54.4596
+reduction charge $\div\ \Delta V$,99.9878,50.2603
+reduction charge $\div\ \Delta V$,199.987,45.0966

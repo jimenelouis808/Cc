@@ -221,9 +221,25 @@ def plot_b_values(ax, study: RateStudy, palette: Palette) -> None:
     ax.set_ylim(0.2, 1.25)
 
 
+#: What the Dunn panel writes on itself, in the language of the WINDOW.
+#:
+#: The exported figure overrides them, because the window is for whoever
+#: ran the measurement and the figure is for whoever reads the paper.
+#: Passing them in is what lets one function serve both without the
+#: publication figure coming out half translated.
+DUNN_TEXTS: dict[str, str] = {
+    "diffusive": "difusivo (k₂√ν)",
+    "surface": "superficial (k₁ν)",
+    "fraction": "{value} % superficial",
+    "potential": "Potencial (V)",
+    "current": "Corriente ({unit})",
+}
+
+
 def plot_dunn(ax, analysis, curve, palette: Palette,
               scan_rate: Optional[float] = None,
-              per_gram: bool = False) -> None:
+              per_gram: bool = False,
+              texts: Optional[dict[str, str]] = None) -> None:
     """The published Dunn figure: the whole cycle, with both parts shaded.
 
     The figure the field actually prints is the CLOSED voltammogram with
@@ -239,6 +255,7 @@ def plot_dunn(ax, analysis, curve, palette: Palette,
     if analysis is None:
         placeholder(ax, "Dunn necesita tres velocidades", palette)
         return
+    words = dict(DUNN_TEXTS, **(texts or {}))
     rate = scan_rate if scan_rate is not None else min(analysis.rates or (0.0,))
     potentials = np.asarray(analysis.potentials, dtype=float)
     anodic, cathodic = analysis.branch_currents(rate)
@@ -272,7 +289,7 @@ def plot_dunn(ax, analysis, curve, palette: Palette,
     if measured_up is not None and measured_down is not None:
         ax.fill_between(potentials, factor * anodic, factor * measured_up,
                         color=diffusive, alpha=0.85, linewidth=0,
-                        label="difusivo (k₂√ν)")
+                        label=words["diffusive"])
         ax.fill_between(potentials, factor * measured_down, factor * cathodic,
                         color=diffusive, alpha=0.85, linewidth=0)
         ax.plot(np.concatenate([potentials, potentials[::-1]]),
@@ -281,18 +298,19 @@ def plot_dunn(ax, analysis, curve, palette: Palette,
                 label=f"{1e3 * rate:.3g} mV/s")
     ax.fill_between(potentials, factor * cathodic, factor * anodic,
                     color=surface, alpha=0.85, linewidth=0,
-                    label="superficial (k₁ν)")
+                    label=words["surface"])
 
     fraction = analysis.fractions.get(rate)
     if fraction is not None:
         # Written inside the shaded region, where the published figures
         # put it, rather than in a title nobody reads next to the number.
         middle = potentials[len(potentials) // 2]
-        ax.annotate(f"{100 * fraction:.0f} % superficial",
+        ax.annotate(words["fraction"].replace(
+                        "{value}", f"{100 * fraction:.0f}"),
                     xy=(middle, 0.0), ha="center", va="center",
                     fontsize=8, color=palette.text)
-    ax.set_xlabel("Potencial (V)")
-    ax.set_ylabel(f"Corriente ({unit})")
+    ax.set_xlabel(words["potential"])
+    ax.set_ylabel(words["current"].replace("{unit}", unit))
     ax.legend(loc="upper left", frameon=False, fontsize=7)
     ax.axhline(0.0, color=palette.border, linewidth=0.6, zorder=0)
 

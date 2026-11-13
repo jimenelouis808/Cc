@@ -5,7 +5,7 @@
 ────────────────────────────────────────────────────────────────────────
   LA CELDA
 ────────────────────────────────────────────────────────────────────────
-Electrodo: referencia Ag/AgCl_sat, H2SO4 0.5 M, pH 0.3
+Electrodo: masa activa 0.02 mg, referencia Ag/AgCl_sat, H2SO4 0.5 M, pH 0.3
   → SHE: E(Electrodo estándar de hidrógeno) = E(Ag/AgCl (KCl saturado)) +0.1970 V
   → RHE: E(Electrodo reversible de hidrógeno a pH 0.3) = E(Ag/AgCl (KCl saturado)) +0.2147 V
   Di siempre el relleno de la referencia: Ag/AgCl 3 M y saturado están a 13 mV, y el SCE a 31 mV del de 3 M.
@@ -27,14 +27,16 @@ Mecanismo de almacenamiento: Pseudocapacitivo (confianza alta)
   VOLTAMPEROMETRÍA CÍCLICA
 ────────────────────────────────────────────────────────────────────────
 Cv_multp_speed_01_CV_C01 [ciclo 4.0]: 2818 puntos, -0.600 a +1.200 V (ventana 1.800 V), 4.99991 mV/s, |I|max 0.0186 mA
-Electrodo: referencia Ag/AgCl_sat, H2SO4 0.5 M, pH 0.3
+Electrodo: masa activa 0.02 mg, referencia Ag/AgCl_sat, H2SO4 0.5 M, pH 0.3
 
 Carga anódica: 2.055 mC
 
 Capacitancia:
-  1.28 mF (lazo cerrado ÷ 2νΔV)
-  1.917 mF (rama anódica ÷ νΔV)
+  1.28 mF (lazo cerrado ÷ 2νΔV)  64.01 F/g
+  1.917 mF (rama anódica ÷ νΔV)  95.83 F/g
   Las dos son la MISMA medida en convenios distintos. El de lazo integra el ciclo cerrado y divide por 2νΔV; el de rama integra solo la anódica y divide por νΔV. Publicar sin decir cuál deja un factor 2 de ambigüedad
+
+Capacidad: 102.8 C/g = 28.54 mAh/g
 
 Picos redox:
   anódico    E = +0.4559 V   i = +0.01256 mA   FWHM 246 mV   pico/fondo 0.7
@@ -44,7 +46,6 @@ Picos redox:
 SIN corrección de caída óhmica: no se ha dado la resistencia no compensada. La pendiente de Tafel sale entonces demasiado grande, y el error crece con la corriente — así que el catalizador parece peor de lo que es justo donde más importa
 
 ⚠ el archivo tiene 4 ciclos; se ha usado el último. El PRIMERO nunca es representativo: lleva formación irreversible, descomposición de electrolito o acondicionamiento del óxido
-⚠ sin masa activa no hay capacitancia específica. Y tiene que ser la masa de material ACTIVO, no la del electrodo: el aglomerante y el carbón conductor suelen ser el 20 %, y usar la masa total rebaja el resultado justo esa fracción
 ⚠ hay picos redox definidos. Antes de citar una capacitancia en F/g, mira el mecanismo (echem.evaluate): un material con picos almacena CARGA, y expresarlo en faradios dividiendo por la ventana infla el número y no describe lo que hace el material
 
 ────────────────────────────────────────────────────────────────────────
@@ -107,7 +108,7 @@ Corriente parásita (ΔQ = Q_ox − Q_red = ⟨i_par⟩·t):
   ⟨i_par⟩ = -0.354 µA
   ordenada = -46.8 µC (el modelo dice cero)
   R²      = 0.9813
-  C sin fuga = 1.168 ± 0.198 mF
+  C sin fuga = 1.168 ± 0.198 mF = 58.4 ± 9.9 F/g
   (de ⟨Q_red⟩; la dispersión es el electrodo cambiando durante la serie, no error de ajuste)
       5.0 mV/s   la fuga es el  -11 % de Q_ox
      10.0 mV/s   la fuga es el   -6 % de Q_ox
@@ -152,7 +153,7 @@ Separación de Dunn (i = k₁ν + k₂√ν) — Media: sólo la rama anódica:
   CARGA-DESCARGA GALVANOSTÁTICA
 ────────────────────────────────────────────────────────────────────────
 GCPL__prueba_ventana_1-0_04_GCPL_C01: 63598 puntos, 63096.5 s, -0.200 a +1.000 V, |I| 0.005 mA
-Electrodo: referencia Ag/AgCl_sat, H2SO4 0.5 M, pH 0.3
+Electrodo: masa activa 0.02 mg, referencia Ag/AgCl_sat, H2SO4 0.5 M, pH 0.3
 
 Ramas:
   carga       248.95 s   -0.198 → +1.000 V   I = +0.005 mA   q = 1.245 mC
@@ -360,14 +361,19 @@ Ramas:
 
 Resistencia interna de la caída IR: 1398 Ω
 
-Capacitancia (descarga, sin la caída IR): 1.632 mF
+Capacitancia (descarga, sin la caída IR): 1.632 mF = 81.61 F/g
+Capacidad: 96.75 C/g = 26.88 mAh/g
 
 Eficiencia culómbica: 153.00 %
 Eficiencia energética : 98.07 %
 
+Energía: 11.06 Wh/kg    Potencia: 102.9 W/kg
+  Por masa de material ACTIVO y de un solo electrodo. Un dispositivo completo lleva dos electrodos, electrolito, separador y colectores, y su energía por masa total es entre tres y cinco veces menor. No son comparables
+
 ⚠ los tres convenios de capacitancia difieren un 50 % (2.287 mF frente a 1.133 mF). Eso NO es ruido: es que la descarga no es una recta (R² = 0.967). El de ΔV supone que sí lo es y sobreinforma exactamente lo que la meseta se curva; para un pseudocondensador el defendible es el de ENERGÍA, que es la capacitancia que almacenaría la misma energía en la misma ventana. Elegir el mayor es una elección, no una medida
 ⚠ la descarga no es lineal (R² = 0.967): hay meseta de potencial. Una meseta es comportamiento de BATERÍA, y una capacitancia en faradios describe mal a un material así. La magnitud correcta es la capacidad, en C/g o mAh/g, y está calculada arriba
 ⚠ la eficiencia culómbica sale 153.0 %, por encima del 100 %. Físicamente imposible en un ciclo aislado: o hay una reacción parásita que aporta carga en la descarga, o el corte de la carga llegó antes de completarse. El exceso equivale a +1.05 µA de corriente parásita, que es la forma de comparar este número entre corrientes distintas: una fuga es una corriente, así que la MISMA fuga sale como un exceso grande a corriente pequeña y pequeño a corriente grande
+⚠ ½CV² da 147 % de la energía integrada. La diferencia mide cuánto se aleja este electrodo de un condensador: ½CV² sólo vale si V baja linealmente con la carga. La energía que se informa es la integral, que vale en los dos casos
 
 ────────────────────────────────────────────────────────────────────────
   CAPACIDAD DE VELOCIDAD (GCD)
@@ -377,11 +383,11 @@ Retención frente a la CORRIENTE, que no es la retención frente al CICLADO. Las
 Capacidad de velocidad (5 corrientes, 0.005–0.06 mA)
   ciclo representativo de cada archivo: mediana
 
-     0.005 mA       1.563 mF   ±13.5 %   IR   14.1 mV ( 1.2 % de la excursión)
-      0.01 mA       1.235 mF   ± 3.0 %   IR   27.5 mV ( 2.3 % de la excursión)
-      0.02 mA        1.15 mF   ± 0.7 %   IR   60.4 mV ( 5.1 % de la excursión)
-      0.04 mA       1.169 mF   ± 7.2 %   IR    144 mV (12.1 % de la excursión)
-      0.06 mA       1.227 mF   ± 0.5 %   IR    230 mV (19.4 % de la excursión)
+     0.005 mA       1.563 mF (   78.17 F/g)   ±13.5 %   IR   14.1 mV ( 1.2 % de la excursión)
+      0.01 mA       1.235 mF (   61.75 F/g)   ± 3.0 %   IR   27.5 mV ( 2.3 % de la excursión)
+      0.02 mA        1.15 mF (   57.51 F/g)   ± 0.7 %   IR   60.4 mV ( 5.1 % de la excursión)
+      0.04 mA       1.169 mF (   58.47 F/g)   ± 7.2 %   IR    144 mV (12.1 % de la excursión)
+      0.06 mA       1.227 mF (   61.35 F/g)   ± 0.5 %   IR    230 mV (19.4 % de la excursión)
 
   Retención: 78.5 % a 12× la corriente
   ⚠ esa retención incluye activación: los archivos GANAN un 23.3 % compuesto en sus propios ciclos
@@ -480,21 +486,19 @@ Circuito: R0-T1
 ────────────────────────────────────────────────────────────────────────
 Capacitancia por método:
 
-  CV   5 mV/s                     1.28 mF
-  GCD  descarga galvanostática    1.632 mF
-  EIS  C′ a 0.0999 Hz           0.7871 mF
+  CV   5 mV/s                     1.28 mF     64.01 F/g
+  GCD  descarga galvanostática    1.632 mF     81.61 F/g
+  EIS  C′ a 0.0999 Hz           0.7871 mF     39.35 F/g
 
 Dispersión entre métodos: 52 %
 
 ⚠ los métodos difieren un 52 %: GCD da 1.632 mF y EIS da 0.7871 mF. No es ruido. Lo habitual es que la de EIS sea la mayor: se mide con una perturbación pequeña alrededor de un punto fijo y ahí no hay nada limitado por velocidad. Entre CV y GCD el orden lo deciden la velocidad y la corriente que se usaran, y compararlas solo vale si son equivalentes; si no lo son, esta diferencia es de las condiciones y no del electrodo
 ⚠ el número que entrega un dispositivo es el de GCD. Los otros dos son diagnósticos: útiles para entender el electrodo, no para anunciar su prestación
-⚠ sin masa activa no hay F/g, que es como se publica casi todo. Ponla en el electrodo: es la masa de material ACTIVO, no la del electrodo entero
 
 ────────────────────────────────────────────────────────────────────────
   AVISOS
 ────────────────────────────────────────────────────────────────────────
 ⚠ CV: el archivo tiene 4 ciclos; se ha usado el último. El PRIMERO nunca es representativo: lleva formación irreversible, descomposición de electrolito o acondicionamiento del óxido
-⚠ CV: sin masa activa no hay capacitancia específica. Y tiene que ser la masa de material ACTIVO, no la del electrodo: el aglomerante y el carbón conductor suelen ser el 20 %, y usar la masa total rebaja el resultado justo esa fracción
 ⚠ CV: hay picos redox definidos. Antes de citar una capacitancia en F/g, mira el mecanismo (echem.evaluate): un material con picos almacena CARGA, y expresarlo en faradios dividiendo por la ventana infla el número y no describe lo que hace el material
 ⚠ velocidades: 4.99991 mV/s: los 3 ciclos completos del archivo dan 1.4 → 1.438 → 1.418 mF, -0.62 % por ciclo
 ⚠ velocidades: 9.99883 mV/s: los 3 ciclos completos del archivo dan 1.325 → 1.267 → 1.262 mF, +2.43 % por ciclo. La caída es MONÓTONA: el ciclo que se informa está sobre una pendiente, no en estado estacionario, y el valor citado depende de cuál se cite. Para una cifra publicable hace falta ciclar hasta que se estabilice
@@ -509,6 +513,7 @@ Dispersión entre métodos: 52 %
 ⚠ GCD: los tres convenios de capacitancia difieren un 50 % (2.287 mF frente a 1.133 mF). Eso NO es ruido: es que la descarga no es una recta (R² = 0.967). El de ΔV supone que sí lo es y sobreinforma exactamente lo que la meseta se curva; para un pseudocondensador el defendible es el de ENERGÍA, que es la capacitancia que almacenaría la misma energía en la misma ventana. Elegir el mayor es una elección, no una medida
 ⚠ GCD: la descarga no es lineal (R² = 0.967): hay meseta de potencial. Una meseta es comportamiento de BATERÍA, y una capacitancia en faradios describe mal a un material así. La magnitud correcta es la capacidad, en C/g o mAh/g, y está calculada arriba
 ⚠ GCD: la eficiencia culómbica sale 153.0 %, por encima del 100 %. Físicamente imposible en un ciclo aislado: o hay una reacción parásita que aporta carga en la descarga, o el corte de la carga llegó antes de completarse. El exceso equivale a +1.05 µA de corriente parásita, que es la forma de comparar este número entre corrientes distintas: una fuga es una corriente, así que la MISMA fuga sale como un exceso grande a corriente pequeña y pequeño a corriente grande
+⚠ GCD: ½CV² da 147 % de la energía integrada. La diferencia mide cuánto se aleja este electrodo de un condensador: ½CV² sólo vale si V baja linealmente con la carga. La energía que se informa es la integral, que vale en los dos casos
 ⚠ velocidad GCD: «GCPL__prueba_ventana_1-0_02_GCPL_C01»: la eficiencia culómbica media es 105.77 %, por encima del 100 % en el promedio de todos los ciclos. Eso no es ruido de un ciclo: es carga que sale sin haber entrado, o sea una reacción parásita sostenida durante toda la medida
 ⚠ velocidad GCD: «GCPL__prueba_ventana_1-0_03_GCPL_C01»: la eficiencia culómbica media es 113.92 %, por encima del 100 % en el promedio de todos los ciclos. Eso no es ruido de un ciclo: es carga que sale sin haber entrado, o sea una reacción parásita sostenida durante toda la medida
 ⚠ velocidad GCD: «GCPL__prueba_ventana_1-0_04_GCPL_C01»: la eficiencia culómbica media es 142.45 %, por encima del 100 % en el promedio de todos los ciclos. Eso no es ruido de un ciclo: es carga que sale sin haber entrado, o sea una reacción parásita sostenida durante toda la medida
@@ -528,6 +533,5 @@ Dispersión entre métodos: 52 %
 ⚠ Dunn: en 8 potenciales la corriente de la rama CAMBIA DE SIGNO entre una velocidad y otra (-0.478 a +1.108 V). Ahí la separación no está definida: k₁ν es una fracción de una corriente que no tiene un signo, y la banda capacitiva de la figura puede salirse del lazo por ese motivo y no por el ajuste. Es la firma de un cruce por cero que se mueve con la velocidad — en estos archivos, la rama catódica lleva corriente anódica cerca del límite positivo
 ⚠ capacitancia: los métodos difieren un 52 %: GCD da 1.632 mF y EIS da 0.7871 mF. No es ruido. Lo habitual es que la de EIS sea la mayor: se mide con una perturbación pequeña alrededor de un punto fijo y ahí no hay nada limitado por velocidad. Entre CV y GCD el orden lo deciden la velocidad y la corriente que se usaran, y compararlas solo vale si son equivalentes; si no lo son, esta diferencia es de las condiciones y no del electrodo
 ⚠ capacitancia: el número que entrega un dispositivo es el de GCD. Los otros dos son diagnósticos: útiles para entender el electrodo, no para anunciar su prestación
-⚠ capacitancia: sin masa activa no hay F/g, que es como se publica casi todo. Ponla en el electrodo: es la masa de material ACTIVO, no la del electrodo entero
 ⚠ la capacitancia del voltamperograma es sólo 0.78 veces la galvanostática. Suele significar que la ventana del CV era más estrecha, o que la velocidad de barrido era demasiado alta para que el electrodo respondiera entero
 ⚠ la resistencia de la caída IR (1.4e+03 Ω) y la de alta frecuencia de la impedancia (87.5 Ω) difieren en más de un factor 3. La primera incluye resistencias que a alta frecuencia se cortocircuitan (la de contacto, la del propio material), así que salga mayor es normal; salga menor, no, y entonces alguna de las dos medidas está mal escalada

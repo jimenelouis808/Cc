@@ -55,7 +55,7 @@ Corriente parásita (ΔQ = Q_ox − Q_red = ⟨i_par⟩·t):
   ⟨i_par⟩ = -1.15 µA
   ordenada = 10.6 µC (el modelo dice cero)
   R²      = 0.5761
-  C sin fuga = 0.5552 ± 0.162 mF
+  C sin fuga = 0.5552 ± 0.162 mF = 27.8 ± 8.1 F/g
   (de ⟨Q_red⟩; la dispersión es el electrodo cambiando durante la serie, no error de ajuste)
       5.0 mV/s   la fuga es el -125 % de Q_ox
      10.0 mV/s   la fuga es el  -48 % de Q_ox

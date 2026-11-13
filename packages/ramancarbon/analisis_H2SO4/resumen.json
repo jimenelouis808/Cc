@@ -3,7 +3,7 @@
     "electrolito": "H2SO4 0.5 M",
     "ph": 0.3,
     "referencia": "Ag/AgCl_sat",
-    "masa_mg": null,
+    "masa_mg": 0.02,
     "area_cm2": null
   },
   "archivos_ilegibles": [
@@ -161,7 +161,7 @@
         "dispersion": 0.13548694651401408,
         "retencion_interna": 1.1329677578619213,
         "orden": 5,
-        "especifica_f_g": null
+        "especifica_f_g": 78.17257369921961
       },
       {
         "corriente_a": 1.0000000707805157e-05,
@@ -172,7 +172,7 @@
         "dispersion": 0.030196132333986957,
         "retencion_interna": 1.0241220445321806,
         "orden": 4,
-        "especifica_f_g": null
+        "especifica_f_g": 61.7478470733002
       },
       {
         "corriente_a": 2.0000001415610313e-05,
@@ -183,7 +183,7 @@
         "dispersion": 0.006638048333967986,
         "retencion_interna": 1.0008826887906317,
         "orden": 3,
-        "especifica_f_g": null
+        "especifica_f_g": 57.510333555985035
       },
       {
         "corriente_a": 4.0000002831220626e-05,
@@ -194,7 +194,7 @@
         "dispersion": 0.07156003191906155,
         "retencion_interna": 1.064132367604986,
         "orden": 1,
-        "especifica_f_g": null
+        "especifica_f_g": 58.4728167132158
       },
       {
         "corriente_a": 6.000000238418579e-05,
@@ -205,7 +205,7 @@
         "dispersion": 0.004801095986739625,
         "retencion_interna": 0.9977572694743881,
         "orden": 2,
-        "especifica_f_g": null
+        "especifica_f_g": 61.350965224488526
       }
     ],
     "avisos": [
@@ -219,7 +219,6 @@
   },
   "avisos": [
     "CV: el archivo tiene 4 ciclos; se ha usado el último. El PRIMERO nunca es representativo: lleva formación irreversible, descomposición de electrolito o acondicionamiento del óxido",
-    "CV: sin masa activa no hay capacitancia específica. Y tiene que ser la masa de material ACTIVO, no la del electrodo: el aglomerante y el carbón conductor suelen ser el 20 %, y usar la masa total rebaja el resultado justo esa fracción",
     "CV: hay picos redox definidos. Antes de citar una capacitancia en F/g, mira el mecanismo (echem.evaluate): un material con picos almacena CARGA, y expresarlo en faradios dividiendo por la ventana infla el número y no describe lo que hace el material",
     "velocidades: 4.99991 mV/s: los 3 ciclos completos del archivo dan 1.4 → 1.438 → 1.418 mF, -0.62 % por ciclo",
     "velocidades: 9.99883 mV/s: los 3 ciclos completos del archivo dan 1.325 → 1.267 → 1.262 mF, +2.43 % por ciclo. La caída es MONÓTONA: el ciclo que se informa está sobre una pendiente, no en estado estacionario, y el valor citado depende de cuál se cite. Para una cifra publicable hace falta ciclar hasta que se estabilice",
@@ -234,6 +233,7 @@
     "GCD: los tres convenios de capacitancia difieren un 50 % (2.287 mF frente a 1.133 mF). Eso NO es ruido: es que la descarga no es una recta (R² = 0.967). El de ΔV supone que sí lo es y sobreinforma exactamente lo que la meseta se curva; para un pseudocondensador el defendible es el de ENERGÍA, que es la capacitancia que almacenaría la misma energía en la misma ventana. Elegir el mayor es una elección, no una medida",
     "GCD: la descarga no es lineal (R² = 0.967): hay meseta de potencial. Una meseta es comportamiento de BATERÍA, y una capacitancia en faradios describe mal a un material así. La magnitud correcta es la capacidad, en C/g o mAh/g, y está calculada arriba",
     "GCD: la eficiencia culómbica sale 153.0 %, por encima del 100 %. Físicamente imposible en un ciclo aislado: o hay una reacción parásita que aporta carga en la descarga, o el corte de la carga llegó antes de completarse. El exceso equivale a +1.05 µA de corriente parásita, que es la forma de comparar este número entre corrientes distintas: una fuga es una corriente, así que la MISMA fuga sale como un exceso grande a corriente pequeña y pequeño a corriente grande",
+    "GCD: ½CV² da 147 % de la energía integrada. La diferencia mide cuánto se aleja este electrodo de un condensador: ½CV² sólo vale si V baja linealmente con la carga. La energía que se informa es la integral, que vale en los dos casos",
     "velocidad GCD: «GCPL__prueba_ventana_1-0_02_GCPL_C01»: la eficiencia culómbica media es 105.77 %, por encima del 100 % en el promedio de todos los ciclos. Eso no es ruido de un ciclo: es carga que sale sin haber entrado, o sea una reacción parásita sostenida durante toda la medida",
     "velocidad GCD: «GCPL__prueba_ventana_1-0_03_GCPL_C01»: la eficiencia culómbica media es 113.92 %, por encima del 100 % en el promedio de todos los ciclos. Eso no es ruido de un ciclo: es carga que sale sin haber entrado, o sea una reacción parásita sostenida durante toda la medida",
     "velocidad GCD: «GCPL__prueba_ventana_1-0_04_GCPL_C01»: la eficiencia culómbica media es 142.45 %, por encima del 100 % en el promedio de todos los ciclos. Eso no es ruido de un ciclo: es carga que sale sin haber entrado, o sea una reacción parásita sostenida durante toda la medida",
@@ -253,7 +253,6 @@
     "Dunn: en 8 potenciales la corriente de la rama CAMBIA DE SIGNO entre una velocidad y otra (-0.478 a +1.108 V). Ahí la separación no está definida: k₁ν es una fracción de una corriente que no tiene un signo, y la banda capacitiva de la figura puede salirse del lazo por ese motivo y no por el ajuste. Es la firma de un cruce por cero que se mueve con la velocidad — en estos archivos, la rama catódica lleva corriente anódica cerca del límite positivo",
     "capacitancia: los métodos difieren un 52 %: GCD da 1.632 mF y EIS da 0.7871 mF. No es ruido. Lo habitual es que la de EIS sea la mayor: se mide con una perturbación pequeña alrededor de un punto fijo y ahí no hay nada limitado por velocidad. Entre CV y GCD el orden lo deciden la velocidad y la corriente que se usaran, y compararlas solo vale si son equivalentes; si no lo son, esta diferencia es de las condiciones y no del electrodo",
     "capacitancia: el número que entrega un dispositivo es el de GCD. Los otros dos son diagnósticos: útiles para entender el electrodo, no para anunciar su prestación",
-    "capacitancia: sin masa activa no hay F/g, que es como se publica casi todo. Ponla en el electrodo: es la masa de material ACTIVO, no la del electrodo entero",
     "la capacitancia del voltamperograma es sólo 0.78 veces la galvanostática. Suele significar que la ventana del CV era más estrecha, o que la velocidad de barrido era demasiado alta para que el electrodo respondiera entero",
     "la resistencia de la caída IR (1.4e+03 Ω) y la de alta frecuencia de la impedancia (87.5 Ω) difieren en más de un factor 3. La primera incluye resistencias que a alta frecuencia se cortocircuitan (la de contacto, la del propio material), así que salga mayor es normal; salga menor, no, y entonces alguna de las dos medidas está mal escalada"
   ]

@@ -1,0 +1,71 @@
+serie,x,y
+$\langle i_{par}\rangle t$, -0.35 µA, R² = 0.981,0,-46.8428
+$\langle i_{par}\rangle t$, -0.35 µA, R² = 0.981,16.1611,-52.5709
+$\langle i_{par}\rangle t$, -0.35 µA, R² = 0.981,32.3222,-58.2991
+$\langle i_{par}\rangle t$, -0.35 µA, R² = 0.981,48.4832,-64.0272
+$\langle i_{par}\rangle t$, -0.35 µA, R² = 0.981,64.6443,-69.7554
+$\langle i_{par}\rangle t$, -0.35 µA, R² = 0.981,80.8054,-75.4835
+$\langle i_{par}\rangle t$, -0.35 µA, R² = 0.981,96.9665,-81.2116
+$\langle i_{par}\rangle t$, -0.35 µA, R² = 0.981,113.128,-86.9398
+$\langle i_{par}\rangle t$, -0.35 µA, R² = 0.981,129.289,-92.6679
+$\langle i_{par}\rangle t$, -0.35 µA, R² = 0.981,145.45,-98.3961
+$\langle i_{par}\rangle t$, -0.35 µA, R² = 0.981,161.611,-104.124
+$\langle i_{par}\rangle t$, -0.35 µA, R² = 0.981,177.772,-109.852
+$\langle i_{par}\rangle t$, -0.35 µA, R² = 0.981,193.933,-115.58
+$\langle i_{par}\rangle t$, -0.35 µA, R² = 0.981,210.094,-121.309
+$\langle i_{par}\rangle t$, -0.35 µA, R² = 0.981,226.255,-127.037
+$\langle i_{par}\rangle t$, -0.35 µA, R² = 0.981,242.416,-132.765
+$\langle i_{par}\rangle t$, -0.35 µA, R² = 0.981,258.577,-138.493
+$\langle i_{par}\rangle t$, -0.35 µA, R² = 0.981,274.738,-144.221
+$\langle i_{par}\rangle t$, -0.35 µA, R² = 0.981,290.899,-149.949
+$\langle i_{par}\rangle t$, -0.35 µA, R² = 0.981,307.06,-155.677
+$\langle i_{par}\rangle t$, -0.35 µA, R² = 0.981,323.222,-161.406
+$\langle i_{par}\rangle t$, -0.35 µA, R² = 0.981,339.383,-167.134
+$\langle i_{par}\rangle t$, -0.35 µA, R² = 0.981,355.544,-172.862
+$\langle i_{par}\rangle t$, -0.35 µA, R² = 0.981,371.705,-178.59
+$\langle i_{par}\rangle t$, -0.35 µA, R² = 0.981,387.866,-184.318
+$\langle i_{par}\rangle t$, -0.35 µA, R² = 0.981,404.027,-190.046
+$\langle i_{par}\rangle t$, -0.35 µA, R² = 0.981,420.188,-195.774
+$\langle i_{par}\rangle t$, -0.35 µA, R² = 0.981,436.349,-201.503
+$\langle i_{par}\rangle t$, -0.35 µA, R² = 0.981,452.51,-207.231
+$\langle i_{par}\rangle t$, -0.35 µA, R² = 0.981,468.671,-212.959
+$\langle i_{par}\rangle t$, -0.35 µA, R² = 0.981,484.832,-218.687
+$\langle i_{par}\rangle t$, -0.35 µA, R² = 0.981,500.993,-224.415
+$\langle i_{par}\rangle t$, -0.35 µA, R² = 0.981,517.154,-230.143
+$\langle i_{par}\rangle t$, -0.35 µA, R² = 0.981,533.316,-235.871
+$\langle i_{par}\rangle t$, -0.35 µA, R² = 0.981,549.477,-241.6
+$\langle i_{par}\rangle t$, -0.35 µA, R² = 0.981,565.638,-247.328
+$\langle i_{par}\rangle t$, -0.35 µA, R² = 0.981,581.799,-253.056
+$\langle i_{par}\rangle t$, -0.35 µA, R² = 0.981,597.96,-258.784
+$\langle i_{par}\rangle t$, -0.35 µA, R² = 0.981,614.121,-264.512
+$\langle i_{par}\rangle t$, -0.35 µA, R² = 0.981,630.282,-270.24
+$\langle i_{par}\rangle t$, -0.35 µA, R² = 0.981,646.443,-275.968
+$\langle i_{par}\rangle t$, -0.35 µA, R² = 0.981,662.604,-281.697
+$\langle i_{par}\rangle t$, -0.35 µA, R² = 0.981,678.765,-287.425
+$\langle i_{par}\rangle t$, -0.35 µA, R² = 0.981,694.926,-293.153
+$\langle i_{par}\rangle t$, -0.35 µA, R² = 0.981,711.087,-298.881
+$\langle i_{par}\rangle t$, -0.35 µA, R² = 0.981,727.248,-304.609
+$\langle i_{par}\rangle t$, -0.35 µA, R² = 0.981,743.41,-310.337
+$\langle i_{par}\rangle t$, -0.35 µA, R² = 0.981,759.571,-316.065
+$\langle i_{par}\rangle t$, -0.35 µA, R² = 0.981,775.732,-321.793
+$\langle i_{par}\rangle t$, -0.35 µA, R² = 0.981,791.893,-327.522
+$\langle Q_{red}\rangle$,0,2103.56
+$\langle Q_{red}\rangle$,1,2103.56
+$Q_{ox}$,719.902,2407
+$Q_{ox}$,359.972,2176.96
+$Q_{ox}$,179.976,2034.94
+$Q_{ox}$,71.999,1888.54
+$Q_{ox}$,35.9998,1757.93
+$Q_{ox}$,17.9995,1583.71
+$Q_{red}$,719.902,2698.03
+$Q_{red}$,359.972,2366.08
+$Q_{red}$,179.976,2163.01
+$Q_{red}$,71.999,1960.97
+$Q_{red}$,35.9998,1809.57
+$Q_{red}$,17.9995,1623.69
+$\Delta Q$,719.902,-291.025
+$\Delta Q$,359.972,-189.118
+$\Delta Q$,179.976,-128.072
+$\Delta Q$,71.999,-72.43
+$\Delta Q$,35.9998,-51.6348
+$\Delta Q$,17.9995,-39.9785

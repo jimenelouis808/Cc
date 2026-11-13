@@ -9,10 +9,11 @@ impedancias intercaladas.
 uv run python analisis_H2SO4/exportar.py <carpeta con los .mpr> [masa_mg] [area_cm2]
 ```
 
-La masa y el área son opcionales porque **no están en los archivos y no
-se dieron con ellos**. Todo lo que no las necesita sale igual; los F/g,
-los mAh/g, los Wh/kg y el ECSA aparecen sólo si se pasan, y el informe
-dice cuáles faltan en vez de citar una capacitancia por gramo de nada.
+La masa por defecto son los **20 µg** de material activo que diste; no
+está en ningún archivo, así que todos los F/g de aquí se apoyan en esa
+línea del script. El área sigue sin darse: sin ella no hay µF/cm² ni
+densidad de corriente por área geométrica, y el informe lo dice en vez
+de inventarla.
 
 ## La celda
 
@@ -34,6 +35,32 @@ de actividad a esa fuerza iónica, pH ≈ 0.3. De ahí la escala RHE:
 ```
 E(RHE) = E(Ag/AgCl sat.) + 0.197 + 0.0592 × 0.3 = E + 0.2147 V
 ```
+
+## Los números, de una vez
+
+Con 20 µg de material activo:
+
+| magnitud | valor | de dónde |
+|---|---|---|
+| **C (GCD)** | **81.6 F/g** | descarga a 5 µA, caída IR descontada |
+| C (CV) | 64.0 F/g | lazo ÷ 2νΔV a 5 mV/s |
+| C (EIS) | 39.4 F/g | C′ a 0.0999 Hz |
+| Energía | 11.1 Wh/kg | ∫V dq, no ½CV² |
+| Potencia | 103 W/kg | a esa misma corriente |
+| C_dl | 330 µF | ventana estrecha, 6 velocidades |
+| ECSA | 8.2 cm² | con Cs = 40 µF/cm² (entre 5.5 y 16.5) |
+| R_s | 85–106 Ω | cruce con el eje real, impedancia |
+
+Los tres métodos difieren un **52 %**, y eso no es ruido: es que miden
+en condiciones distintas. El número que entrega un dispositivo es el de
+GCD; los otros dos son diagnósticos. Quien publique el mayor sin decir
+cuál es está publicando una elección.
+
+F/g por corriente, del GCD:
+
+| I | 5 µA | 10 µA | 20 µA | 40 µA | 60 µA |
+|---|---|---|---|---|---|
+| C | 78.2 | 61.8 | 57.5 | 58.5 | 61.4 F/g |
 
 ## Lo primero: dos de las tres ventanas parten el agua
 
@@ -176,18 +203,54 @@ la recta mejora; quitarlo es una decisión y aquí no se ha tomado.
 
 ## Lo que hay en la carpeta
 
+### Figuras
+
+| figura | paneles |
+|---|---|
+| `cv_ventana_amplia` | la serie de velocidades con la escala RHE y los límites del agua, C y eficiencia contra ν, el balance de carga, y la separación de Dunn |
+| `cv_leyes` | k_cap, k_diff e i_par con sus errores, y las tres contribuciones apiladas |
+| `cv_ecsa` | lo mismo para la ventana estrecha, de donde salen C_dl y el ECSA |
+| `gcd` | las curvas, C contra corriente, retención ciclo a ciclo, eficiencia culómbica, la fuga, y la caída IR con la ESR |
+| `gcd_articulo` | los tres que imprime la literatura: retención normalizada con sus barras de error, capacidad y eficiencia por ciclo, y el Ragone con su techo |
+| `peis` | Nyquist a escala 1:1, el rincón de alta frecuencia, Bode con el codo, y C′(f)/C″(f) |
+| `peis_modelo` | Nyquist en log-log, la DRT, el residuo de cada circuito y el de Kramers-Kronig |
+| `capacitancia` | CV, GCD y EIS lado a lado, cada uno con su condición |
+
+Cada una en `.png` y `.pdf` a 600 ppp, y los números de cada panel en
+`datos_figuras/<figura>/`, un CSV por panel: lo que se exporta es lo que
+está DIBUJADO, con las transformaciones ya aplicadas.
+
+### Texto y tablas
+
 | archivo | qué es |
 |---|---|
 | `informe.txt` | el informe completo: celda, mecanismo, CV, velocidad, Dunn, GCD, capacidad de velocidad, impedancia |
 | `informe_ecsa.txt` | la serie estrecha, con C_dl, ECSA, Trasatti y las tres leyes de i(ν) |
 | `informe_velocidad.txt` | sólo la capacidad de velocidad del GCD, con sus avisos |
 | `informe_peis_*.txt` | un informe por espectro |
+| `tablas.md` | las ventanas frente al RHE, la curva de velocidad, la impedancia y el ECSA |
 | `cv_velocidades.csv` | capacitancia, ΔEp, picos y reversibilidad por velocidad |
 | `gcd_velocidad.csv` | la curva de velocidad con la dispersión de cada punto |
 | `gcd_ciclado.csv` | lo que los 101 ciclos de cada archivo le hacen |
 | `peis_*.csv` | los tres espectros, f / Z′ / −Z″ |
 | `resumen.json` | todo lo anterior en una estructura |
-| `gcd.png`, `gcd_velocidad.png`, `cv.png`, `peis.png` | las figuras, del catálogo de la ventana |
 
 Los `.mpr` no se versionan. Los CSV sí, para que las figuras se puedan
 reproducir sin ellos.
+
+## Una cosa que las figuras enseñan y el texto no decía
+
+El residuo de cada circuito, en `peis_modelo` (c), ordena los tres
+espectros por lo bien que un modelo los describe:
+
+| espectro | circuito que pide su forma | residuo |
+|---|---|---|
+| inicial, +0.418 V | `R0-(R1|Q1)` | 17.3 % |
+| tras la CV, OCV | `R0-T1` | 11.0 % |
+| tras la CV, pico redox | `R0-(R1|Q1)-T1` | 1.5 % |
+
+Un Randles sobre el espectro inicial no describe estos datos. Lo que los
+describe es la línea de transmisión de poro (`T1`), y el único que ajusta
+bien es el que lleva las dos cosas — y ése es justo el que no pasa
+Kramers-Kronig. O sea que el mejor ajuste de los tres es el que menos se
+puede citar.

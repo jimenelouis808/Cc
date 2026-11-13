@@ -94,6 +94,8 @@ LABELS: dict[str, dict[str, str]] = {
         "rate": r"$\nu$ / mV s$^{-1}$",
         "capacitance_mass": "C / F g$^{-1}$",
         "capacitance": "C / F",
+        "capacitance_by_method": "C / mF",
+        "capacitance_by_method_mass": "C / F g$^{-1}$",
         "loop": r"loop $\div\ 2\nu\Delta V$  (leak included)",
         "reduction": r"reduction charge $\div\ \Delta V$",
         "efficiency": "Q$_{red}$/Q$_{ox}$",
@@ -135,8 +137,12 @@ LABELS: dict[str, dict[str, str]] = {
         "slope1": "slope 1 (45° on a linear plot)",
         "log_dropped": "{n} inductive point(s) left out: log needs −Z″ > 0",
         "rate_retention": "capacitance retention / %",
-        "retention_at_end": "{value:.1f} %",
+        "retention_at_end": "{value} %",
         "normalised_at": "100 % at {rate}",
+        "dunn_diffusive": r"diffusive ($k_2\sqrt{\nu}$)",
+        "dunn_surface": r"surface ($k_1\nu$)",
+        "dunn_fraction": "{value} % surface",
+        "spread_between": "methods differ by {value} %",
         "rs_marker": "▼ R$_s$ from the data",
         "knee_marker": "● knee: phase = −45°",
         "tau0_marker": "■ C″ maximum → τ₀",
@@ -191,6 +197,8 @@ LABELS: dict[str, dict[str, str]] = {
         "rate": r"$\nu$ / mV s$^{-1}$",
         "capacitance_mass": "C / F g$^{-1}$",
         "capacitance": "C / F",
+        "capacitance_by_method": "C / mF",
+        "capacitance_by_method_mass": "C / F g$^{-1}$",
         "loop": r"lazo $\div\ 2\nu\Delta V$  (con la fuga)",
         "reduction": r"carga de reducción $\div\ \Delta V$",
         "efficiency": "Q$_{red}$/Q$_{ox}$",
@@ -232,8 +240,12 @@ LABELS: dict[str, dict[str, str]] = {
         "slope1": "pendiente 1 (los 45° del plano lineal)",
         "log_dropped": "{n} punto(s) inductivo(s) fuera: el log pide −Z″ > 0",
         "rate_retention": "retención de capacitancia / %",
-        "retention_at_end": "{value:.1f} %",
+        "retention_at_end": "{value} %",
         "normalised_at": "100 % en {rate}",
+        "dunn_diffusive": r"difusivo ($k_2\sqrt{\nu}$)",
+        "dunn_surface": r"superficial ($k_1\nu$)",
+        "dunn_fraction": "{value} % superficial",
+        "spread_between": "los métodos difieren un {value} %",
         "rs_marker": "▼ R$_s$ de los datos",
         "knee_marker": "● codo: fase = −45°",
         "tau0_marker": "■ máximo de C″ → τ₀",
@@ -573,6 +585,88 @@ def _set_grid(axis, spec: CompositeFigure) -> None:
         axis.grid(False)
 
 
+#: Longest legend entry, in characters, that still fits two to a row.
+#:
+#: A panel is about half of a 7.2-inch figure, so roughly 3.6 inches
+#: wide, and two columns of entries plus their handles have to live
+#: inside that. Measured on the labels this was written against: a
+#: series called "800 °C" fits twice over and one called "tras la CV,
+#: en el pico redox (+0.500 V)" runs off the axes in BOTH columns.
+#: The old rule counted series and never looked at their names.
+LEGEND_TWO_COLUMN_CHARS = 16
+
+
+def _legend_columns(axis, count: int) -> int:
+    """One column or two, decided by how long the entries actually are.
+
+    ``get_legend_handles_labels`` returns the labels as STRINGS, not as
+    Text artists; asking them for ``get_text()`` raises, and a panel
+    that raises is reported and left blank, which is how this helper
+    first appeared in a figure.
+    """
+    if count <= 2:
+        return 1
+    labels = [str(label) for label in axis.get_legend_handles_labels()[1]
+              if not str(label).startswith("_")]
+    longest = max((len(label) for label in labels), default=0)
+    return 2 if 0 < longest <= LEGEND_TWO_COLUMN_CHARS else 1
+
+
+def _current_ticks(axis, currents) -> None:
+    """Label a logarithmic current axis at the currents MEASURED.
+
+    A galvanostatic series is geometric — 5, 10, 20, 40, 60 µA — and
+    matplotlib's log minor labels put "3 x 10^1" and "4 x 10^1" close
+    enough to overlap into "3 x 10^14 x 10^1", which is what every
+    current axis in the first full figure printed. The measured values
+    are the only ticks that mean anything here anyway.
+    """
+    from matplotlib.ticker import NullFormatter, NullLocator
+
+    values = sorted({float(c) for c in currents if c and c > 0})
+    if not values:
+        return
+    axis.xaxis.set_minor_locator(NullLocator())
+    axis.xaxis.set_minor_formatter(NullFormatter())
+    axis.set_xticks(values)
+    axis.set_xticklabels([f"{value:.3g}" for value in values])
+
+
+#: Minimum vertical gap between two end-of-curve labels, as a fraction
+#: of the axis height.
+#:
+#: A label is about one line tall and a panel holds roughly twenty-five
+#: lines, so five per cent is a line and a half: enough that two labels
+#: read as two. Measured on the series this was written against, where
+#: the 20 and 60 µA curves end 0.3 % apart and their labels printed on
+#: top of each other.
+LABEL_MIN_GAP = 0.05
+
+
+def _spread_labels(values: list[float], low: float, high: float) -> list[float]:
+    """Push labels apart just enough to stop them overlapping.
+
+    Takes the y of each label and returns where to draw it. Only the
+    LABEL moves: it is annotated with an arrowless offset from the data
+    point it belongs to, so the curve it names is still the one it
+    touches. Doing nothing is the alternative, and two curves that end
+    a tenth of a per cent apart then print one label over the other.
+    """
+    span = high - low
+    if span <= 0 or len(values) < 2:
+        return list(values)
+    gap = LABEL_MIN_GAP * span
+    order = sorted(range(len(values)), key=lambda i: values[i])
+    placed = list(values)
+    for position, index in enumerate(order):
+        if position == 0:
+            continue
+        previous = placed[order[position - 1]]
+        if placed[index] - previous < gap:
+            placed[index] = previous + gap
+    return placed
+
+
 def _tidy(axis, spec: CompositeFigure, log_x: bool = False) -> None:
     """Ticks inwards on all four sides, minor ticks, and the font size.
 
@@ -831,12 +925,17 @@ def _panel_cv_capacitance(axis, session, spec, palette) -> None:
     axis.set_ylim(min(loop + reversible) - 0.15 * span,
                   max(loop + reversible) + 0.22 * span)
     if spec.legends:
+        # Lower LEFT. The two capacitance curves fall from left to
+        # right and the efficiency runs along the top, so upper right
+        # is the one corner both of them reach: there the legend sat on
+        # top of the twin axis's own label, which is how this panel
+        # came out of the first full figure.
         axis.legend(frameon=False, fontsize=spec.font_size - 1.0,
-                    loc="upper right", handlelength=1.6)
+                    loc="lower left", handlelength=1.6)
         axis.annotate(spec.text("efficiency"),
-                      xy=(rates[1], efficiency[1]),
-                      xycoords=("data", "axes fraction"), xytext=(8, -28),
-                      textcoords="offset points",
+                      xy=(rates[-1], efficiency[-1]),
+                      xycoords=("data", "axes fraction"), xytext=(-6, -16),
+                      textcoords="offset points", ha="right",
                       fontsize=spec.font_size - 1.0, color=MODEL)
     _tidy(axis, spec, log_x=True)
 
@@ -1055,7 +1154,19 @@ def _panel_dunn(axis, session, spec, palette) -> None:
                            if session.rate_series else None)
     if analysis is None or curve is None:
         return
-    plot_dunn(axis, analysis, curve, palette)
+    # The screen writes this panel in Spanish and the figure writes it
+    # in English, which is the rule for every other panel here and was
+    # the one place it did not hold: the exported figure came out with
+    # three axes in English and this one in Spanish.
+    per_gram = bool(getattr(session.electrode, "mass_mg", None))
+    plot_dunn(axis, analysis, curve, palette, per_gram=per_gram, texts={
+        "diffusive": spec.text("dunn_diffusive"),
+        "surface": spec.text("dunn_surface"),
+        "fraction": spec.text("dunn_fraction"),
+        "potential": spec.text("potential_plain"),
+        "current": (spec.text("current_mass") if per_gram
+                    else spec.text("current")),
+    })
     _tidy(axis, spec)
 
 
@@ -1424,7 +1535,7 @@ def _panel_bode(axis, session, spec, palette) -> None:
         # dashed line. Two columns halve the height into that strip.
         axis.legend(frameon=False, fontsize=spec.font_size - 1.0,
                     loc="lower left", handlelength=1.2,
-                    ncol=2 if len(_eis_list(session)) > 2 else 1,
+                    ncol=_legend_columns(axis, len(_eis_list(session))),
                     columnspacing=1.2)
     _tidy(axis, spec, log_x=True)
 
@@ -1672,6 +1783,7 @@ def _panel_gcd_rate(axis, session, spec, palette) -> None:
                       color=MODEL, markersize=7, markeredgewidth=1.4,
                       zorder=5, label=spec.text("interpolated"))
     axis.set_xscale("log")
+    _current_ticks(axis, list(clean_x) + list(broken_x))
     axis.set_xlabel("i / µA")
     axis.set_ylabel(spec.text("capacitance_mass") if per_gram
                     else spec.text("capacitance_uf"))
@@ -1780,6 +1892,7 @@ def _panel_gcd_rate_retention(axis, session, spec, palette) -> None:
     axis.axhline(100.0, color=GREY, linewidth=0.7, linestyle=(0, (1, 2)),
                  zorder=1)
     axis.set_xscale("log")
+    _current_ticks(axis, x)
     axis.set_xlabel(spec.text("current_density_a_g") if mass_g
                     else "i / µA")
     axis.set_ylabel(spec.text("rate_retention"))
@@ -1841,7 +1954,7 @@ def _panel_gcd_capacity_efficiency(axis, session, spec, palette) -> None:
         axis.set_ylim(low - 0.28 * (high - low), high)
         axis.legend(frameon=False, fontsize=spec.font_size - 1.0,
                     loc="lower left", handlelength=1.4,
-                    ncol=2 if len(session.gcd_curves()) > 2 else 1,
+                    ncol=_legend_columns(axis, len(session.gcd_curves())),
                     columnspacing=1.2)
     _tidy(axis, spec)
 
@@ -1853,6 +1966,7 @@ def _panel_gcd_cycling(axis, session, spec, palette) -> None:
     its cycles inside one file and the analysis gave one number per
     file, so a thousand cycles of a measurement arrived as a point.
     """
+    ends: list[tuple[float, float, str]] = []
     for index, (curve, cycling) in enumerate(
             zip(session.gcd_curves(), session.gcd_cyclings())):
         if cycling is None or not cycling.capacitance_f:
@@ -1867,12 +1981,32 @@ def _panel_gcd_cycling(axis, session, spec, palette) -> None:
         # The number at the end of the curve, which is what anyone
         # reading this panel wants and what every published version of
         # it carries. Reading it off the axis costs a ruler.
-        axis.annotate(spec.text("retention_at_end", value=retention[-1]),
-                      xy=(cycling.cycles[-1], retention[-1]),
-                      xytext=(4, 0), textcoords="offset points",
-                      ha="left", va="center", color=_colour(index),
-                      fontsize=spec.font_size - 1.5, zorder=4,
-                      annotation_clip=False)
+        # Formatted HERE, not in the template. `text` substitutes by
+        # `replace` of "{value}" — it has to, because every other label
+        # is LaTeX and LaTeX is braces — so a template carrying a
+        # format spec like "{value:.1f}" matches nothing and the panel
+        # printed the placeholder itself at the end of five curves.
+        ends.append((cycling.cycles[-1], float(retention[-1]),
+                     _colour(index)))
+    # The labels, after every curve is drawn: where each one goes
+    # depends on where the others ended.
+    if ends:
+        low, high = axis.get_ylim()
+        # Headroom under the lowest curve. The labels sit at the right
+        # edge at the height their curve ended, and the panel letter is
+        # drawn inside that same lower-right corner: without the room,
+        # the curves that end near 100 % print their label through it.
+        low -= 0.12 * (high - low)
+        axis.set_ylim(low, high)
+        spread = _spread_labels([end[1] for end in ends], low, high)
+        for (cycle, value, colour), y in zip(ends, spread):
+            axis.annotate(spec.text("retention_at_end",
+                                    value=f"{value:.1f}"),
+                          xy=(cycle, y), xytext=(4, 0),
+                          textcoords="offset points",
+                          ha="left", va="center", color=colour,
+                          fontsize=spec.font_size - 1.5, zorder=4,
+                          annotation_clip=False)
     axis.axhline(100.0, color=GREY, linewidth=0.7, linestyle=(0, (1, 2)),
                  zorder=1)
     # Room on the right for those labels, which sit outside the data.
@@ -1950,6 +2084,7 @@ def _panel_gcd_leakage(axis, session, spec, palette) -> None:
                   markeredgecolor=INK, markersize=6, linewidth=0, zorder=4,
                   label=spec.text("asymmetric_note"))
     axis.set_xscale("log")
+    _current_ticks(axis, currents)
     axis.set_xlabel("i / µA")
     axis.set_ylabel(spec.text("leakage_ua"))
     if spec.legends and (currents or broken_x):
@@ -1987,6 +2122,7 @@ def _panel_gcd_resistance(axis, session, spec, palette) -> None:
               markersize=5, linewidth=1.3, zorder=3,
               label=spec.text("ir_drop_mv"))
     axis.set_xscale("log")
+    _current_ticks(axis, currents)
     axis.set_xlabel("i / µA")
     axis.set_ylabel(spec.text("ir_drop_mv"), color=INK)
     twin = axis.twinx()
@@ -2509,6 +2645,71 @@ def _panel_her_tafel(axis, session, spec, palette) -> None:
 #: Every panel the composite figure can hold, in the order they are
 #: offered. The order is the order a reader goes through them: the
 #: measurement first, then what was derived from it, then what checks it.
+def _panel_capacitance_methods(axis, session, spec, palette) -> None:
+    """The same capacitance by every technique that measured it.
+
+    Horizontal bars because the categories are METHODS with long names
+    and there is one quantity per method: a vertical bar chart would
+    rotate four labels to read them. One hue for all of them, because
+    the bars are one series — colouring each method differently would
+    encode identity twice and invite the colour to be read as a
+    ranking.
+
+    The point of the panel is the SPREAD. Three numbers that agree say
+    the electrode is being described; three that differ by tens of per
+    cent say the conditions differ, and which one gets published then
+    decides the headline figure. The literature almost always quotes
+    the largest without saying so, and the condition each one was
+    measured at — scan rate, current, frequency — is printed on its own
+    bar for that reason: a capacitance without its condition does not
+    compare with anybody's, not even with the same sample measured
+    twice.
+    """
+    result = getattr(session, "result", None)
+    comparison = getattr(result, "capacitance", None) if result else None
+    if comparison is None or len(comparison.entries) < 2:
+        return
+
+    entries = sorted(comparison.entries, key=lambda e: e.farads)
+    per_gram = all(e.per_gram is not None for e in entries)
+    values = [e.per_gram if per_gram else 1e3 * e.farads for e in entries]
+    positions = np.arange(len(entries), dtype=float)
+
+    axis.barh(positions, values, height=0.58, color=SERIES_COLOURS[0],
+              edgecolor="none", zorder=3)
+    axis.set_yticks(positions)
+    axis.set_yticklabels([e.method for e in entries],
+                         fontsize=spec.font_size - 1)
+    axis.set_xlabel(spec.text("capacitance_by_method_mass") if per_gram
+                    else spec.text("capacitance_by_method"))
+    axis.set_xlim(0.0, 1.18 * max(values))
+
+    # Direct labels: the value on the bar and the condition under it.
+    # Selective by construction — there are only three or four bars, and
+    # the number is the whole content of each one.
+    for position, value, entry in zip(positions, values, entries):
+        axis.text(value * 1.03, position, f"{value:.3g}", va="center",
+                  ha="left", fontsize=spec.font_size - 1, color=INK,
+                  zorder=4)
+        if entry.condition:
+            axis.text(0.012 * max(values), position - 0.33, entry.condition,
+                      va="top", ha="left", fontsize=spec.font_size - 2.5,
+                      color=GREY, zorder=4)
+    if comparison.spread is not None:
+        # Top right. The panel letter is drawn in the BOTTOM right, and
+        # the longest bar is at the top, so the only corner free of
+        # both is this one — with the bars sorted ascending the top
+        # bar's label ends well short of it.
+        axis.text(0.98, 0.95,
+                  spec.text("spread_between",
+                            value=f"{100 * comparison.spread:.0f}"),
+                  transform=axis.transAxes, ha="right", va="top",
+                  fontsize=spec.font_size - 1.5, color=GREY)
+    axis.set_ylim(-0.7, len(entries) - 0.3)
+    _tidy(axis, spec)
+    axis.tick_params(axis="y", which="minor", left=False, right=False)
+
+
 ECHEM_PANELS: tuple[PanelSpec, ...] = (
     PanelSpec("cv_serie", "CV: la serie de velocidades", "rates",
               _panel_cv_series,
@@ -2634,6 +2835,12 @@ ECHEM_PANELS: tuple[PanelSpec, ...] = (
               "energía contra potencia en log-log, con el techo "
               "ΔV²/4R que ninguna descarga medida alcanza",
               technique="gcd"),
+    PanelSpec("capacitancia_metodos",
+              "Capacitancia: la misma, por cada método",
+              "capacitancia", _panel_capacitance_methods,
+              note="CV, GCD y EIS lado a lado con su condición. La "
+                   "dispersión ES el resultado.",
+              technique="resumen"),
     PanelSpec("her_medida", "HER/OER: la curva TAL COMO SE MIDIÓ",
               "catalysis", _panel_her_measured,
               "j contra el potencial en su propia escala, con el eje RHE "
@@ -2679,6 +2886,7 @@ DEFAULT_PANELS: dict[str, tuple[str, ...]] = {
     "catalysis": ("her_medida", "her_polarizacion", "her_tafel"),
     "catalysis_series": ("her_velocidades",),
     "holds": ("her_retencion",),
+    "capacitancia": ("capacitancia_metodos",),
 }
 
 #: The techniques the panel list can be filtered by, with ``"todo"``
@@ -2691,6 +2899,7 @@ TECHNIQUES: tuple[tuple[str, str], ...] = (
     ("eis", "EIS (impedancia)"),
     ("catalysis", "HER/OER (catálisis)"),
     ("ms", "Mott-Schottky"),
+    ("resumen", "Resumen (entre técnicas)"),
 )
 
 
@@ -2734,6 +2943,9 @@ def _what_is_loaded(session) -> dict[str, bool]:
         "catalysis": getattr(session, "lsv", None) is not None,
         "catalysis_series": len(getattr(session, "lsv_series", []) or []) >= 2,
         "holds": bool(getattr(session, "holds", None)),
+        "capacitancia": len(getattr(
+            getattr(getattr(session, "result", None), "capacitance", None),
+            "entries", ()) or ()) >= 2,
     }
 
 
@@ -2749,7 +2961,7 @@ def default_panels(session, technique: str = "todo") -> list[str]:
     offered = {panel.key for panel in available_panels(session, technique)}
     chosen: list[str] = []
     for need in ("rates", "gcd", "eis", "catalysis", "catalysis_series",
-                 "holds", "ms"):
+                 "holds", "ms", "capacitancia"):
         if not have.get(need):
             continue
         chosen.extend(key for key in DEFAULT_PANELS[need] if key in offered)

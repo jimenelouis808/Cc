@@ -1,6 +1,6 @@
 # Tablas — electrodo en H2SO4 0.5 M
 
-Electrolito H2SO4 0.5 M, pH 0.3 (deducido de la molaridad), referencia Ag/AgCl KCl sat. Masa activa no dada, área no dada.
+Electrolito H2SO4 0.5 M, pH 0.3 (deducido de la molaridad), referencia Ag/AgCl KCl sat. Masa activa 0.02 mg, área no dada.
 
 ## Las ventanas frente al RHE (el agua es estable entre 0 y 1.229 V)
 

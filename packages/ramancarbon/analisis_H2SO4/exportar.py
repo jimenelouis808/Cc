@@ -47,6 +47,24 @@ OUT = Path(__file__).resolve().parent
 ELECTROLYTE = "H2SO4_0.5M"
 REFERENCE = "Ag/AgCl_sat"
 
+#: Active material, in mg. Twenty micrograms, as the user stated it.
+#: Not in any file: EC-Lab carries a mass field and these were written
+#: without it, so every F/g on these figures rests on this line.
+MASS_MG = 0.020
+
+#: What each impedance file IS, for the legend. The DC bias comes from
+#: the file; what the cell had just been through does not, and a legend
+#: reading «PEIS_despues_CV_mult_02» names nothing.
+#: Short on purpose. A legend entry shares a panel about 3.6 inches
+#: wide with two others and with the curves themselves, so what goes in
+#: it is the state and the bias and nothing else; the long version is
+#: in the README and in the table.
+PEIS_LABELS = {
+    "PEIS_incial_C01": "initial",
+    "PEIS_despues_CV_mult_01_PEIS_C01": "after CV, OCV",
+    "PEIS_despues_CV_mult_02_PEIS_C01": "after CV, peak",
+}
+
 #: The galvanostatic files in the order the schedule ran them, which is
 #: the order of their names and NOT the order of their currents. It
 #: decides the sign of the degradation bias on the rate retention and
@@ -250,7 +268,7 @@ def tables(summary: dict, electrode: Optional[Electrode] = None) -> str:
     return "\n".join(out) + "\n"
 
 
-def main(folder: Path, mass_mg: Optional[float] = None,
+def main(folder: Path, mass_mg: Optional[float] = MASS_MG,
          area_cm2: Optional[float] = None) -> None:
     electrode = Electrode(mass_mg=mass_mg, area_cm2=area_cm2,
                           electrolyte=ELECTROLYTE, reference=REFERENCE)
@@ -454,38 +472,87 @@ def main(folder: Path, mass_mg: Optional[float] = None,
         write_csv(f"peis_{curve.name[:28]}.csv", "f_Hz,Zre_ohm,menosZim_ohm",
                   rows)
 
-    # -- figures, from the catalogue
+    # -- figures, all of them, from the window's own catalogue
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
-    def draw(panels, stem, technique, height_in=2.9, columns=2):
-        session.figure_technique = technique
+    def draw(owner, panels, stem, technique, height_in=2.9, columns=2):
+        """One composite figure, plus the numbers behind every panel."""
+        owner.figure_technique = technique
         spec = CompositeFigure(panels=list(panels), columns=columns,
-                               width_in=7.2, panel_height_in=height_in, dpi=600)
-        session.composite = spec
+                               width_in=7.2, panel_height_in=height_in,
+                               dpi=600)
+        owner.composite = spec
         figure = plt.figure(figsize=spec.figsize())
-        for problem in session.draw_figure(figure, PALETTES["claro"]):
-            print("  panel con problema:", problem)
+        for problem in owner.draw_figure(figure, PALETTES["claro"]):
+            print(f"  panel con problema en {stem}: {problem}")
         for suffix in (".png", ".pdf"):
             figure.savefig(OUT / f"{stem}{suffix}", dpi=spec.dpi,
                            bbox_inches="tight")
         plt.close(figure)
-        print(f"  escrita {stem}.{{png,pdf}}")
+        folder = OUT / "datos_figuras" / stem
+        folder.mkdir(parents=True, exist_ok=True)
+        owner.save_figure_data(folder)
+        print(f"  escrita {stem}.{{png,pdf}} y sus números")
 
     session.rate_series = list(cv_curves)
     session.cv = cv_curves[0] if cv_curves else None
-    session.eis = peis_curves[0] if peis_curves else None
     session.result = result
 
-    draw(["gcd_series", "gcd_velocidad", "gcd_ciclado", "gcd_resistencia"],
-         "gcd", "gcd")
-    draw(["gcd_retencion_velocidad", "gcd_capacidad_eficiencia"],
-         "gcd_velocidad", "gcd", height_in=3.2)
+    # The three spectra go in as a SERIES, which is what makes the
+    # impedance panels draw them on the same axes: the whole point of
+    # measuring three states of one cell is the comparison, and one
+    # figure per spectrum hides it.
+    for curve in peis_curves:
+        bias = curve.metadata.get("potencial_cd_v")
+        label = PEIS_LABELS.get(curve.name, curve.name)
+        if bias is not None:
+            label = f"{label} ({bias:+.3f} V)"
+        curve.name = label
+        session.eis_series.append(curve)
+    session.eis = peis_curves[0] if peis_curves else None
+
     if len(cv_curves) >= 2:
-        draw(["cv_serie", "cv_capacitancia"], "cv", "rates", height_in=3.2)
+        draw(session,
+             ["cv_serie", "cv_capacitancia", "cv_carga", "cv_dunn"],
+             "cv_ventana_amplia", "rates")
+        draw(session, ["cv_terminos", "cv_pila"], "cv_leyes", "rates",
+             height_in=3.2)
+    if session.gcd_series:
+        draw(session,
+             ["gcd_series", "gcd_velocidad", "gcd_ciclado",
+              "gcd_eficiencia", "gcd_fuga", "gcd_resistencia"],
+             "gcd", "gcd")
+        draw(session,
+             ["gcd_retencion_velocidad", "gcd_capacidad_eficiencia",
+              "gcd_ragone"],
+             "gcd_articulo", "gcd", height_in=3.0)
     if peis_curves:
-        draw(["eis_nyquist", "eis_bode"], "peis", "eis", height_in=3.2)
+        draw(session,
+             ["eis_nyquist", "eis_rincon", "eis_bode", "eis_capacitancia"],
+             "peis", "eis")
+        draw(session,
+             ["eis_nyquist_log", "eis_drt", "eis_residuo", "eis_kk"],
+             "peis_modelo", "eis")
+    if result.capacitance and len(result.capacitance.entries) >= 2:
+        draw(session, ["capacitancia_metodos"], "capacitancia", "resumen",
+             height_in=3.0, columns=1)
+
+    # The narrow series is a different experiment and gets its own
+    # session: its window is 150 mV wide and its capacitance is a C_dl,
+    # so putting it on the same axes as the 1.8 V series would compare
+    # two things that are not the same measurement.
+    if len(ecsa_curves) >= 2:
+        narrow = EchemSession(name="ventana estrecha (C_dl)")
+        narrow.electrode = electrode
+        narrow.rate_series = list(ecsa_curves)
+        narrow.cv = ecsa_curves[0]
+        narrow.non_faradaic = True
+        narrow.analyse()
+        draw(narrow,
+             ["cv_serie", "cv_capacitancia", "cv_carga", "cv_dunn"],
+             "cv_ecsa", "rates")
 
     (OUT / "tablas.md").write_text(tables(summary, electrode), encoding="utf-8")
     print("  escrito tablas.md")
@@ -498,6 +565,6 @@ def main(folder: Path, mass_mg: Optional[float] = None,
 
 
 if __name__ == "__main__":
-    mass = float(sys.argv[2]) if len(sys.argv) > 2 else None
+    mass = float(sys.argv[2]) if len(sys.argv) > 2 else MASS_MG
     area = float(sys.argv[3]) if len(sys.argv) > 3 else None
     main(Path(sys.argv[1]).resolve(), mass, area)

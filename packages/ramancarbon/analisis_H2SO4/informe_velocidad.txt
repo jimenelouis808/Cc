@@ -1,11 +1,11 @@
 Capacidad de velocidad (5 corrientes, 0.005–0.06 mA)
   ciclo representativo de cada archivo: mediana
 
-     0.005 mA       1.563 mF   ±13.5 %   IR   14.1 mV ( 1.2 % de la excursión)
-      0.01 mA       1.235 mF   ± 3.0 %   IR   27.5 mV ( 2.3 % de la excursión)
-      0.02 mA        1.15 mF   ± 0.7 %   IR   60.4 mV ( 5.1 % de la excursión)
-      0.04 mA       1.169 mF   ± 7.2 %   IR    144 mV (12.1 % de la excursión)
-      0.06 mA       1.227 mF   ± 0.5 %   IR    230 mV (19.4 % de la excursión)
+     0.005 mA       1.563 mF (   78.17 F/g)   ±13.5 %   IR   14.1 mV ( 1.2 % de la excursión)
+      0.01 mA       1.235 mF (   61.75 F/g)   ± 3.0 %   IR   27.5 mV ( 2.3 % de la excursión)
+      0.02 mA        1.15 mF (   57.51 F/g)   ± 0.7 %   IR   60.4 mV ( 5.1 % de la excursión)
+      0.04 mA       1.169 mF (   58.47 F/g)   ± 7.2 %   IR    144 mV (12.1 % de la excursión)
+      0.06 mA       1.227 mF (   61.35 F/g)   ± 0.5 %   IR    230 mV (19.4 % de la excursión)
 
   Retención: 78.5 % a 12× la corriente
   ⚠ esa retención incluye activación: los archivos GANAN un 23.3 % compuesto en sus propios ciclos

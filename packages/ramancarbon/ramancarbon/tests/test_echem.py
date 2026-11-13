@@ -4871,3 +4871,90 @@ def test_an_asymmetric_pair_is_not_a_point_on_a_current_axis():
     assert all(p.name != "60/-20 uA" for p in result.points)
     assert any("no tiene UNA densidad de corriente" in w
                for w in result.warnings)
+
+
+def test_the_capacitance_panel_puts_the_three_methods_side_by_side():
+    """CV, GCD and EIS measure the same capacitance under conditions
+    that are not the same, and the spread between them is the result.
+    The panel exists so that spread is a figure and not a sentence
+    buried in the report."""
+    from ramancarbon.gui.figures_echem import (available_panels,
+                                               default_panels)
+
+    session = _gcd_session()
+    session.cv = make_cv_demo()
+    session.cv.electrode = session.electrode
+    session.eis = make_eis_demo()
+    session.eis.electrode = session.electrode
+    session.gcd = session.gcd_series[0]
+    session.analyse()
+    assert session.result.capacitance is not None
+    assert len(session.result.capacitance.entries) >= 2
+
+    offered = {panel.key for panel in available_panels(session)}
+    assert "capacitancia_metodos" in offered
+    assert "capacitancia_metodos" in default_panels(session)
+    # And it belongs to its own technique, so the filter can reach it.
+    assert "capacitancia_metodos" in {
+        panel.key for panel in available_panels(session, "resumen")}
+
+    figure, axis = _draw_gcd_panel(session, "capacitancia_metodos")
+    # One bar per method, horizontal, and labelled by method name.
+    assert len(axis.patches) == len(session.result.capacitance.entries)
+    assert [t.get_text() for t in axis.get_yticklabels()] == [
+        entry.method for entry
+        in sorted(session.result.capacitance.entries, key=lambda e: e.farads)]
+
+
+def test_a_long_legend_entry_does_not_go_into_two_columns():
+    """Two columns of entries have to fit across half a figure. The old
+    rule counted series and never looked at their names, so three
+    spectra called «after CV, redox peak (+0.500 V)» ran off the axes in
+    both columns."""
+    from matplotlib.figure import Figure
+
+    from ramancarbon.gui.figures_echem import _legend_columns
+
+    axis = Figure().add_subplot(111)
+    for name in ("5 µA", "10 µA", "20 µA"):
+        axis.plot([0, 1], [0, 1], label=name)
+    assert _legend_columns(axis, 3) == 2
+
+    axis = Figure().add_subplot(111)
+    for name in ("inicial, antes de todo (+0.418 V)",
+                 "tras la CV, a OCV (+0.275 V)",
+                 "tras la CV, en el pico redox (+0.500 V)"):
+        axis.plot([0, 1], [0, 1], label=name)
+    assert _legend_columns(axis, 3) == 1
+    # Two series never need a second column whatever they are called.
+    assert _legend_columns(axis, 2) == 1
+
+
+def test_labels_that_would_overlap_are_pushed_apart():
+    """Two curves that end a tenth of a per cent apart print one label
+    on top of the other, and the figure then says nothing about either
+    of them."""
+    from ramancarbon.gui.figures_echem import LABEL_MIN_GAP, _spread_labels
+
+    placed = _spread_labels([99.8, 100.1, 113.3], 99.0, 115.0)
+    gap = LABEL_MIN_GAP * 16.0
+    assert placed[0] == pytest.approx(99.8)
+    assert placed[1] - placed[0] >= gap - 1e-9
+    # One that was already clear of its neighbour does not move.
+    assert placed[2] == pytest.approx(113.3)
+    # Order is preserved and nothing is dropped.
+    assert len(placed) == 3
+
+
+def test_a_label_template_with_a_format_spec_would_never_substitute():
+    """``CompositeFigure.text`` substitutes by ``replace`` of «{name}»,
+    because every other label is LaTeX and LaTeX is braces. A template
+    written «{value:.1f}» therefore matches nothing, and the retention
+    panel printed that placeholder at the end of five curves."""
+    from ramancarbon.gui.figures_echem import LABELS
+
+    for language, table in LABELS.items():
+        for key, template in table.items():
+            assert ":." not in template, (
+                f"«{key}» en {language} lleva un formato que replace() no "
+                "puede sustituir")
