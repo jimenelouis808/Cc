@@ -93,6 +93,20 @@ class PorosityReport:
     pore_diameters, pore_histogram
         Pore size distribution: bin centres in Å and the fraction of
         void volume in each.
+    mean_wall_distance
+        Mean distance (Å) from a point of the accessible volume to the
+        nearest framework atom's SURFACE. It says what
+        ``largest_free_sphere`` cannot: that number is the width of the
+        tightest place a probe must squeeze through, so two pores with
+        the same one can hold very different amounts of volume far from
+        any wall — and far from a wall is where nothing is adsorbed.
+        For a slit it has a closed form, ``probe_radius / 2 +
+        largest_free_sphere / 4``, which is what the test pins; a
+        channel of the same free width reads higher the less slit-like
+        it is.
+    wall_distances, wall_distance_histogram
+        That distribution: bin centres in Å and the fraction of
+        accessible volume in each.
     """
 
     probe_radius: float
@@ -107,6 +121,10 @@ class PorosityReport:
     framework_mass_g: float
     pore_diameters: np.ndarray = field(default_factory=lambda: np.empty(0))
     pore_histogram: np.ndarray = field(default_factory=lambda: np.empty(0))
+    mean_wall_distance: float = 0.0
+    wall_distances: np.ndarray = field(default_factory=lambda: np.empty(0))
+    wall_distance_histogram: np.ndarray = field(
+        default_factory=lambda: np.empty(0))
     samples: int = 0
     warnings: list[str] = field(default_factory=list)
 
@@ -123,6 +141,9 @@ class PorosityReport:
             f"  largest cavity     {self.largest_included_sphere:.2f} A",
             f"  largest channel    {self.largest_free_sphere:.2f} A"
             "   <- a probe above this cannot cross the cell",
+            f"  mean wall distance {self.mean_wall_distance:.2f} A"
+            f"   (a slit of this channel would read "
+            f"{0.5 * self.probe_radius + 0.25 * self.largest_free_sphere:.2f})",
         ]
         lines += [f"  ! {w}" for w in self.warnings]
         return "\n".join(lines)
@@ -266,6 +287,9 @@ def analyse_porosity(
 
     centres, histogram = _pore_distribution(
         free_radius[inside], bins=bins)
+    wall_centres, wall_histogram = _wall_distance_distribution(
+        free_radius[inside], bins=bins)
+    mean_wall = float(free_radius[inside].mean()) if inside.any() else 0.0
 
     return PorosityReport(
         probe_radius=probe_radius,
@@ -283,6 +307,9 @@ def analyse_porosity(
         framework_mass_g=mass_g,
         pore_diameters=centres,
         pore_histogram=histogram,
+        mean_wall_distance=mean_wall,
+        wall_distances=wall_centres,
+        wall_distance_histogram=wall_histogram,
         samples=samples,
         warnings=warnings,
     )
@@ -507,6 +534,33 @@ def _percolating_radius(
         else:
             high = trial
     return (low if low >= probe_radius * 1e-6 else 0.0), included
+
+
+def _wall_distance_distribution(
+    free_radius: np.ndarray, bins: int
+) -> tuple[np.ndarray, np.ndarray]:
+    """How far the accessible volume sits from the nearest wall.
+
+    The same per-point number the pore size distribution doubles, kept
+    undoubled, which is what it already is: the distance from the point
+    to the surface of the nearest framework atom. Doubling it names a
+    pore, and naming a pore from one point is only right at the deepest
+    point of it; leaving it alone names a distance, and that is right
+    everywhere.
+
+    It answers the question `largest_free_sphere` cannot. That diameter
+    is a bottleneck -- the narrowest place on the widest path -- so it
+    is a bound on the pore and not a description of its shape. A slit
+    and a hexagonal channel with the same bottleneck differ in how much
+    of their volume sits far from any wall, and far from a wall is
+    where the framework does nothing and the gas is simply compressed.
+    """
+    if not len(free_radius):
+        return np.empty(0), np.empty(0)
+    histogram, borders = np.histogram(free_radius, bins=bins, density=False)
+    centres = 0.5 * (borders[:-1] + borders[1:])
+    total = histogram.sum()
+    return centres, histogram / total if total else histogram.astype(float)
 
 
 def _pore_distribution(

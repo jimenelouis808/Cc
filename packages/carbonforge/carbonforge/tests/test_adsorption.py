@@ -280,6 +280,45 @@ class TestPorosity:
         assert any("closed to it" in w or "cannot cross" in w
                    for w in report.warnings) or report.void_fraction == 0.0
 
+    def test_a_slit_reads_the_wall_distance_its_geometry_fixes(self):
+        """The closed form, which is what makes the measure a measure.
+
+        Between two planes the accessible band runs from one probe
+        radius off a wall to one off the other, and the distance to the
+        nearer wall rises linearly from `probe_radius` at the edge to
+        half the free width at the middle. Its mean is therefore
+        exactly `probe_radius / 2 + largest_free_sphere / 4`, with no
+        fitted constant anywhere.
+
+        Pinning it matters because the whole point of the number is
+        comparative: a channel that is not a slit reads HIGHER than
+        this at the same free width, and that excess is only meaningful
+        if the slit itself lands on its own analytic value.
+        """
+        spacing = 4.26
+        sheet = [(x * 2.46, y * spacing, 0.0)
+                 for x in range(10) for y in range(6)]
+        for separation in (9.0, 13.0):
+            positions = [(x, y, z + layer * separation)
+                         for layer in range(2) for x, y, z in sheet]
+            atoms = Atoms(f"C{len(positions)}", positions=positions,
+                          cell=[24.6, 25.56, 2 * separation], pbc=True)
+            report = analyse_porosity(atoms, samples=40_000,
+                                      area_points=40, seed=0)
+            expected = (0.5 * report.probe_radius
+                        + 0.25 * report.largest_free_sphere)
+            assert report.mean_wall_distance == pytest.approx(
+                expected, abs=0.15), (
+                f"separation {separation} A: measured "
+                f"{report.mean_wall_distance:.3f} against {expected:.3f}")
+
+    def test_the_wall_distance_histogram_is_a_distribution(self):
+        atoms = levesque_bundle(gap=6.0, diameter=REFERENCE_DIAMETER)
+        report = analyse_porosity(atoms, samples=8000, area_points=40, seed=0)
+        assert len(report.wall_distances) == len(report.wall_distance_histogram)
+        assert report.wall_distance_histogram.sum() == pytest.approx(1.0)
+        assert report.mean_wall_distance > report.probe_radius
+
     def test_an_empty_cell_is_all_void(self):
         atoms = Atoms("C", positions=[(0.0, 0.0, 0.0)],
                       cell=[40.0] * 3, pbc=True)

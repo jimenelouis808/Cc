@@ -159,18 +159,59 @@ la rendija al mismo ancho multiplicado por el cociente de áreas. Falló.
 crece con la presión.** Encoger ayuda algo —la eficiencia por área sube
 de 0.75 en la escala 34 a 0.79 en la 22— pero no alcanza a la rendija.
 
-Lo más probable es que **igualar el diámetro de esfera libre sea una
-forma ingenua de igualar poros**. En una rendija de 9 Å, *todo* punto
-está a menos de 4.5 Å de una de las dos paredes. En un canal hexagonal
-cuya esfera inscrita mide 9 Å hay esquinas y, sobre todo, un centro
-lejos de cualquier pared. Ese volumen extra se llena de gas casi libre,
-que cuenta para el absoluto y no para el exceso — y por eso el déficit
-crece con la presión, cuando hay más gas con que llenarlo.
+### Y la explicación que se dio primero era falsa
 
-Dicho de otro modo: **la esfera libre mayor es una cota, no una
-descripción de la forma del poro**, y dos poros con la misma cota no son
-el mismo poro. Para esta comparación haría falta algo como la
-distribución de distancias a la pared, que no está medido aquí.
+Al medir esto se propuso que **igualar el diámetro de esfera libre fuese
+una forma ingenua de igualar poros**: en una rendija de 9 Å todo punto
+está a menos de 4.5 Å de una pared, mientras que un canal hexagonal con
+la misma esfera inscrita tendría esquinas y un centro lejos de toda
+pared, que se llenaría de gas casi libre. Encajaba con que el déficit
+creciera con la presión.
+
+**Se midió, y es falsa.** `analyse_porosity` reporta ahora
+`mean_wall_distance`, la distancia media de un punto del volumen
+accesible a la superficie del átomo más cercano. Para una rendija vale
+`probe_radius/2 + canal/4` en forma cerrada, y las diez rendijas caen
+sobre su valor analítico a ±0.04 Å o menos. Las superestructuras leen
+**más bajo**, no más alto:
+
+| | canal | pared media | rendija del mismo canal | exceso |
+|---|---|---|---|---|
+| súper-grafeno e22 | 9.15 Å | 2.77 Å | 3.01 Å | **−0.24** |
+| súper-grafeno e26 | 10.57 Å | 2.87 Å | 3.37 Å | **−0.49** |
+
+Su volumen accesible está **más cerca** de las paredes que el de una
+rendija equivalente, no más lejos. La causa es que los tubos son huecos:
+un tubo de radio 4 Å tiene un interior con radio libre de 2.4 Å, que el
+H₂ alcanza, y ese volumen pegado a la pared arrastra la media.
+
+Mirando la cola en vez de la media, que es lo que la bimodalidad pide,
+la conclusión no cambia. Fracción del volumen accesible a más de una
+distancia dada de la pared, contra la rendija del mismo canal:
+
+| | > 2 Å | > 3 Å | > 4 Å | > 5 Å |
+|---|---|---|---|---|
+| súper-grafeno e22 | 0.711 | 0.336 | 0.146 | 0.044 |
+| rendija igual | 0.823 | 0.503 | 0.184 | 0.000 |
+| súper-grafeno e26 | 0.686 | 0.362 | 0.193 | 0.069 |
+| rendija igual | 0.855 | 0.595 | 0.335 | 0.074 |
+
+Hay algo de cola más allá de lo que una rendija puede tener —un 4.4 %
+del volumen de la e22 está más lejos de una pared que **cualquier** punto
+de su rendija equivalente, que es el centro de los hexágonos— pero un
+4 % no explica un déficit del 9 al 22 %, y en todo lo demás la
+superestructura tiene **menos** volumen lejos de la pared, no más.
+
+Así que **la geometría del poro no explica el déficit**, y las dos
+explicaciones que se propusieron están descartadas por medición. El
+candidato que queda, y que aquí no se mide, es la **curvatura de la
+pared**: la superficie de la superestructura es sobre todo exterior de
+tubo, que es convexa, y una pared convexa tiene menos carbonos al
+alcance de un punto dado que una lámina plana, así que su pozo de
+potencial es menos profundo. Eso haría que cada m² valiese menos,
+independientemente del ancho de poro — lo que encaja con que el déficit
+aparezca en la eficiencia **por área**. Comprobarlo pide la distribución
+de energía potencial del armazón, no de distancias.
 
 ## Límites
 
@@ -187,10 +228,10 @@ Los mismos que `validacion_superestructuras/`, y uno propio:
   idénticos, que es el propósito de la serie.
 - La rejilla no resuelve dónde está el máximo **dentro** de cada régimen
   de capas, sólo entre cuáles dos puntos cae.
-- Las superestructuras encogidas se comparan con la rendija **igualando
-  la esfera libre mayor**, que es una cota y no la forma del poro (ver
-  arriba). La comparación es por tanto indicativa, y el déficit que mide
-  incluye lo que esa manera de igualar deja fuera.
+- Las superestructuras encogidas se comparan con la rendija igualando la
+  esfera libre mayor. Medida la distancia media a la pared (ver arriba),
+  esa manera de igualar resultó **no** ser la causa del déficit, y la
+  causa sigue sin establecerse.
 - Tres puntos (H = 6, 9 y 16) traen el aviso de deriva del muestreo. Ese
   aviso está señalado como falso positivo en
   `validacion_superestructuras/README.md`: compara el primer bloque de
