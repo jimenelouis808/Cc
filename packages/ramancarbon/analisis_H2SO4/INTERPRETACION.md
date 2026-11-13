@@ -1,6 +1,7 @@
 # Qué dicen estas figuras
 
-Electrodo de 20 µg en H₂SO₄ 0.5 M, referencia Ag/AgCl KCl sat., pH 0.3
+Electrodo de 20 µg sobre disco de carbón vítreo de 3 mm (0.0707 cm²,
+carga 283 µg/cm²) en H₂SO₄ 0.5 M, referencia Ag/AgCl KCl sat., pH 0.3
 deducido de la molaridad. La escala RHE está 0.2147 V por encima de la
 medida, y el agua es estable entre 0 y 1.229 V vs RHE. Casi todo lo que
 sigue cuelga de ese par de frases.
@@ -162,6 +163,12 @@ dentro del agua. De aquí salen **C_dl = 330 µF** y **ECSA = 8.2 cm²**
 (entre 5.5 y 16.5 según la Cs que se adopte: ese factor de tres es
 irreducible y sólo sirve para comparar entre tus muestras).
 
+Contra los **0.0707 cm²** geométricos del disco, eso es un **factor de
+rugosidad de 117** — entre 78 y 233 con el intervalo de la Cs. El
+material accesible al electrolito es dos órdenes de magnitud más que el
+área del sustrato, que es lo que uno espera de un carbono poroso y lo
+que hace que 283 µg/cm² den 23 mF/cm².
+
 Dos reservas: la recta de C_dl tiene R² = 0.96, y el archivo de 20 mV/s
 se sale de la tendencia (0.695 mF donde tocaría 0.55) porque cae un
 13.9 % por ciclo dentro de sí mismo. Sin ese punto la recta mejora;
@@ -262,8 +269,10 @@ corriente.**
 
 1. **Es un pseudocondensador**, con confianza alta: picos redox anchos
    (ΔEp 90 mV), b = 0.81 en el pico, 62 % capacitivo por Dunn.
-2. **81.6 F/g a 5 µA** (= 0.25 A/g), 11.1 Wh/kg, 103 W/kg. Con las
-   reservas de abajo.
+2. **81.6 F/g a 5 µA** (= 0.25 A/g = 0.071 mA/cm²), que son
+   **23.1 mF/cm²** sobre el área geométrica; 11.1 Wh/kg y 103 W/kg. Con
+   las reservas de abajo.
+   El área electroquímica es **117 veces** la geométrica.
 3. **El electrodo se activa durante toda la medida**, y eso lo ven dos
    técnicas independientes: +23 % compuesto dentro de los archivos de
    GCD, y −55 % de resistencia interfacial con +51 % de almacenamiento
@@ -284,7 +293,9 @@ corriente.**
   una serie de ida y vuelta: 5 → 60 → 5 µA. Si el 5 µA final devuelve el
   valor del inicial, lo medido fue velocidad; si no, fue activación.
 - **El ECSA, contra la literatura.** El factor tres de la Cs es
-  irreducible. Sirve para comparar entre tus muestras y para nada más.
+  irreducible, y pasa entero al factor de rugosidad: 117 es el valor
+  central de un intervalo 78–233. Sirve para comparar entre tus
+  muestras y para nada más.
 - **La meseta del GCD.** Que sea la ventana o que sea el material se
   decide con la misma repetición en ventana estrecha.
 - **El PEIS final** sigue vacío y hace falta para cerrar el «antes y

@@ -5,7 +5,7 @@
 ────────────────────────────────────────────────────────────────────────
   LA CELDA
 ────────────────────────────────────────────────────────────────────────
-Electrodo: masa activa 0.02 mg, referencia Ag/AgCl_sat, H2SO4 0.5 M, pH 0.3
+Electrodo: masa activa 0.02 mg, área 0.0706858 cm², referencia Ag/AgCl_sat, H2SO4 0.5 M, pH 0.3
   → SHE: E(Electrodo estándar de hidrógeno) = E(Ag/AgCl (KCl saturado)) +0.1970 V
   → RHE: E(Electrodo reversible de hidrógeno a pH 0.3) = E(Ag/AgCl (KCl saturado)) +0.2147 V
   Di siempre el relleno de la referencia: Ag/AgCl 3 M y saturado están a 13 mV, y el SCE a 31 mV del de 3 M.
@@ -27,13 +27,13 @@ Mecanismo de almacenamiento: Pseudocapacitivo (confianza alta)
   VOLTAMPEROMETRÍA CÍCLICA
 ────────────────────────────────────────────────────────────────────────
 Cv_multp_speed_01_CV_C01 [ciclo 4.0]: 2818 puntos, -0.600 a +1.200 V (ventana 1.800 V), 4.99991 mV/s, |I|max 0.0186 mA
-Electrodo: masa activa 0.02 mg, referencia Ag/AgCl_sat, H2SO4 0.5 M, pH 0.3
+Electrodo: masa activa 0.02 mg, área 0.0706858 cm², referencia Ag/AgCl_sat, H2SO4 0.5 M, pH 0.3
 
 Carga anódica: 2.055 mC
 
 Capacitancia:
-  1.28 mF (lazo cerrado ÷ 2νΔV)  64.01 F/g
-  1.917 mF (rama anódica ÷ νΔV)  95.83 F/g
+  1.28 mF (lazo cerrado ÷ 2νΔV)  64.01 F/g  18.11 mF/cm²
+  1.917 mF (rama anódica ÷ νΔV)  95.83 F/g  27.11 mF/cm²
   Las dos son la MISMA medida en convenios distintos. El de lazo integra el ciclo cerrado y divide por 2νΔV; el de rama integra solo la anódica y divide por νΔV. Publicar sin decir cuál deja un factor 2 de ambigüedad
 
 Capacidad: 102.8 C/g = 28.54 mAh/g
@@ -153,7 +153,7 @@ Separación de Dunn (i = k₁ν + k₂√ν) — Media: sólo la rama anódica:
   CARGA-DESCARGA GALVANOSTÁTICA
 ────────────────────────────────────────────────────────────────────────
 GCPL__prueba_ventana_1-0_04_GCPL_C01: 63598 puntos, 63096.5 s, -0.200 a +1.000 V, |I| 0.005 mA
-Electrodo: masa activa 0.02 mg, referencia Ag/AgCl_sat, H2SO4 0.5 M, pH 0.3
+Electrodo: masa activa 0.02 mg, área 0.0706858 cm², referencia Ag/AgCl_sat, H2SO4 0.5 M, pH 0.3
 
 Ramas:
   carga       248.95 s   -0.198 → +1.000 V   I = +0.005 mA   q = 1.245 mC
@@ -486,9 +486,9 @@ Circuito: R0-T1
 ────────────────────────────────────────────────────────────────────────
 Capacitancia por método:
 
-  CV   5 mV/s                     1.28 mF     64.01 F/g
-  GCD  descarga galvanostática    1.632 mF     81.61 F/g
-  EIS  C′ a 0.0999 Hz           0.7871 mF     39.35 F/g
+  CV   5 mV/s                     1.28 mF     64.01 F/g     18.11 mF/cm²
+  GCD  descarga galvanostática    1.632 mF     81.61 F/g     23.09 mF/cm²
+  EIS  C′ a 0.0999 Hz           0.7871 mF     39.35 F/g     11.13 mF/cm²
 
 Dispersión entre métodos: 52 %
 

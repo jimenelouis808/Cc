@@ -4,7 +4,7 @@
     "ph": 0.3,
     "referencia": "Ag/AgCl_sat",
     "masa_mg": 0.02,
-    "area_cm2": null
+    "area_cm2": 0.07068583470577036
   },
   "archivos_ilegibles": [
     "GCPL__prueba_ventana_1-0_06_PEIS-FINAL.mpr: GCPL__prueba_ventana_1-0_06_PEIS-FINAL.mpr: la cabecera de datos declara 0 puntos y 16 columnas"

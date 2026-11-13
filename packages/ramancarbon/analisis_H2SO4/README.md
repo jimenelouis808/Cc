@@ -9,11 +9,13 @@ impedancias intercaladas.
 uv run python analisis_H2SO4/exportar.py <carpeta con los .mpr> [masa_mg] [area_cm2]
 ```
 
-La masa por defecto son los **20 µg** de material activo que diste; no
-está en ningún archivo, así que todos los F/g de aquí se apoyan en esa
-línea del script. El área sigue sin darse: sin ella no hay µF/cm² ni
-densidad de corriente por área geométrica, y el informe lo dice en vez
-de inventarla.
+Por defecto, esta celda: **20 µg** de material activo sobre un **disco
+de carbón vítreo de 3 mm** (0.0707 cm², la misma que usa
+`analisis_GCD` para otra muestra). Ninguna de las dos está en los
+archivos —EC-Lab tiene campo para las dos y se escribieron sin ellas—
+así que viven en las constantes del script, que es el único sitio donde
+un dato que no está en la medida puede vivir sin que haya que volver a
+preguntarlo. Carga: **283 µg/cm²**.
 
 ## La celda
 
@@ -38,17 +40,18 @@ E(RHE) = E(Ag/AgCl sat.) + 0.197 + 0.0592 × 0.3 = E + 0.2147 V
 
 ## Los números, de una vez
 
-Con 20 µg de material activo:
+Con 20 µg de material activo sobre 0.0707 cm² (283 µg/cm²):
 
 | magnitud | valor | de dónde |
 |---|---|---|
-| **C (GCD)** | **81.6 F/g** | descarga a 5 µA, caída IR descontada |
-| C (CV) | 64.0 F/g | lazo ÷ 2νΔV a 5 mV/s |
-| C (EIS) | 39.4 F/g | C′ a 0.0999 Hz |
+| **C (GCD)** | **81.6 F/g** = **23.1 mF/cm²** | descarga a 5 µA, caída IR descontada |
+| C (CV) | 64.0 F/g = 18.1 mF/cm² | lazo ÷ 2νΔV a 5 mV/s |
+| C (EIS) | 39.4 F/g = 11.1 mF/cm² | C′ a 0.0999 Hz |
 | Energía | 11.1 Wh/kg | ∫V dq, no ½CV² |
 | Potencia | 103 W/kg | a esa misma corriente |
 | C_dl | 330 µF | ventana estrecha, 6 velocidades |
 | ECSA | 8.2 cm² | con Cs = 40 µF/cm² (entre 5.5 y 16.5) |
+| **Factor de rugosidad** | **117** | ECSA ÷ 0.0707 cm² geométricos (entre 78 y 233) |
 | R_s | 85–106 Ω | cruce con el eje real, impedancia |
 
 Los tres métodos difieren un **52 %**, y eso no es ruido: es que miden
@@ -56,11 +59,13 @@ en condiciones distintas. El número que entrega un dispositivo es el de
 GCD; los otros dos son diagnósticos. Quien publique el mayor sin decir
 cuál es está publicando una elección.
 
-F/g por corriente, del GCD:
+Por corriente, del GCD:
 
-| I | 5 µA | 10 µA | 20 µA | 40 µA | 60 µA |
+| | 5 µA | 10 µA | 20 µA | 40 µA | 60 µA |
 |---|---|---|---|---|---|
-| C | 78.2 | 61.8 | 57.5 | 58.5 | 61.4 F/g |
+| j (mA/cm²) | 0.071 | 0.141 | 0.283 | 0.566 | 0.849 |
+| C (F/g) | 78.2 | 61.8 | 57.5 | 58.5 | 61.4 |
+| C (mF/cm²) | 22.1 | 17.5 | 16.3 | 16.5 | 17.4 |
 
 ## Lo primero: dos de las tres ventanas parten el agua
 

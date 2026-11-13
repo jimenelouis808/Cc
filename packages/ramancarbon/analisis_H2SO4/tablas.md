@@ -1,6 +1,6 @@
 # Tablas — electrodo en H2SO4 0.5 M
 
-Electrolito H2SO4 0.5 M, pH 0.3 (deducido de la molaridad), referencia Ag/AgCl KCl sat. Masa activa 0.02 mg, área no dada.
+Electrolito H2SO4 0.5 M, pH 0.3 (deducido de la molaridad), referencia Ag/AgCl KCl sat. Masa activa 20 µg, sobre un disco de carbón vítreo de 3 mm (0.07069 cm²). Carga: 283 µg/cm².
 
 ## Las ventanas frente al RHE (el agua es estable entre 0 y 1.229 V)
 
@@ -16,13 +16,13 @@ Un margen negativo es electrólisis: por debajo de 0 V se desprende hidrógeno y
 
 Ciclo representativo: mediana. Retención 78.5 % a 12× la corriente; sin descontar la caída IR saldría 64.0 %, así que esa diferencia es la resistencia de la celda y no el electrodo.
 
-| I (mA) | C (µF) | ventana (V) | IR (mV) | IR / excursión | ± entre ciclos | retención interna |
-|---|---|---|---|---|---|---|
-| 0.005 | 1563 | 1.185 | 14.09 | 1.2 % | 13.5 % | 113.3 % |
-| 0.01 | 1235 | 1.17 | 27.54 | 2.3 % | 3.0 % | 102.4 % |
-| 0.02 | 1150 | 1.135 | 60.42 | 5.1 % | 0.7 % | 100.1 % |
-| 0.04 | 1169 | 1.047 | 144.3 | 12.1 % | 7.2 % | 106.4 % |
-| 0.06 | 1227 | 0.9558 | 230.1 | 19.4 % | 0.5 % | 99.8 % |
+| I (mA) | j (mA/cm²) | C (µF) | C (F/g) | C (mF/cm²) | ventana (V) | IR (mV) | IR / excursión | ± entre ciclos | retención interna |
+|---|---|---|---|---|---|---|---|---|---|
+| 0.005 | 0.0707 | 1563 | 78.17 | 22.12 | 1.185 | 14.09 | 1.2 % | 13.5 % | 113.3 % |
+| 0.01 | 0.141 | 1235 | 61.75 | 17.47 | 1.17 | 27.54 | 2.3 % | 3.0 % | 102.4 % |
+| 0.02 | 0.283 | 1150 | 57.51 | 16.27 | 1.135 | 60.42 | 5.1 % | 0.7 % | 100.1 % |
+| 0.04 | 0.566 | 1169 | 58.47 | 16.54 | 1.047 | 144.3 | 12.1 % | 7.2 % | 106.4 % |
+| 0.06 | 0.849 | 1227 | 61.35 | 17.36 | 0.9558 | 230.1 | 19.4 % | 0.5 % | 99.8 % |
 
 `C = a·I^-m` con m = 0.090 ± 0.048, R² = 0.534.
 Los archivos GANAN un 23.3 % compuesto dentro de sus propios ciclos: activación, no degradación.
@@ -39,7 +39,7 @@ La R_ct no está en la tabla a propósito: ninguno de los espectros cierra el se
 
 ## C_dl y ECSA (serie estrecha)
 
-C_dl = 329.9 µF, ECSA = 8.25 cm² (entre 5.5 y 16.5 según la Cs que se adopte: ese factor de tres es irreducible y pasa entero al área).
+C_dl = 329.9 µF, ECSA = 8.25 cm² (entre 5.5 y 16.5 según la Cs que se adopte: ese factor de tres es irreducible y pasa entero al área). Contra los 0.07069 cm² geométricos del disco, un factor de rugosidad de **117** (entre 78 y 233).
 
 | E (V) | b | error | R² |
 |---|---|---|---|

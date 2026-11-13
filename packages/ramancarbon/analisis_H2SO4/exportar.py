@@ -4,11 +4,11 @@ Usage::
 
     uv run python analisis_H2SO4/exportar.py <dir con los .mpr> [masa_mg] [area_cm2]
 
-The mass and the area are optional because they are not in the files and
-were not given with them. Everything that does not need them is reported
-either way; F/g, mAh/g, Wh/kg and the ECSA appear only when they are
-passed, and the report says which ones are missing rather than quoting a
-capacitance per gram of nothing.
+The mass and the area default to this cell: 20 ug of active material on
+a 3 mm glassy-carbon disc. Neither is in the files -- EC-Lab carries a
+field for both and these were written without them -- so they live in
+the constants below, which is the only place a value that is not in the
+data can live without being asked for again.
 
 The headers of the files name a different cell from the one that was
 measured. The conditions below are the ones the user stated, and they
@@ -51,6 +51,14 @@ REFERENCE = "Ag/AgCl_sat"
 #: Not in any file: EC-Lab carries a mass field and these were written
 #: without it, so every F/g on these figures rests on this line.
 MASS_MG = 0.020
+
+#: Diameter of the glassy-carbon disc, in mm. The same electrode this
+#: group deposits on, and the same one `analisis_GCD` records for its
+#: own measurements of another sample.
+#:
+#: Every uF/cm2, every current density and the roughness factor rest on
+#: this line.
+DISC_MM = 3.0
 
 #: The circuit every spectrum is fitted with.
 #:
@@ -177,16 +185,19 @@ def tables(summary: dict, electrode: Optional[Electrode] = None) -> str:
     """``tablas.md``, built from the same structure as ``resumen.json``."""
     out: list[str] = ["# Tablas — electrodo en H2SO4 0.5 M", ""]
     conditions = summary["condiciones"]
-    out.append(
-        f"Electrolito {conditions['electrolito']}, pH {conditions['ph']} "
-        "(deducido de la molaridad), referencia Ag/AgCl KCl sat. "
-        "Masa activa "
-        + ("no dada" if conditions["masa_mg"] is None
-           else f"{conditions['masa_mg']:g} mg")
-        + ", área "
-        + ("no dada" if conditions["area_cm2"] is None
-           else f"{conditions['area_cm2']:g} cm²") + "."
-    )
+    mass_mg = conditions["masa_mg"]
+    area = conditions["area_cm2"]
+    line = (f"Electrolito {conditions['electrolito']}, pH "
+            f"{conditions['ph']} (deducido de la molaridad), referencia "
+            "Ag/AgCl KCl sat. Masa activa "
+            + ("no dada" if mass_mg is None else f"{1e3 * mass_mg:g} µg")
+            + ", sobre "
+            + ("un área no dada" if area is None
+               else f"un disco de carbón vítreo de {DISC_MM:g} mm "
+                    f"({area:.4g} cm²)"))
+    if mass_mg and area:
+        line += f". Carga: {1e3 * mass_mg / area:.0f} µg/cm²"
+    out.append(line + ".")
     out.append("")
     if electrode is not None:
         out.extend(window_table(electrode))
@@ -205,19 +216,35 @@ def tables(summary: dict, electrode: Optional[Electrode] = None) -> str:
                      "el electrodo")
         out.append(head + ".")
         out.append("")
-        out.append("| I (mA) | C (µF) | ventana (V) | IR (mV) | "
-                   "IR / excursión | ± entre ciclos | retención interna |")
-        out.append("|---|---|---|---|---|---|---|")
+        header = "| I (mA) |"
+        if area:
+            header += " j (mA/cm²) |"
+        header += " C (µF) |"
+        if mass_mg:
+            header += " C (F/g) |"
+        if area:
+            header += " C (mF/cm²) |"
+        header += (" ventana (V) | IR (mV) | IR / excursión | "
+                   "± entre ciclos | retención interna |")
+        out.append(header)
+        out.append("|---" * (header.count("|") - 1) + "|")
         for point in rate["puntos"]:
             drop, window = point["ir_v"], point["ventana_v"]
             total = window + drop
-            out.append(
-                f"| {1e3 * abs(point['corriente_a']):.4g} | "
-                f"{1e6 * point['capacitancia_f']:.4g} | {window:.4g} | "
-                f"{1e3 * drop:.4g} | {100 * drop / total:.1f} % | "
-                f"{100 * point['dispersion']:.1f} % | "
-                f"{100 * point['retencion_interna']:.1f} % |"
-            )
+            current = abs(point["corriente_a"])
+            row = f"| {1e3 * current:.4g} |"
+            if area:
+                row += f" {1e3 * current / area:.3g} |"
+            row += f" {1e6 * point['capacitancia_f']:.4g} |"
+            if mass_mg:
+                row += f" {point['especifica_f_g']:.4g} |"
+            if area:
+                row += f" {1e3 * point['capacitancia_f'] / area:.4g} |"
+            row += (f" {window:.4g} | {1e3 * drop:.4g} | "
+                    f"{100 * drop / total:.1f} % | "
+                    f"{100 * point['dispersion']:.1f} % | "
+                    f"{100 * point['retencion_interna']:.1f} % |")
+            out.append(row)
         out.append("")
         if rate["m"] is not None:
             out.append(
@@ -261,12 +288,15 @@ def tables(summary: dict, electrode: Optional[Electrode] = None) -> str:
         low, high = ecsa["ecsa_intervalo_cm2"] or (ecsa["ecsa_cm2"],) * 2
         out.append("## C_dl y ECSA (serie estrecha)")
         out.append("")
-        out.append(
-            f"C_dl = {1e6 * ecsa['cdl_f']:.4g} µF, ECSA = "
-            f"{ecsa['ecsa_cm2']:.3g} cm² (entre {low:.3g} y {high:.3g} según "
-            "la Cs que se adopte: ese factor de tres es irreducible y pasa "
-            "entero al área)."
-        )
+        text = (f"C_dl = {1e6 * ecsa['cdl_f']:.4g} µF, ECSA = "
+                f"{ecsa['ecsa_cm2']:.3g} cm² (entre {low:.3g} y {high:.3g} "
+                "según la Cs que se adopte: ese factor de tres es "
+                "irreducible y pasa entero al área).")
+        if area:
+            text += (f" Contra los {area:.4g} cm² geométricos del disco, "
+                     f"un factor de rugosidad de **{ecsa['ecsa_cm2'] / area:.0f}** "
+                     f"(entre {low / area:.0f} y {high / area:.0f}).")
+        out.append(text)
         out.append("")
         out.append("| E (V) | b | error | R² |")
         out.append("|---|---|---|---|")
@@ -286,6 +316,8 @@ def tables(summary: dict, electrode: Optional[Electrode] = None) -> str:
 
 def main(folder: Path, mass_mg: Optional[float] = MASS_MG,
          area_cm2: Optional[float] = None) -> None:
+    if area_cm2 is None:
+        area_cm2 = float(np.pi * (0.1 * DISC_MM / 2.0) ** 2)
     electrode = Electrode(mass_mg=mass_mg, area_cm2=area_cm2,
                           electrolyte=ELECTROLYTE, reference=REFERENCE)
     print(electrode.describe())
