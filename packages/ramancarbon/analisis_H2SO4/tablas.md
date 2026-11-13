@@ -53,3 +53,24 @@ C_dl = 329.9 µF, ECSA = 8.25 cm² (entre 5.5 y 16.5 según la Cs que se adopte:
 
 - `GCPL__prueba_ventana_1-0_06_PEIS-FINAL.mpr: GCPL__prueba_ventana_1-0_06_PEIS-FINAL.mpr: la cabecera de datos declara 0 puntos y 16 columnas`
 
+## Reparto capacitivo / difusivo (Dunn)
+
+Fracción de la corriente ANÓDICA que escala con ν, o sea la capacitiva. El resto es difusiva. «—» es un potencial donde la corriente de la rama cambia de signo entre velocidades y la separación no está definida.
+
+| E (V) | E vs RHE | 5 mV/s | 10 mV/s | 20 mV/s | 50 mV/s | 100 mV/s | 200 mV/s | k₁ (mF) | R² |
+|---|---|---|---|---|---|---|---|---|---|
+| -0.397 | -0.182 | — | — | — | — | — | — | 0.141 | 0.828 |
+| -0.201 | +0.014 | 100 % | 100 % | 89 % | 90 % | 94 % | 100 % | 0.359 | 0.994 |
+| +0.002 | +0.217 | 57 % | 58 % | 62 % | 69 % | 77 % | 89 % | 0.475 | 0.995 |
+| +0.198 | +0.413 | 44 % | 46 % | 50 % | 59 % | 68 % | 83 % | 0.637 | 0.992 |
+| +0.454 | +0.669 | 40 % | 41 % | 44 % | 52 % | 63 % | 80 % | 1 | 0.984 |
+| +0.597 | +0.812 | 79 % | 79 % | 76 % | 75 % | 81 % | 99 % | 1.52 | 0.986 |
+| +0.801 | +1.015 | 96 % | 100 % | 100 % | 100 % | 98 % | 99 % | 1.48 | 0.999 |
+| +0.996 | +1.211 | 72 % | 88 % | 99 % | 100 % | 100 % | 95 % | 1.17 | 0.998 |
+
+Y el reparto sobre la CARGA de cada ciclo entero, que es el número que se cita:
+
+| ν (mV/s) | 5 | 10 | 20 | 50 | 100 | 200 |
+|---|---|---|---|---|---|---|
+| capacitivo | 60.1 % | 66.7 % | 71.1 % | 76.4 % | 81.9 % | 90.6 % |
+

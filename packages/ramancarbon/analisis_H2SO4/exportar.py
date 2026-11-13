@@ -314,6 +314,143 @@ def tables(summary: dict, electrode: Optional[Electrode] = None) -> str:
     return "\n".join(out) + "\n"
 
 
+def dunn_tables(result, curves, electrode, out: Path) -> list[str]:
+    """The Dunn separation as NUMBERS, per potential and per scan rate.
+
+    The figure draws the two contributions as filled bands, and a band
+    is a ``PolyCollection``: it leaves no line behind, so the export
+    that walks a panel's lines returns the measured loop and nothing
+    else. There is no way to replot the separation from that, which is
+    the one thing the panel is for.
+
+    Two files. The long one has a row per (potential, scan rate) and is
+    what a plotting script wants; the wide one has a row per potential
+    with the two coefficients and the quality of their fit, and is what
+    you read to find where the separation means anything at all.
+    """
+    analysis = getattr(result, "dunn", None)
+    if analysis is None:
+        return []
+    potentials = np.asarray(analysis.potentials, dtype=float)
+    mass_g = (electrode.mass_mg * 1e-3) if electrode.mass_mg else None
+    crossings = set(analysis.crossings or ())
+    # A potential counts as undefined if it is one of the crossings, to
+    # the resolution those were rounded to.
+    undefined = np.array([round(float(value), 3) in crossings
+                          for value in potentials])
+
+    rows = ["E_V,E_vs_RHE_V,nu_mV_s,i_cap_anodica_mA,i_cap_catodica_mA,"
+            "i_medida_anodica_mA,i_medida_catodica_mA,i_dif_anodica_mA,"
+            "i_dif_catodica_mA,fraccion_capacitiva_anodica,k1_A_V_s,"
+            "k2_A_V_s05,r2,separacion_definida"]
+    rhe, _ = electrode.to_reference(potentials, "RHE")
+    for curve in sorted(curves, key=lambda c: c.scan_rate):
+        rate = float(curve.scan_rate)
+        anodic, cathodic = analysis.branch_currents(rate)
+        if anodic is None:
+            continue
+        try:
+            one = curve.reporting_cycle()[0]
+            up, down = one.sweeps()
+            order_up = np.argsort(up.potential)
+            order_down = np.argsort(down.potential)
+            measured_up = np.interp(potentials, up.potential[order_up],
+                                    up.current[order_up])
+            measured_down = np.interp(potentials, down.potential[order_down],
+                                      down.current[order_down])
+        except Exception:                       # noqa: BLE001 - no clean cycle
+            measured_up = measured_down = np.full(potentials.size, np.nan)
+        for index, potential in enumerate(potentials):
+            total = measured_up[index]
+            cap = anodic[index]
+            fraction = (abs(cap) / abs(total)) if abs(total) > 0 else np.nan
+            rows.append(",".join([
+                f"{potential:.5g}",
+                f"{rhe[index]:.5g}" if rhe is not None else "",
+                f"{1e3 * rate:.4g}",
+                f"{1e3 * cap:.6g}", f"{1e3 * cathodic[index]:.6g}",
+                f"{1e3 * total:.6g}", f"{1e3 * measured_down[index]:.6g}",
+                f"{1e3 * (total - cap):.6g}",
+                f"{1e3 * (measured_down[index] - cathodic[index]):.6g}",
+                f"{min(fraction, 1.0):.4f}" if np.isfinite(fraction) else "",
+                f"{analysis.k1[index]:.6g}", f"{analysis.k2[index]:.6g}",
+                f"{analysis.r_squared[index]:.4f}",
+                "no" if undefined[index] else "si",
+            ]))
+    (out / "dunn_contribuciones.csv").write_text("\n".join(rows) + "\n",
+                                                 encoding="utf-8")
+
+    wide = ["E_V,E_vs_RHE_V,k1_A_V_s,k2_A_V_s05,r2,"
+            "C_local_F,C_local_F_g,separacion_definida"]
+    for index, potential in enumerate(potentials):
+        # k1 IS a capacitance: it is dI/d(nu) at that potential.
+        capacitance = float(analysis.k1[index])
+        wide.append(",".join([
+            f"{potential:.5g}",
+            f"{rhe[index]:.5g}" if rhe is not None else "",
+            f"{analysis.k1[index]:.6g}", f"{analysis.k2[index]:.6g}",
+            f"{analysis.r_squared[index]:.4f}",
+            f"{capacitance:.6g}",
+            f"{capacitance / mass_g:.6g}" if mass_g else "",
+            "no" if undefined[index] else "si",
+        ]))
+    (out / "dunn_coeficientes.csv").write_text("\n".join(wide) + "\n",
+                                               encoding="utf-8")
+    print("  escritos dunn_contribuciones.csv y dunn_coeficientes.csv")
+
+    # And the readable version: a handful of potentials against every
+    # rate, which is the table you put in a paper.
+    lines = ["## Reparto capacitivo / difusivo (Dunn)", ""]
+    lines.append("Fracción de la corriente ANÓDICA que escala con ν, o sea "
+                 "la capacitiva. El resto es difusiva. «—» es un potencial "
+                 "donde la corriente de la rama cambia de signo entre "
+                 "velocidades y la separación no está definida.")
+    lines.append("")
+    chosen = [p for p in (-0.40, -0.20, 0.0, 0.20, 0.456, 0.60, 0.80, 1.00)
+              if potentials.min() <= p <= potentials.max()]
+    picked = [int(np.argmin(np.abs(potentials - value))) for value in chosen]
+    rates_sorted = sorted(float(c.scan_rate) for c in curves)
+    header = "| E (V) | E vs RHE |" + "".join(
+        f" {1e3 * r:.3g} mV/s |" for r in rates_sorted) + " k₁ (mF) | R² |"
+    lines.append(header)
+    lines.append("|---" * (header.count("|") - 1) + "|")
+    bank = {}
+    for rate in rates_sorted:
+        anodic, _ = analysis.branch_currents(rate)
+        curve = next(c for c in curves if abs(c.scan_rate - rate) < 1e-12)
+        try:
+            up, _ = curve.reporting_cycle()[0].sweeps()
+            order = np.argsort(up.potential)
+            bank[rate] = (anodic, np.interp(potentials, up.potential[order],
+                                            up.current[order]))
+        except Exception:                       # noqa: BLE001
+            bank[rate] = (anodic, np.full(potentials.size, np.nan))
+    for index in picked:
+        row = f"| {potentials[index]:+.3f} |"
+        row += (f" {rhe[index]:+.3f} |" if rhe is not None else " |")
+        for rate in rates_sorted:
+            cap, total = bank[rate]
+            if undefined[index] or not np.isfinite(total[index]) \
+                    or abs(total[index]) == 0:
+                row += " — |"
+            else:
+                row += f" {100 * min(abs(cap[index] / total[index]), 1.0):.0f} % |"
+        row += (f" {1e3 * analysis.k1[index]:.3g} | "
+                f"{analysis.r_squared[index]:.3f} |")
+        lines.append(row)
+    lines.append("")
+    lines.append("Y el reparto sobre la CARGA de cada ciclo entero, que es "
+                 "el número que se cita:")
+    lines.append("")
+    lines.append("| ν (mV/s) |" + "".join(
+        f" {1e3 * r:.3g} |" for r in rates_sorted))
+    lines.append("|---" * (len(rates_sorted) + 1) + "|")
+    lines.append("| capacitivo |" + "".join(
+        f" {100 * analysis.fractions.get(r, float('nan')):.1f} % |"
+        for r in rates_sorted))
+    lines.append("")
+    return lines
+
 def main(folder: Path, mass_mg: Optional[float] = MASS_MG,
          area_cm2: Optional[float] = None) -> None:
     if area_cm2 is None:
@@ -620,7 +757,10 @@ def main(folder: Path, mass_mg: Optional[float] = MASS_MG,
              ["cv_serie", "cv_capacitancia", "cv_carga", "cv_dunn"],
              "cv_ecsa", "rates")
 
-    (OUT / "tablas.md").write_text(tables(summary, electrode), encoding="utf-8")
+    extra = dunn_tables(result, cv_curves, electrode, OUT) if cv_curves else []
+    (OUT / "tablas.md").write_text(
+        tables(summary, electrode) + "\n".join(extra) + "\n",
+        encoding="utf-8")
     print("  escrito tablas.md")
 
     summary["avisos"] = result.warnings

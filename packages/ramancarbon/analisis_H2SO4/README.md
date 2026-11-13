@@ -237,6 +237,8 @@ está DIBUJADO, con las transformaciones ya aplicadas.
 | `cv_velocidades.csv` | capacitancia, ΔEp, picos y reversibilidad por velocidad |
 | `gcd_velocidad.csv` | la curva de velocidad con la dispersión de cada punto |
 | `gcd_ciclado.csv` | lo que los 101 ciclos de cada archivo le hacen |
+| `dunn_contribuciones.csv` | el reparto de Dunn, una fila por (potencial, velocidad): corriente capacitiva y difusiva de cada rama, medida y ajustada. Es lo que hace falta para redibujar las bandas, que la exportación de la figura NO da porque un `fill_between` no deja línea |
+| `dunn_coeficientes.csv` | k₁, k₂, R² y la capacitancia local por potencial |
 | `peis_*.csv` | los tres espectros, f / Z′ / −Z″ |
 | `INTERPRETACION.md` | **qué dice cada figura**, y qué no se puede concluir de ellas |
 | `resumen.json` | todo lo anterior en una estructura |
