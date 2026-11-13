@@ -1819,6 +1819,16 @@ class DunnAnalysis:
     oxidation and reduction are not mirror images."""
     k1_anodic: Optional[np.ndarray] = None
     k2_anodic: Optional[np.ndarray] = None
+    crossings: tuple[float, ...] = ()
+    """Potentials where the branch current CHANGES SIGN between one scan
+    rate and another.
+
+    There the separation is not defined: ``k₁ν`` is a fraction of a
+    current that has no sign, so the capacitive band can leave the
+    voltammogram for that reason and not because the fit is poor. It was
+    already said in the warnings; it is kept here so a figure can mark
+    the potentials instead of leaving the reader to find a sentence and
+    guess which part of the curve it is about."""
     k1_cathodic: Optional[np.ndarray] = None
     k2_cathodic: Optional[np.ndarray] = None
     """Coefficients for each branch separately, whatever :attr:`sweep`
@@ -2209,6 +2219,7 @@ def dunn_analysis(
         potentials=potentials, k1=k1, k2=k2, r_squared=quality,
         fractions=fractions, rates=tuple(rates), warnings=warnings,
         sweep=sweep,
+        crossings=tuple(sorted(set(round(value, 3) for value in crossings))),
         k1_anodic=k1_anodic, k2_anodic=k2_anodic,
         k1_cathodic=k1_cathodic, k2_cathodic=k2_cathodic,
     )

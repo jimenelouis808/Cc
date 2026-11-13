@@ -228,11 +228,12 @@ def plot_b_values(ax, study: RateStudy, palette: Palette) -> None:
 #: Passing them in is what lets one function serve both without the
 #: publication figure coming out half translated.
 DUNN_TEXTS: dict[str, str] = {
-    "diffusive": "difusivo (k₂√ν)",
-    "surface": "superficial (k₁ν)",
-    "fraction": "{value} % superficial",
+    "diffusive": "difusivo, limitado por transporte (k₂√ν)",
+    "surface": "capacitivo, de superficie (k₁ν)",
+    "fraction": "{value} % capacitivo",
     "potential": "Potencial (V)",
     "current": "Corriente ({unit})",
+    "undefined": "aquí la separación no está definida",
 }
 
 
@@ -273,13 +274,33 @@ def plot_dunn(ax, analysis, curve, palette: Palette,
     factor = (1e3 if unit == "mA" else 1.0) * scale
 
     measured_up = measured_down = None
+    raw = None
     if curve is not None:
+        # ONE cycle, the same one the rest of the analysis reports. A
+        # file with four cycles answers `sweeps()` with the anodic
+        # points of all four and the cathodic points of all four: drawn
+        # in order that is four loops joined by the jumps between them,
+        # and interpolated onto the Dunn grid it is an average over
+        # four cycles of which the first is formation.
+        single = curve
         try:
-            up, down = curve.sweeps()
+            single = curve.reporting_cycle()[0]
+        except Exception:                       # noqa: BLE001 - one cycle only
+            single = curve
+        try:
+            up, down = single.sweeps()
             measured_up = np.interp(potentials, *_sorted(up))
             measured_down = np.interp(potentials, *_sorted(down))
+            # The loop itself comes from the measurement's OWN points,
+            # in the order they were recorded — that order IS the loop.
+            # The Dunn grid is as coarse as the fit needs, sixty
+            # potentials by default, and a voltammogram drawn on sixty
+            # points is a visible polygon.
+            raw = (np.asarray(single.potential, dtype=float),
+                   np.asarray(single.current, dtype=float))
         except Exception:                       # noqa: BLE001 - no clean cycle
             measured_up = measured_down = None
+            raw = None
 
     surface = palette.component_colour(0)
     diffusive = palette.fitted
@@ -292,13 +313,33 @@ def plot_dunn(ax, analysis, curve, palette: Palette,
                         label=words["diffusive"])
         ax.fill_between(potentials, factor * measured_down, factor * cathodic,
                         color=diffusive, alpha=0.85, linewidth=0)
-        ax.plot(np.concatenate([potentials, potentials[::-1]]),
-                factor * np.concatenate([measured_up, measured_down[::-1]]),
-                color=palette.data, linewidth=1.4,
-                label=f"{1e3 * rate:.3g} mV/s")
+        if raw is not None:
+            ax.plot(raw[0], factor * raw[1], color=palette.data,
+                    linewidth=1.4, label=f"{1e3 * rate:.3g} mV/s")
+        else:
+            ax.plot(np.concatenate([potentials, potentials[::-1]]),
+                    factor * np.concatenate([measured_up,
+                                             measured_down[::-1]]),
+                    color=palette.data, linewidth=1.4,
+                    label=f"{1e3 * rate:.3g} mV/s")
     ax.fill_between(potentials, factor * cathodic, factor * anodic,
                     color=surface, alpha=0.85, linewidth=0,
                     label=words["surface"])
+
+    # Where the branch current changes sign between one rate and
+    # another, k1*nu is a fraction of a current that has no sign and the
+    # band can leave the loop for that reason rather than because the
+    # fit is poor. The analysis already said so in its warnings; marking
+    # the potentials is what lets a reader see WHICH part of the curve
+    # the sentence is about.
+    crossings = getattr(analysis, "crossings", ()) or ()
+    if len(crossings):
+        width = 0.5 * float(np.min(np.diff(potentials))) if potentials.size > 1 \
+            else 0.01
+        for index, value in enumerate(crossings):
+            ax.axvspan(value - width, value + width, color=palette.border,
+                       alpha=0.55, linewidth=0, zorder=0,
+                       label=words["undefined"] if index == 0 else None)
 
     fraction = analysis.fractions.get(rate)
     if fraction is not None:

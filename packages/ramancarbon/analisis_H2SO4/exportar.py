@@ -52,6 +52,20 @@ REFERENCE = "Ag/AgCl_sat"
 #: without it, so every F/g on these figures rests on this line.
 MASS_MG = 0.020
 
+#: The circuit every spectrum is fitted with.
+#:
+#: ``"auto"`` reads each spectrum's shape and shortlists from it, which
+#: is the right default and gets this set wrong: the initial spectrum's
+#: phase only reaches -52 deg inside the sweep, so no capacitive tail is
+#: detected, no porous circuit is shortlisted, and a Randles is settled
+#: on at a residual of 17.2 %. The same `R0-(R1|Q1)-Q2` fits all three
+#: at 1.5-2.0 % with every parameter determined -- and fitting the
+#: three with ONE model is what makes their parameters comparable,
+#: which is the whole reason for measuring three states of one cell.
+#: The auto choice is kept alongside, per spectrum, so the decision can
+#: be checked rather than taken on trust.
+CIRCUIT = "supercondensador"
+
 #: What each impedance file IS, for the legend. The DC bias comes from
 #: the file; what the cell had just been through does not, and a legend
 #: reading «PEIS_despues_CV_mult_02» names nothing.
@@ -221,18 +235,20 @@ def tables(summary: dict, electrode: Optional[Electrode] = None) -> str:
     if summary.get("peis"):
         out.append("## Impedancia")
         out.append("")
-        out.append("| archivo | E (V vs Ag/AgCl) | amplitud | R_s (Ω) | "
-                   "C′(0.1 Hz) (mF) | codo (Hz) | Kramers-Kronig | circuito |")
-        out.append("|---|---|---|---|---|---|---|---|")
+        out.append("| archivo | E (V vs Ag/AgCl) | R_s (Ω) | "
+                   "C′(0.1 Hz) (mF) | codo (Hz) | Kramers-Kronig | "
+                   "circuito | residuo | el que elegía «auto» |")
+        out.append("|---|---|---|---|---|---|---|---|---|")
         for row in summary["peis"]:
             capacitance = row.get("capacitancia_f")
             out.append(
                 f"| `{row['archivo']}` | {row['potencial_cd_v']:+.4f} | "
-                f"{row['amplitud_mv']:.1f} mV | {row['rs_ohm']:.4g} | "
+                f"{row['rs_ohm']:.4g} | "
                 + (f"{1e3 * capacitance:.4g}" if capacitance else "—")
                 + f" | {row['codo_hz']:.4g} | "
                 + ("sí" if row["kk"] else "**no**")
-                + f" | `{row['circuito']}` |"
+                + f" | `{row['circuito']}` | {row['residuo_pct']:.2f} % | "
+                + f"`{row['circuito_auto']}` a {row['residuo_auto_pct']:.2f} % |"
             )
         out.append("")
         out.append("La R_ct no está en la tabla a propósito: ninguno de los "
@@ -310,6 +326,10 @@ def main(folder: Path, mass_mg: Optional[float] = MASS_MG,
     # -- impedance. One report, because they are one electrode.
     result = analyse_sample(
         name="electrodo en H2SO4 0.5 M",
+        # The Dunn grid is also the grid the figure's shaded band is
+        # drawn on, and sixty points over 1.8 V is a step of 30 mV:
+        # fine for the fit, coarse enough to be seen as facets.
+        dunn_points=240,
         cv=cv_curves[0] if cv_curves else None,
         rate_series=cv_curves or None,
         gcd=gcd_curves[-1] if gcd_curves else None,
@@ -340,7 +360,8 @@ def main(folder: Path, mass_mg: Optional[float] = MASS_MG,
     peis_curves.sort(key=lambda c: (0 if "incial" in c.name.lower() else 1,
                                     c.metadata.get("potencial_cd_v") or 0.0))
     for curve in peis_curves:
-        analysis = analyse_eis(curve, circuit="auto")
+        analysis = analyse_eis(curve, circuit=CIRCUIT)
+        automatic = analyse_eis(curve, circuit="auto", check_kk=False)
         (OUT / f"informe_peis_{curve.name[:28]}.txt").write_text(
             analysis.summary(), encoding="utf-8")
         peis_rows.append({
@@ -354,6 +375,17 @@ def main(folder: Path, mass_mg: Optional[float] = MASS_MG,
             "capacitancia_f": analysis.capacitance_f,
             "codo_hz": analysis.knee_frequency,
             "circuito": analysis.fit.circuit if analysis.fit else None,
+            "residuo_pct": (analysis.fit.residual_pct
+                            if analysis.fit else None),
+            "circuito_auto": (automatic.fit.circuit
+                              if automatic.fit else None),
+            "residuo_auto_pct": (automatic.fit.residual_pct
+                                 if automatic.fit else None),
+            "elementos": {
+                f"{element.name}.{name}": value
+                for element in (analysis.fit.elements if analysis.fit else [])
+                for name, value in zip(element.parameters, element.values)
+            },
             "forma": analysis.shape.describe() if analysis.shape else None,
             "kk": analysis.kk.passes if analysis.kk else None,
             "avisos": analysis.warnings,
@@ -364,6 +396,7 @@ def main(folder: Path, mass_mg: Optional[float] = MASS_MG,
     # -- from the window's own catalogue.
     session = EchemSession(name="electrodo en H2SO4 0.5 M")
     session.electrode = electrode
+    session.circuit = CIRCUIT
     for name in GCD_SCHEDULE:
         match = next((p for p in groups["gcd"] if p.stem == name), None)
         if match and not session.add_gcd_to_series(match):
@@ -512,6 +545,7 @@ def main(folder: Path, mass_mg: Optional[float] = MASS_MG,
         curve.name = label
         session.eis_series.append(curve)
     session.eis = peis_curves[0] if peis_curves else None
+    session.circuit = CIRCUIT
 
     if len(cv_curves) >= 2:
         draw(session,

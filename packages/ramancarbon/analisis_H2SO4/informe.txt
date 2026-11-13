@@ -136,18 +136,18 @@ ECSA = 25.91 cm² (entre 17.3 y 51.8 según la Cs que se adopte)
 ────────────────────────────────────────────────────────────────────────
 Separación de Dunn (i = k₁ν + k₂√ν) — Media: sólo la rama anódica:
 
-      5.0 mV/s   capacitivo  61.2 %   difusivo  38.8 %
-     10.0 mV/s   capacitivo  67.4 %   difusivo  32.6 %
-     20.0 mV/s   capacitivo  71.5 %   difusivo  28.5 %
-     50.0 mV/s   capacitivo  76.7 %   difusivo  23.3 %
-    100.0 mV/s   capacitivo  82.1 %   difusivo  17.9 %
-    200.0 mV/s   capacitivo  91.0 %   difusivo   9.0 %
+      5.0 mV/s   capacitivo  60.1 %   difusivo  39.9 %
+     10.0 mV/s   capacitivo  66.7 %   difusivo  33.3 %
+     20.0 mV/s   capacitivo  71.1 %   difusivo  28.9 %
+     50.0 mV/s   capacitivo  76.4 %   difusivo  23.6 %
+    100.0 mV/s   capacitivo  81.9 %   difusivo  18.1 %
+    200.0 mV/s   capacitivo  90.6 %   difusivo   9.4 %
 
-  en 6 de 60 potenciales el ajuste de dos términos no describe los datos (R² < 0.95)
+  en 25 de 240 potenciales el ajuste de dos términos no describe los datos (R² < 0.95)
 
   esta separación es capacitivo frente a DIFUSIVO, no doble capa frente a redox. Un proceso redox confinado en la superficie es superficial: su corriente escala con ν, que es lo que significa «pseudocapacitivo», así que entra en k₁ por definición. Que un voltamperograma con picos redox evidentes salga «99 % capacitivo» es el resultado correcto, no un pico que se haya perdido. Lo que separa doble capa de pseudocapacitivo es la PRESENCIA de picos redox en el CV, y eso lo decide la clasificación de mecanismo
 
-  ⚠ en 8 potenciales la corriente de la rama CAMBIA DE SIGNO entre una velocidad y otra (-0.478 a +1.108 V). Ahí la separación no está definida: k₁ν es una fracción de una corriente que no tiene un signo, y la banda capacitiva de la figura puede salirse del lazo por ese motivo y no por el ajuste. Es la firma de un cruce por cero que se mueve con la velocidad — en estos archivos, la rama catódica lleva corriente anódica cerca del límite positivo
+  ⚠ en 34 potenciales la corriente de la rama CAMBIA DE SIGNO entre una velocidad y otra (-0.503 a +1.117 V). Ahí la separación no está definida: k₁ν es una fracción de una corriente que no tiene un signo, y la banda capacitiva de la figura puede salirse del lazo por ese motivo y no por el ajuste. Es la firma de un cruce por cero que se mueve con la velocidad — en estos archivos, la rama catódica lleva corriente anódica cerca del límite positivo
 
 ────────────────────────────────────────────────────────────────────────
   CARGA-DESCARGA GALVANOSTÁTICA
@@ -530,7 +530,7 @@ Dispersión entre métodos: 52 %
 ⚠ DRT: la inversión es mal condicionada: la regularización no es un detalle de implementación sino una elección sobre cuánta estructura creerse. Aquí λ = 1.11e-05
 ⚠ DRT: hay picos separados por menos de un factor de tres en τ: a esa distancia la separación depende de λ más que de los datos, y un circuito equivalente los describiría igual de bien con un solo elemento de fase constante
 ⚠ DRT: hay peso apreciable en el extremo lento: falta frecuencia baja, y la difusión suele estar ahí
-⚠ Dunn: en 8 potenciales la corriente de la rama CAMBIA DE SIGNO entre una velocidad y otra (-0.478 a +1.108 V). Ahí la separación no está definida: k₁ν es una fracción de una corriente que no tiene un signo, y la banda capacitiva de la figura puede salirse del lazo por ese motivo y no por el ajuste. Es la firma de un cruce por cero que se mueve con la velocidad — en estos archivos, la rama catódica lleva corriente anódica cerca del límite positivo
+⚠ Dunn: en 34 potenciales la corriente de la rama CAMBIA DE SIGNO entre una velocidad y otra (-0.503 a +1.117 V). Ahí la separación no está definida: k₁ν es una fracción de una corriente que no tiene un signo, y la banda capacitiva de la figura puede salirse del lazo por ese motivo y no por el ajuste. Es la firma de un cruce por cero que se mueve con la velocidad — en estos archivos, la rama catódica lleva corriente anódica cerca del límite positivo
 ⚠ capacitancia: los métodos difieren un 52 %: GCD da 1.632 mF y EIS da 0.7871 mF. No es ruido. Lo habitual es que la de EIS sea la mayor: se mide con una perturbación pequeña alrededor de un punto fijo y ahí no hay nada limitado por velocidad. Entre CV y GCD el orden lo deciden la velocidad y la corriente que se usaran, y compararlas solo vale si son equivalentes; si no lo son, esta diferencia es de las condiciones y no del electrodo
 ⚠ capacitancia: el número que entrega un dispositivo es el de GCD. Los otros dos son diagnósticos: útiles para entender el electrodo, no para anunciar su prestación
 ⚠ la capacitancia del voltamperograma es sólo 0.78 veces la galvanostática. Suele significar que la ventana del CV era más estrecha, o que la velocidad de barrido era demasiado alta para que el electrodo respondiera entero

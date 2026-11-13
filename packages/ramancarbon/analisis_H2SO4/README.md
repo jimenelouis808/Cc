@@ -233,24 +233,36 @@ está DIBUJADO, con las transformaciones ya aplicadas.
 | `gcd_velocidad.csv` | la curva de velocidad con la dispersión de cada punto |
 | `gcd_ciclado.csv` | lo que los 101 ciclos de cada archivo le hacen |
 | `peis_*.csv` | los tres espectros, f / Z′ / −Z″ |
+| `INTERPRETACION.md` | **qué dice cada figura**, y qué no se puede concluir de ellas |
 | `resumen.json` | todo lo anterior en una estructura |
 
 Los `.mpr` no se versionan. Los CSV sí, para que las figuras se puedan
 reproducir sin ellos.
 
+## El circuito de impedancia
+
+Los tres espectros se ajustan con **`R0-(R1|Q1)-Q2`**, no con lo que
+elige `circuit="auto"`. El automático lee la forma de cada espectro y
+propone a partir de ella, y sobre el inicial eso falla: su fase sólo
+llega a −52° dentro del barrido, así que no detecta cola capacitiva, no
+propone ningún circuito poroso, y zanja con un Randles al **17.25 %** de
+residuo. El mismo `R0-(R1|Q1)-Q2` ajusta los tres entre **1.5 y 2.0 %
+con todos los parámetros determinados**, y usar uno solo es lo que hace
+comparables sus parámetros entre los tres estados. `tablas.md` guarda
+también lo que elegía `auto`, para que la decisión se pueda discutir.
+
 ## Una cosa que las figuras enseñan y el texto no decía
 
-El residuo de cada circuito, en `peis_modelo` (c), ordena los tres
-espectros por lo bien que un modelo los describe:
+Con el circuito común, los parámetros de los tres estados se pueden
+poner en una fila y leer la activación directamente:
 
-| espectro | circuito que pide su forma | residuo |
-|---|---|---|
-| inicial, +0.418 V | `R0-(R1|Q1)` | 17.3 % |
-| tras la CV, OCV | `R0-T1` | 11.0 % |
-| tras la CV, pico redox | `R0-(R1|Q1)-T1` | 1.5 % |
+| | inicial | tras la CV, OCV | tras la CV, pico |
+|---|---|---|---|
+| R₀ en serie | 104.4 Ω | 87.0 Ω | 84.5 Ω |
+| R₁ interfacial | 637.5 Ω | 297.8 Ω | 286.3 Ω |
+| Q₂ almacenamiento | 5.95×10⁻⁴ | 8.44×10⁻⁴ | 8.99×10⁻⁴ |
+| codo | 0.183 Hz | 0.378 Hz | 0.316 Hz |
 
-Un Randles sobre el espectro inicial no describe estos datos. Lo que los
-describe es la línea de transmisión de poro (`T1`), y el único que ajusta
-bien es el que lleva las dos cosas — y ése es justo el que no pasa
-Kramers-Kronig. O sea que el mejor ajuste de los tres es el que menos se
-puede citar.
+Despues de ciclar: la serie baja un 19 %, la interfacial se parte por la
+mitad y el almacenamiento sube la mitad. Es la misma activación que el
+GCD mide dentro de sus archivos, por un camino independiente.

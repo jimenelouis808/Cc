@@ -4958,3 +4958,55 @@ def test_a_label_template_with_a_format_spec_would_never_substitute():
             assert ":." not in template, (
                 f"«{key}» en {language} lleva un formato que replace() no "
                 "puede sustituir")
+
+
+def test_dunn_keeps_the_potentials_where_its_answer_is_undefined():
+    """Where the branch current changes sign between one rate and
+    another, k₁ν is a fraction of a current with no sign. The analysis
+    already said so in a warning; keeping the potentials lets a figure
+    mark WHICH part of the curve the sentence is about."""
+    from ramancarbon.echem.cv import dunn_analysis
+
+    curves = cv_rate_series()
+    analysis = dunn_analysis(curves, points=40)
+
+    assert isinstance(analysis.crossings, tuple)
+    # Whatever they are, the warning and the field have to agree.
+    named = [w for w in analysis.warnings if "CAMBIA DE SIGNO" in w]
+    if named:
+        assert str(len(analysis.crossings)) in named[0]
+        assert all(isinstance(value, float) for value in analysis.crossings)
+    else:
+        assert analysis.crossings == ()
+
+
+def test_the_dunn_figure_draws_ONE_cycle_at_full_resolution():
+    """A four-cycle file answers ``sweeps()`` with the anodic points of
+    all four: drawn in order that is four loops joined by the jumps
+    between them, and the first of the four is formation. And the loop
+    comes from the measurement's own points, not from the Dunn grid —
+    sixty potentials over a volt and a half is a visible polygon."""
+    from matplotlib.figure import Figure
+
+    from ramancarbon.echem.cv import dunn_analysis
+    from ramancarbon.gui.plots_echem import plot_dunn
+    from ramancarbon.gui.theme import PALETTES
+
+    curves = cv_rate_series()
+    analysis = dunn_analysis(curves, points=40)
+    many = max(curves, key=lambda c: c.scan_rate)
+    cycles = len(set(many.cycle.tolist()))
+
+    axis = Figure().add_subplot(111)
+    plot_dunn(axis, analysis, many, PALETTES["claro"])
+    traces = [line for line in axis.get_lines()
+              if "mV/s" in str(line.get_label())]
+    assert len(traces) == 1
+    drawn = len(traces[0].get_xdata())
+
+    # Not the grid: the grid has 40 points and both branches of one
+    # cycle have many more.
+    assert drawn > 40
+    if cycles > 1:
+        # And one cycle, not the whole file.
+        assert drawn < len(many.potential)

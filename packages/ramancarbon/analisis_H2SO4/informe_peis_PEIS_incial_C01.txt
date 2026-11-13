@@ -16,9 +16,11 @@ FORMA DEL ESPECTRO (sin circuito)
   ⚠ −Z″ no tiene ningún máximo local: sube hasta la frecuencia más baja medida. No hay semicírculo cerrado en estos datos, así que de ellos NO sale ninguna resistencia de transferencia de carga — la que devuelva un ajuste sale del modelo, no de la medida
 
 Resistencia en serie: 105.8 Ω  (cruce con el eje real interpolado entre 1.365e+05 y 9.319e+04 Hz)
-Resistencia de transferencia de carga: 8276 Ω
+Resistencia de transferencia de carga: 637.5 Ω
 Capacitancia entregable C′(0.0999 Hz): 0.4681 mF  (de los datos, sin circuito)
-Capacitancia del ARCO interfacial (Hsu-Mansfeld): 1.078 mF  — es del arco, no lo que almacena el electrodo
+Capacitancia del elemento que almacena (CPE en serie a 0.0999 Hz): 0.6802 mF
+  C′(0.0999 Hz): 0.4681 mF medida, 0.4452 mF del ajuste (-4.9 %); el elemento Q2 solo vale 0.6802 mF
+Capacitancia del ARCO interfacial (Hsu-Mansfeld): 0.0244 mF  — es del arco, no lo que almacena el electrodo
 Frecuencia de codo (fase = -45°): 0.1829 Hz (τ = 5.469 s)
 
 Circuitos que la forma del espectro pide:
@@ -27,45 +29,25 @@ Circuitos que la forma del espectro pide:
   con_inductancia = L0-R0-(R1|Q1)
     con Z″ positivo arriba, la inductancia del montaje tiene que estar EN el circuito o se la come R0
 
-COMPARACIÓN DE CIRCUITOS
-──────────────────────────────────────────────
-
-  circuito                    χ²        libres  determinados      BIC
-  R0-(R1|Q1)                    1.381       4            4     -297.2
-  L0-R0-(R1|Q1)                 1.377       5            4     -293.1
-
-  El BIC penaliza parámetros, y hace falta porque un circuito con más
-  elementos ajusta SIEMPRE al menos igual de bien: que baje el χ² al
-  añadir uno no prueba nada por sí solo.
-  Pero el BIC tampoco decide solo. La columna que decide es «determinados»:
-  un parámetro que vuelve con una incertidumbre por encima del 50 %
-  no es una medida, y un circuito que gana por BIC con la mitad de sus
-  parámetros indeterminados ha ajustado la forma sin medir nada.
-
-  Mejor por BIC: R0-(R1|Q1)
-
-  Y nada de esto dice si el circuito es el APROPIADO para el material.
-  Ninguna regla estructural puede: un CPE donde va un condensador sigue
-  ajustando, y entonces su Q no son faradios.
-
-Circuito: R0-(R1|Q1)
+Circuito: R0-(R1|Q1)-Q2
   convergido: `ftol` termination condition is satisfied.
-  χ² = 1.381   residuo medio 17.248 %
+  χ² = 0.01858   residuo medio 1.981 %
 
-  R0.R       =      92.1378 Ω  (± 4.7 %)
-  R1.R       =      8276.04 Ω  (± 40.8 %)
-  Q1.Q       =  0.000361485 S·sⁿ  (± 10.5 %)
-  Q1.n       =     0.500798   (± 4.6 %)
+  R0.R       =      104.436 Ω  (± 0.4 %)
+  R1.R       =      637.518 Ω  (± 2.5 %)
+  Q1.Q       =  4.36135e-05 S·sⁿ  (± 3.8 %)
+  Q1.n       =      0.86049   (± 0.9 %)
+  Q2.Q       =  0.000595246 S·sⁿ  (± 1.1 %)
+  Q2.n       =     0.713395   (± 1.4 %)
 
-  ⚠ Q1: n = 0.501, muy lejos de 1. Con esa n el elemento ya no describe una doble capa distribuida; mira si lo que hay ahí es difusión (Warburg, n = 0.5)
-  ⚠ Q1: Q = 0.0003615 S·sⁿ NO son faradios. Para dar una capacitancia hace falta convertir con la resistencia en paralelo (echem.eis.cpe_to_capacitance) y citar siempre la n al lado
-  ⚠ el residuo medio es 17.2 %. El circuito no describe estos datos: mira el diagrama de Nyquist y compara la forma, no el número
+  ⚠ Q1: Q = 4.361e-05 S·sⁿ NO son faradios. Para dar una capacitancia hace falta convertir con la resistencia en paralelo (echem.eis.cpe_to_capacitance) y citar siempre la n al lado
+  ⚠ Q2: Q = 0.0005952 S·sⁿ NO son faradios. Para dar una capacitancia hace falta convertir con la resistencia en paralelo (echem.eis.cpe_to_capacitance) y citar siempre la n al lado
   ⚠ a alta frecuencia el espectro entra en la mitad inductiva del plano (−Z″ negativo). Casi siempre son los cables, no la muestra: añade una L en serie al circuito o recorta esas frecuencias
 
 ⚠ Z″ es POSITIVO en 2 punto(s) del extremo alto: eso es inductancia del cableado, no de la muestra. Un circuito sin una L en serie tiene que absorberla en R0, y entonces R0 no es la resistencia de la disolución
 ⚠ −Z″ no tiene ningún máximo local: sube hasta la frecuencia más baja medida. No hay semicírculo cerrado en estos datos, así que de ellos NO sale ninguna resistencia de transferencia de carga — la que devuelva un ajuste sale del modelo, no de la medida
-⚠ la R de transferencia de carga (8276 Ω) sale del circuito y no de los datos: −Z″ no cierra ningún arco dentro del barrido, así que su constante de tiempo está fuera de lo medido. La capacitancia efectiva convertida con ella hereda esa dependencia
-⚠ Q1: n = 0.501, muy lejos de 1. Con esa n el elemento ya no describe una doble capa distribuida; mira si lo que hay ahí es difusión (Warburg, n = 0.5)
-⚠ Q1: Q = 0.0003615 S·sⁿ NO son faradios. Para dar una capacitancia hace falta convertir con la resistencia en paralelo (echem.eis.cpe_to_capacitance) y citar siempre la n al lado
-⚠ el residuo medio es 17.2 %. El circuito no describe estos datos: mira el diagrama de Nyquist y compara la forma, no el número
+⚠ la capacitancia del elemento Q2 (0.6802 mF) y C′ a la misma frecuencia (0.4681 mF) difieren un +45 %, y a 0.0999 Hz la fase es -52°. Las dos son la misma magnitud solo cuando la respuesta ya es capacitiva: C′ lleva dentro la parte REAL de toda la cadena, así que mientras la fase no se acerque a −90° sale más baja. La que el dispositivo entrega es C′
+⚠ la R de transferencia de carga (637.5 Ω) sale del circuito y no de los datos: −Z″ no cierra ningún arco dentro del barrido, así que su constante de tiempo está fuera de lo medido. La capacitancia efectiva convertida con ella hereda esa dependencia
+⚠ Q1: Q = 4.361e-05 S·sⁿ NO son faradios. Para dar una capacitancia hace falta convertir con la resistencia en paralelo (echem.eis.cpe_to_capacitance) y citar siempre la n al lado
+⚠ Q2: Q = 0.0005952 S·sⁿ NO son faradios. Para dar una capacitancia hace falta convertir con la resistencia en paralelo (echem.eis.cpe_to_capacitance) y citar siempre la n al lado
 ⚠ a alta frecuencia el espectro entra en la mitad inductiva del plano (−Z″ negativo). Casi siempre son los cables, no la muestra: añade una L en serie al circuito o recorta esas frecuencias

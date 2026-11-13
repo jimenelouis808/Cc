@@ -29,11 +29,11 @@ Los archivos GANAN un 23.3 % compuesto dentro de sus propios ciclos: activación
 
 ## Impedancia
 
-| archivo | E (V vs Ag/AgCl) | amplitud | R_s (Ω) | C′(0.1 Hz) (mF) | codo (Hz) | Kramers-Kronig | circuito |
-|---|---|---|---|---|---|---|---|
-| `PEIS_incial_C01` | +0.4176 | 10.1 mV | 105.8 | 0.4681 | 0.1829 | sí | `R0-(R1|Q1)` |
-| `PEIS_despues_CV_mult_01_PEIS_C01` | +0.2753 | 10.3 mV | 87.54 | 0.7871 | 0.3782 | sí | `R0-T1` |
-| `PEIS_despues_CV_mult_02_PEIS_C01` | +0.4997 | 10.3 mV | 84.99 | 0.7972 | 0.3156 | **no** | `R0-(R1|Q1)-T1` |
+| archivo | E (V vs Ag/AgCl) | R_s (Ω) | C′(0.1 Hz) (mF) | codo (Hz) | Kramers-Kronig | circuito | residuo | el que elegía «auto» |
+|---|---|---|---|---|---|---|---|---|
+| `PEIS_incial_C01` | +0.4176 | 105.8 | 0.4681 | 0.1829 | sí | `R0-(R1|Q1)-Q2` | 1.98 % | `R0-(R1|Q1)` a 17.25 % |
+| `PEIS_despues_CV_mult_01_PEIS_C01` | +0.2753 | 87.54 | 0.7871 | 0.3782 | sí | `R0-(R1|Q1)-Q2` | 1.86 % | `R0-T1` a 11.04 % |
+| `PEIS_despues_CV_mult_02_PEIS_C01` | +0.4997 | 84.99 | 0.7972 | 0.3156 | **no** | `R0-(R1|Q1)-Q2` | 1.54 % | `R0-(R1|Q1)-T1` a 1.54 % |
 
 La R_ct no está en la tabla a propósito: ninguno de los espectros cierra el semicírculo, así que la que devuelva un ajuste la pone el modelo y no la medida.
 
