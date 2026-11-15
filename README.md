@@ -19,6 +19,12 @@ uv sync --all-packages --extra dev      # instala los cuatro
 uv run ramancarbon-gui                  # la aplicación gráfica
 ```
 
+**No uses `--all-extras`.** Falla, y el mensaje no dice qué hacer: el
+extra `render` de `nanocarbon_lab` trae `bpy`, que fija numpy 1.26, y
+carbonforge necesita numpy 2. Los dos están declarados en conflicto a
+propósito. El renderizador se instala aparte, en su propio entorno
+(`uv sync --package nanocarbon_lab --extra render`).
+
 Instalación detallada, incluido Tkinter y el caso sin `uv`, en
 [`INSTALACION.md`](INSTALACION.md). Lo que ha cambiado en la última ronda,
 en [`NOVEDADES.md`](NOVEDADES.md).

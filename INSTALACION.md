@@ -210,6 +210,31 @@ PC de sobremesa, así que usa MPI (`mpiexec -n <núcleos>`) o el clúster.
 Instala el paquete del sistema (arriba, en Requisitos). Las CLIs y la biblioteca
 funcionan sin él.
 
+**`error: Extras 'dev' and 'render' are incompatible with the declared
+conflicts`** — sale de `uv sync --all-packages --all-extras`, que es lo
+natural de teclear y es justo lo que no se puede pedir. No es que la
+instalación esté rota: `render` trae `bpy`, que fija numpy 1.26.4, y
+carbonforge necesita numpy 2. Los dos extras están **declarados en
+conflicto a propósito** en el `pyproject.toml` de la raíz, para que el
+renderizador no decida la versión de numpy de los otros tres paquetes.
+
+Usa el comando del README, que instala los cuatro con todo lo que hace
+falta para trabajar y para pasar las pruebas:
+
+```bash
+uv sync --all-packages --extra dev
+```
+
+Si además quieres el renderizador, va **aparte** y en su propio entorno:
+
+```bash
+uv sync --package nanocarbon_lab --extra render
+```
+
+No los mezcles en el mismo entorno. Con `pip` no hay aviso ninguno:
+`pip install -e ".[render]"` **degrada numpy a 1.26.4 en silencio** y lo
+que se rompe después son los otros paquetes, lejos de aquí.
+
 **`bpy` no instala** — es opcional, solo para el renderizador de Blender de
 `nanocarbon_lab`. Existe una rueda por versión de Python y solo para 3.11.
 Sáltalo: no lo necesitas para nada más.
