@@ -258,3 +258,19 @@ python -m carbonforge.adsorption.run iso_X
 ```
 
 Reanuda: los puntos que ya están en `resultados.json` no se recalculan.
+
+## Presión de llenado: en `validacion_rendijas/`
+
+Estas tres isotermas están todas a 1, 3.8 y 10 MPa, donde las
+estructuras ya están casi llenas. La pregunta de **a qué presión
+llenan** vive por debajo de 1 MPa y se responde sin isoterma, con el
+límite de cobertura cero (`adsorption/henry.py`): la pendiente inicial
+es una media de Widom sobre la celda vacía.
+
+Medido para súper-cuadrado, súper-grafeno, súper-cúbico y súper-fcc en
+`validacion_rendijas/README.md` («Y las superredes de verdad»), contra
+una rendija y un haz de tubos. Resumen: tres de las cuatro igualan al
+surco idealizado, el súper-fcc pierde por un factor 7 porque doce tubos
+en un nodo no dejan canal, y una rendija de 6.6 Å sigue ganando la
+pendiente por gramo con un pozo más somero — sitios peores, y muchos
+más de ellos por gramo.

@@ -73,6 +73,16 @@ GAS_CONSTANT_KJ: float = 8.314462618e-3
 #: points, so a cell that is mostly vacuum needs many samples.
 ERROR_LIMIT: float = 0.05
 
+#: Points per block when the energies are evaluated. The neighbour
+#: lists of a whole sample at once are what runs out of memory: a
+#: `query_ball_point` over a million points in a cell this dense holds
+#: a million Python lists, and at a million samples the process was
+#: KILLED -- no traceback, nothing. Same class of fault as the
+#: unchunked network field in `builders/implicit.py`, and the same
+#: cure. The points themselves are drawn in one go, so the block size
+#: cannot change an answer, and a test pins that.
+CHUNK: int = 20_000
+
 #: A heat this high at zero coverage is not a van der Waals well on
 #: carbon at all, whatever the geometry, so it means the sample is
 #: wrong rather than the structure remarkable -- most often a cell
@@ -170,6 +180,7 @@ def henry_constant(
     cutoff: float = CUTOFF,
     gas: VirialGas | None = None,
     seed: int = 0,
+    chunk: int = CHUNK,
 ) -> HenryReport:
     """Measure the zero-coverage limit by Widom insertion.
 
@@ -198,6 +209,10 @@ def henry_constant(
         pressure coincide.
     seed
         For the insertion points.
+    chunk
+        Points per block of the energy evaluation. It bounds memory
+        and nothing else: the points are drawn in one go, so this
+        cannot change the result.
 
     Returns
     -------
@@ -226,19 +241,34 @@ def henry_constant(
 
     # The same potential, with the same quantum correction, that the
     # Monte Carlo would see. Overlaps come back as inf and weigh zero.
-    energy = _framework_energy(points, tree, edges, temperature,
-                               cutoff=cutoff)
+    # Evaluated in blocks: see `CHUNK`.
     beta = 1.0 / temperature
-    weight = np.exp(-beta * np.clip(energy, -1e4, 1e4))
-    weight[~np.isfinite(energy)] = 0.0
+    total = 0.0
+    total_squared = 0.0
+    total_weighted = 0.0
+    for start in range(0, samples, max(1, chunk)):
+        block = points[start:start + max(1, chunk)]
+        energy = _framework_energy(block, tree, edges, temperature,
+                                   cutoff=cutoff)
+        weight = np.exp(-beta * np.clip(energy, -1e4, 1e4))
+        finite = np.isfinite(energy)
+        weight[~finite] = 0.0
+        total += float(weight.sum())
+        total_squared += float(np.square(weight).sum())
+        total_weighted += float(np.sum(weight[finite] * energy[finite]))
 
-    average = float(weight.mean())
-    spread = float(weight.std(ddof=1)) / np.sqrt(samples) if samples > 1 else 0.0
+    average = total / samples
+    if samples > 1:
+        # The sample variance from the running sums, which is what
+        # keeps this independent of the block size.
+        variance = max(
+            (total_squared - samples * average**2) / (samples - 1), 0.0)
+        spread = float(np.sqrt(variance / samples))
+    else:
+        spread = 0.0
 
     # <U> weighted by the same factor: the well a molecule sits in.
-    finite = np.isfinite(energy)
-    weighted = float(np.sum(weight[finite] * energy[finite]))
-    mean_energy = weighted / (average * samples) if average > 0.0 else 0.0
+    mean_energy = total_weighted / total if total > 0.0 else 0.0
 
     # Loading per unit pressure. <N> = a(P) V <exp(-bU)> with the
     # activity in inverse cubic angstrom, exactly as the GCMC uses it,

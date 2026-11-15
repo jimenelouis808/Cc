@@ -423,3 +423,78 @@ que el supuesto de Langmuir es un supuesto.
 ```bash
 uv run python validacion_rendijas/llenado.py
 ```
+
+## Y las superredes de verdad: `llenado_super.py`
+
+`llenado.py` compara una pared plana con un surco **idealizado** —todo
+surco, ningún nodo— porque una superred lleva nodos y un nodo no es ni
+surco ni rendija. Esta es la cosa real: súper-cuadrado, súper-grafeno,
+súper-cúbico y súper-fcc, construidas con `nanocarbon_lab` en sus
+presets de catálogo y entregadas por fichero (ningún paquete importa al
+otro), empotradas en celda legal aquí.
+
+A 77 K, un millón de inserciones por dos semillas:
+
+| estructura | átomos | canal (Å) | área (m²/g) | K_H (mol/kg/MPa) | q_st (kJ/mol) |
+|---|---|---|---|---|---|
+| **rendija, H = 6.6 Å** | 960 | 3.55 | — | **8660 ± 50** | 7.81 |
+| súper-cúbico | 836 | 20.00 | 2314 | 4956 ± 101 | **8.90** |
+| haz de tubos, hueco 4.0 Å | 8704 | 10.21 | — | 4252 ± 107 | **8.96** |
+| súper-cuadrado | 1328 | 20.22 | 2351 | 4225 ± 5 | 8.47 |
+| súper-grafeno | 2360 | 18.46 | 2249 | 4057 ± 35 | 8.56 |
+| súper-fcc | 2982 | 7.33 | 1760 | **633 ± 6** | 7.30 |
+
+Cuatro cosas, y ninguna era la esperada:
+
+* **El nodo no estropea nada.** Tres de las cuatro caen exactamente
+  donde cae el haz idealizado (4000–5000), y el súper-cúbico queda por
+  encima de él. Los nodos eran la razón para no extrapolar del haz a la
+  superred; medido, la extrapolación valía. El nodo es una minoría de
+  la pared y no estrangula el canal.
+* **El súper-fcc es la excepción, y pierde por un factor 7.** Su canal
+  es de 7.33 Å contra 18–20 Å de las otras y su área 1760 contra
+  2250–2350: doce tubos en un nodo no dejan sitio para una pared entre
+  ellos, que es lo que el catálogo de `nanocarbon_lab` ya dice de él
+  («se informa, no se recomienda»). Aquella advertencia era sobre la
+  geometría de la pared; **esto es la misma conclusión llegando desde
+  la adsorción, que es una comprobación independiente.**
+* **La rendija óptima sigue ganando la pendiente por gramo, 1.75×, con
+  el pozo MÁS SOMERO de la tabla salvo el fcc.** Esa es la frase que
+  resume todo el estudio: `K_H` ≈ densidad de sitios × `exp(q/RT)`, y
+  la rendija tiene sitios mediocres **en todas partes** mientras las
+  superredes tienen sitios excelentes en unos pocos. Gana el que tiene
+  más sitios por gramo, no el que tiene los mejores.
+* **El orden no sigue ni al área ni al canal.** El súper-cuadrado tiene
+  el área mayor (2351 m²/g) y el canal más ancho (20.22 Å) y no es el
+  mejor; el súper-cúbico, con menos área y canal más estrecho, lo
+  supera. `K_H` sigue a `q_st`, no al área — que es por qué el área
+  geométrica no es la cifra de mérito a baja presión y por qué
+  `curvatura.py` buscaba en el sitio correcto al mirar pozos.
+
+Dos notas de método que costaron una medida cada una:
+
+* **Estas celdas son casi todas vacío, así que su media de Widom
+  converge más despacio que la de una rendija** y a 200 000
+  inserciones el propio informe avisaba (5–7 % de error en el
+  súper-cúbico y el fcc). A 10⁶ el aviso desaparece y los valores
+  apenas se mueven (4862 → 4956, 640 → 633), o sea que el aviso era
+  conservador y aun así había que atenderlo. El número de muestras es
+  un argumento del script precisamente porque la respuesta al aviso es
+  subirlo.
+* **A 10⁶ puntos el proceso moría sin traza**, porque `query_ball_point`
+  sobre todos los puntos a la vez guarda un millón de listas de
+  vecinos. Es la misma clase de fallo que el campo de red sin trocear
+  de `implicit.py` y la misma cura: la evaluación va en bloques
+  (`henry.CHUNK`). Los puntos se sortean de una vez, así que el tamaño
+  de bloque no puede cambiar la respuesta, y un test lo fija a 1e-12.
+
+El súper-cúbico se construye con el rescate de pared colapsada activo
+(`nanocarbon_lab` avisa y lo reconstruye con la pared sujeta a su
+superficie); lo que se mide aquí es la estructura rescatada, no la
+colapsada.
+
+```bash
+# en nanocarbon_lab, que escribe los extxyz:
+#   python construye_super.py <carpeta>
+uv run python validacion_rendijas/llenado_super.py <carpeta> 1000000
+```

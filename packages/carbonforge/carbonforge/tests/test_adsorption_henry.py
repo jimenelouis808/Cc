@@ -180,3 +180,22 @@ def test_the_limit_agrees_with_the_simulation() -> None:
     higher = run_gcmc(atoms, temperature=77.0, pressure_mpa=0.01,
                       equilibration=200_000, production=200_000, seed=1)
     assert higher.mean_count < 0.9 * tangent(0.01)
+
+
+def test_the_block_size_cannot_change_the_answer() -> None:
+    """Memory is bounded by blocks; the result is not a function of them.
+
+    The points are drawn in one go and only the energy evaluation is
+    chunked, so this is exact rather than close -- which is the
+    property that makes the block size safe to tune. Unchunked, a
+    million-point sample held a million neighbour lists and the
+    process was killed outright.
+    """
+    atoms = _slit(8.0)
+    whole = henry_constant(atoms, samples=20_000, seed=0, chunk=20_000)
+    split = henry_constant(atoms, samples=20_000, seed=0, chunk=997)
+    assert split.henry_coefficient == pytest.approx(
+        whole.henry_coefficient, rel=1e-12)
+    assert split.isosteric_heat == pytest.approx(
+        whole.isosteric_heat, rel=1e-12)
+    assert split.henry_error == pytest.approx(whole.henry_error, rel=1e-9)
