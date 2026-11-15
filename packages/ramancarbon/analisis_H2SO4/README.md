@@ -237,6 +237,9 @@ está DIBUJADO, con las transformaciones ya aplicadas.
 | `cv_velocidades.csv` | capacitancia, ΔEp, picos y reversibilidad por velocidad |
 | `gcd_velocidad.csv` | la curva de velocidad con la dispersión de cada punto |
 | `gcd_ciclado.csv` | lo que los 101 ciclos de cada archivo le hacen |
+| `dunn_lazo_<ν>mVs.csv` | **el que se dibuja.** El ciclo como UN camino ordenado (anódica subiendo, catódica bajando) con `i`, `i_cap` e `i_dif` en mA y en A/g. Tres llamadas y sin lógica de ramas: `plot(E, i)`, `fill_between(E, i_cap, i)`, `fill_between(E, 0, i_cap)` |
+| `dunn_fracciones.csv` | ancho: un potencial por fila, una columna por velocidad, con la fracción capacitiva |
+| `dibuja_dunn.py` | dibuja desde esos CSV **sin importar ramancarbon**, para traducirlo a otra herramienta |
 | `dunn_contribuciones.csv` | el reparto de Dunn, una fila por (potencial, velocidad): corriente capacitiva y difusiva de cada rama, medida y ajustada. Es lo que hace falta para redibujar las bandas, que la exportación de la figura NO da porque un `fill_between` no deja línea |
 | `dunn_coeficientes.csv` | k₁, k₂, R² y la capacitancia local por potencial |
 | `peis_*.csv` | los tres espectros, f / Z′ / −Z″ |

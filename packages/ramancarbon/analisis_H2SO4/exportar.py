@@ -380,6 +380,103 @@ def dunn_tables(result, curves, electrode, out: Path) -> list[str]:
     (out / "dunn_contribuciones.csv").write_text("\n".join(rows) + "\n",
                                                  encoding="utf-8")
 
+    # -- the plot-ready shape -----------------------------------------
+    #
+    # One file per scan rate, with the cycle written as ONE ORDERED PATH
+    # — anodic going up in potential, cathodic coming back down — so the
+    # figure is two calls and no branch logic:
+    #
+    #     plot(E, i)                       # the closed loop
+    #     fill_between(E, i_cap, i)        # the diffusive part
+    #     fill_between(E, 0, i_cap)        # the capacitive part
+    #
+    # The long table above has the same numbers split by branch, which
+    # is right for reading and wrong for drawing: a loop is a path, and
+    # a path with a branch column has to be re-joined before it can be
+    # plotted at all.
+    loop_files: list[str] = []
+    for curve in sorted(curves, key=lambda c: c.scan_rate):
+        rate = float(curve.scan_rate)
+        anodic, cathodic = analysis.branch_currents(rate)
+        if anodic is None:
+            continue
+        try:
+            one = curve.reporting_cycle()[0]
+            up, down = one.sweeps()
+            order_up = np.argsort(up.potential)
+            order_down = np.argsort(down.potential)
+            measured_up = np.interp(potentials, up.potential[order_up],
+                                    up.current[order_up])
+            measured_down = np.interp(potentials, down.potential[order_down],
+                                      down.current[order_down])
+        except Exception:                       # noqa: BLE001
+            continue
+        back = slice(None, None, -1)
+        path_e = np.concatenate([potentials, potentials[back]])
+        path_rhe = (np.concatenate([rhe, rhe[back]])
+                    if rhe is not None else None)
+        path_i = np.concatenate([measured_up, measured_down[back]])
+        path_cap = np.concatenate([anodic, cathodic[back]])
+        path_ok = np.concatenate([undefined, undefined[back]])
+        head = "E_V,E_vs_RHE_V,i_mA,i_cap_mA,i_dif_mA"
+        if mass_g:
+            head += ",i_A_g,i_cap_A_g,i_dif_A_g"
+        head += ",rama,separacion_definida"
+        body = [head]
+        for index in range(path_e.size):
+            total, cap = path_i[index], path_cap[index]
+            line = [f"{path_e[index]:.5g}",
+                    f"{path_rhe[index]:.5g}" if path_rhe is not None else "",
+                    f"{1e3 * total:.6g}", f"{1e3 * cap:.6g}",
+                    f"{1e3 * (total - cap):.6g}"]
+            if mass_g:
+                line += [f"{total / mass_g:.6g}", f"{cap / mass_g:.6g}",
+                         f"{(total - cap) / mass_g:.6g}"]
+            line += ["anodica" if index < potentials.size else "catodica",
+                     "no" if path_ok[index] else "si"]
+            body.append(",".join(line))
+        name = f"dunn_lazo_{1e3 * rate:.0f}mVs.csv"
+        (out / name).write_text("\n".join(body) + "\n", encoding="utf-8")
+        loop_files.append(name)
+    if loop_files:
+        print(f"  escritos {len(loop_files)} dunn_lazo_*.csv "
+              "(un camino cerrado por velocidad, listos para dibujar)")
+
+    # The fractions WIDE: one row per potential, one column per rate.
+    # This is the other figure the field prints — the capacitive share
+    # across the window — and in the long table it needed a pivot.
+    wide_fractions = ["E_V,E_vs_RHE_V" + "".join(
+        f",frac_cap_{1e3 * float(c.scan_rate):.0f}mVs"
+        for c in sorted(curves, key=lambda c: c.scan_rate))
+        + ",separacion_definida"]
+    columns = []
+    for curve in sorted(curves, key=lambda c: c.scan_rate):
+        rate = float(curve.scan_rate)
+        anodic, _ = analysis.branch_currents(rate)
+        try:
+            up, _ = curve.reporting_cycle()[0].sweeps()
+            order = np.argsort(up.potential)
+            total = np.interp(potentials, up.potential[order],
+                              up.current[order])
+        except Exception:                       # noqa: BLE001
+            total = np.full(potentials.size, np.nan)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            share = np.abs(anodic) / np.abs(total)
+        columns.append(np.where(np.isfinite(share), np.minimum(share, 1.0),
+                                np.nan))
+    for index in range(potentials.size):
+        row = [f"{potentials[index]:.5g}",
+               f"{rhe[index]:.5g}" if rhe is not None else ""]
+        for column in columns:
+            value = column[index]
+            row.append(f"{value:.4f}" if np.isfinite(value)
+                       and not undefined[index] else "")
+        row.append("no" if undefined[index] else "si")
+        wide_fractions.append(",".join(row))
+    (out / "dunn_fracciones.csv").write_text(
+        "\n".join(wide_fractions) + "\n", encoding="utf-8")
+    print("  escrito dunn_fracciones.csv (ancho: un potencial por fila)")
+
     wide = ["E_V,E_vs_RHE_V,k1_A_V_s,k2_A_V_s05,r2,"
             "C_local_F,C_local_F_g,separacion_definida"]
     for index, potential in enumerate(potentials):
