@@ -125,6 +125,29 @@ class PorosityReport:
     wall_distances: np.ndarray = field(default_factory=lambda: np.empty(0))
     wall_distance_histogram: np.ndarray = field(
         default_factory=lambda: np.empty(0))
+    mean_energy: float = 0.0
+    """Mean H2-framework potential energy over the ACCESSIBLE volume, in
+    kelvin, negative for binding.
+
+    What a cubic ångström of this pore is worth energetically, which is
+    the quantity an area in m²/g says nothing about: two frameworks can
+    offer the same surface and bind differently on it. A flat sheet has
+    more carbons within reach of a point above it than a convex wall of
+    the same area does, so the well over a tube's outside is shallower
+    than the well in a slit — a prediction about this number and not
+    about any distance."""
+    deepest_energy: float = 0.0
+    """The strongest site the probe found, in kelvin. The minimum over
+    the sampled accessible points, so it is a lower bound in the sample
+    count and never an exact minimum."""
+    energies: np.ndarray = field(default_factory=lambda: np.empty(0))
+    """Bin centres of :attr:`energy_histogram`, in kelvin."""
+    energy_histogram: np.ndarray = field(
+        default_factory=lambda: np.empty(0))
+    """How the accessible volume is distributed over well depth. Its
+    SHAPE is the diagnostic: a slit is bimodal (two walls, each with its
+    own layer) and an open framework with convex walls is a single
+    shallow peak."""
     samples: int = 0
     warnings: list[str] = field(default_factory=list)
 
@@ -144,6 +167,9 @@ class PorosityReport:
             f"  mean wall distance {self.mean_wall_distance:.2f} A"
             f"   (a slit of this channel would read "
             f"{0.5 * self.probe_radius + 0.25 * self.largest_free_sphere:.2f})",
+            f"  mean well depth    {self.mean_energy:.1f} K"
+            f"   (deepest site {self.deepest_energy:.0f} K)"
+            "   <- what a m2 of THIS wall is worth",
         ]
         lines += [f"  ! {w}" for w in self.warnings]
         return "\n".join(lines)
@@ -291,6 +317,21 @@ def analyse_porosity(
         free_radius[inside], bins=bins)
     mean_wall = float(free_radius[inside].mean()) if inside.any() else 0.0
 
+    # The well the framework offers, over the volume a molecule can
+    # actually reach. Same pair and same quantum correction the
+    # simulation uses, so this is the energy the GCMC would see and not
+    # a second model of it.
+    energy_centres, energy_histogram = np.empty(0), np.empty(0)
+    mean_energy = deepest_energy = 0.0
+    if inside.any():
+        well = _framework_energy(points[inside], tree, edges, temperature)
+        finite = well[np.isfinite(well)]
+        if finite.size:
+            mean_energy = float(finite.mean())
+            deepest_energy = float(finite.min())
+            energy_histogram, borders = np.histogram(finite, bins=bins)
+            energy_centres = 0.5 * (borders[:-1] + borders[1:])
+
     return PorosityReport(
         probe_radius=probe_radius,
         void_fraction=fraction,
@@ -310,9 +351,44 @@ def analyse_porosity(
         mean_wall_distance=mean_wall,
         wall_distances=wall_centres,
         wall_distance_histogram=wall_histogram,
+        mean_energy=mean_energy,
+        deepest_energy=deepest_energy,
+        energies=energy_centres,
+        energy_histogram=energy_histogram,
         samples=samples,
         warnings=warnings,
     )
+
+
+def _framework_energy(
+    points: np.ndarray, tree: cKDTree, edges: np.ndarray,
+    temperature: float, cutoff: float = 12.0,
+) -> np.ndarray:
+    """H2-framework potential energy at each point, in kelvin.
+
+    The same pair parameters and the same Feynman-Hibbs correction the
+    Monte Carlo uses, at the temperature asked for, so this is the
+    energy that run would see rather than a second model of it. The
+    correction matters: it is about a fifth of the well at 77 K.
+
+    Points are returned in the order given, with ``inf`` where the probe
+    overlaps an atom so hard the energy overflows — those are not
+    accessible points and the caller drops them.
+    """
+    from .potentials import H2_C, feynman_hibbs
+
+    wrapped = np.mod(points, edges)
+    np.clip(wrapped, 0.0, np.nextafter(edges, 0.0), out=wrapped)
+    neighbours = tree.query_ball_point(wrapped, cutoff)
+    out = np.zeros(len(wrapped), dtype=float)
+    for index, (point, near) in enumerate(zip(wrapped, neighbours)):
+        if not near:
+            continue
+        delta = tree.data[near] - point
+        delta -= edges * np.round(delta / edges)
+        r = np.maximum(np.linalg.norm(delta, axis=1), 1e-6)
+        out[index] = float(np.sum(feynman_hibbs(r, H2_C, temperature)))
+    return out
 
 
 def _helium_void_fraction(

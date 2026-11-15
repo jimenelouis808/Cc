@@ -204,14 +204,54 @@ superestructura tiene **menos** volumen lejos de la pared, no más.
 
 Así que **la geometría del poro no explica el déficit**, y las dos
 explicaciones que se propusieron están descartadas por medición. El
-candidato que queda, y que aquí no se mide, es la **curvatura de la
-pared**: la superficie de la superestructura es sobre todo exterior de
-tubo, que es convexa, y una pared convexa tiene menos carbonos al
-alcance de un punto dado que una lámina plana, así que su pozo de
-potencial es menos profundo. Eso haría que cada m² valiese menos,
-independientemente del ancho de poro — lo que encaja con que el déficit
-aparezca en la eficiencia **por área**. Comprobarlo pide la distribución
-de energía potencial del armazón, no de distancias.
+candidato que quedaba era la **curvatura de la pared**: la superficie
+de la superestructura es sobre todo exterior de tubo, que es convexa, y
+una pared convexa tiene menos carbonos al alcance de un punto dado que
+una lámina plana, así que su pozo de potencial es menos profundo. Eso
+haría que cada m² valiese menos, independientemente del ancho de poro —
+lo que encaja con que el déficit aparezca en la eficiencia **por área**.
+
+## Y la curvatura sí lo explica: 24 % del pozo
+
+Ya se puede medir: `analyse_porosity` informa ahora la distribución de
+energía potencial del armazón sobre el volumen accesible, y
+`curvatura.py` aísla la variable. Una pared cada vez, misma densidad de
+carbono, misma sonda, misma temperatura, y la sonda **se barre** hacia
+afuera para leer cada pared en SU propio mínimo y no en el del plano:
+
+| (n,n) | R (Å) | pozo (K) | distancia (Å) | % del plano |
+|---|---|---|---|---|
+| (5,5) | 3.39 | −333.5 | 3.22 | 73.9 % |
+| (6,6) | 4.07 | −344.5 | 3.22 | **76.4 %** |
+| (8,8) | 5.42 | −361.2 | 3.22 | 80.1 % |
+| (10,10) | 6.78 | −373.2 | 3.22 | 82.7 % |
+| (15,15) | 10.17 | −392.2 | 3.22 | 87.0 % |
+| (20,20) | 13.56 | −403.7 | 3.22 | 89.5 % |
+| (30,30) | 20.34 | −416.7 | 3.22 | 92.4 % |
+| plana | ∞ | −451.0 | 3.22 | 100.0 % |
+
+El exterior de un (6,6) —que es el puntal de estas superestructuras—
+vale **el 76 % del pozo de una lámina plana**. El déficit crece al
+cerrarse el radio y **se va a cero cuando el radio crece**, que es el
+límite que convierte esto en una medida y no en un relato: una pared de
+radio 20 Å ya está al 92 % del plano.
+
+Y la distancia del mínimo **no se mueve**: 3.22 Å en las ocho filas. O
+sea que no es que la molécula se siente en otro sitio, es que desde el
+mismo sitio ve menos carbono. Que es exactamente el mecanismo
+propuesto, y no otro compatible con el mismo número.
+
+### Lo que NO dice
+
+Un haz de tubos medido entero sale **más** hondo que una rendija
+(−493 K de media contra −347 K sobre el volumen accesible, a 77 K), y
+eso no contradice lo anterior: en un haz, un sitio del surco ve
+carbono de **tres** tubos a la vez, y la superposición recupera con
+creces lo que la convexidad cuesta por pared. El déficit de las
+superestructuras es que tienen superficie convexa **abierta** —poros
+grandes, sin surcos— así que pagan el 24 % sin cobrar la superposición.
+Esa es la consecuencia de diseño: lo que hay que buscar no es más área,
+son surcos.
 
 ## Límites
 

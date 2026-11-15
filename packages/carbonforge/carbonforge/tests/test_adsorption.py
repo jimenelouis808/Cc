@@ -312,6 +312,93 @@ class TestPorosity:
                 f"separation {separation} A: measured "
                 f"{report.mean_wall_distance:.3f} against {expected:.3f}")
 
+    def test_a_convex_wall_offers_a_shallower_well_than_a_flat_one(self):
+        """The prediction `validacion_rendijas/` was left holding.
+
+        Two explanations for the superstructures' deficit per m2 had
+        already been measured and refused; the one left was that their
+        surface is mostly the OUTSIDE of a tube, which is convex, and a
+        convex wall has fewer carbons within reach of a point above it
+        than a flat sheet of the same areal density. That is a claim
+        about the depth of the well, not about any distance, which is
+        why it needed this and not `mean_wall_distance`.
+
+        Measured here on one isolated wall at a time, so nothing but
+        the curvature differs: same carbon density, same probe, same
+        temperature, and the probe scanned away from the surface so
+        each wall is read at its OWN minimum. The flat limit is the
+        check that makes it a measurement — the deficit has to vanish
+        as the radius grows, and it does.
+        """
+        from carbonforge.builders.cnt import build_cnt
+        from carbonforge.builders.graphene import build_graphene_supercell
+
+        def well(positions: np.ndarray, direction: np.ndarray,
+                 start: float) -> float:
+            """Deepest energy found scanning out along `direction`."""
+            best = 0.0
+            for distance in np.arange(2.6, 6.0, 0.05):
+                point = direction * (start + distance)
+                radii = np.linalg.norm(positions - point, axis=1)
+                radii = radii[radii < 20.0]
+                if not radii.size:
+                    continue
+                best = min(best, float(np.sum(
+                    feynman_hibbs(np.maximum(radii, 1e-6), H2_C, 77.0))))
+            return best
+
+        sheet = build_graphene_supercell(nx=20, ny=12, vacuum=20.0)
+        flat_positions = sheet.get_positions()
+        flat_positions -= flat_positions.mean(axis=0)
+        flat = well(flat_positions, np.array([0.0, 0.0, 1.0]), 0.0)
+        assert flat < -300.0, "a graphene sheet binds H2 by hundreds of K"
+
+        shares = []
+        for index in (6, 10, 20):
+            tube = build_cnt(n=index, m=index, length=40.0, vacuum=20.0)
+            positions = tube.get_positions()
+            positions -= positions.mean(axis=0)
+            radius = float(np.hypot(positions[:, 0], positions[:, 1]).mean())
+            depth = well(positions, np.array([1.0, 0.0, 0.0]), radius)
+            shares.append(depth / flat)
+
+        # Every convex wall is shallower than the flat one...
+        assert all(share < 1.0 for share in shares), shares
+        # ...the tightest curvature the most...
+        assert shares[0] < shares[1] < shares[2], shares
+        # ...a (6,6) exterior costs about a quarter of the well...
+        assert 0.70 < shares[0] < 0.82, shares[0]
+        # ...and it goes to the flat value as the radius grows, which is
+        # the limit that makes this physics and not a fitting artefact.
+        assert shares[-1] > 0.85, shares[-1]
+
+    def test_the_porosity_reports_the_well_the_framework_offers(self):
+        """An area in m2/g says how much surface there is and nothing
+        about what it is worth. The energy distribution is the other
+        half, and a slit has to come back bound and bimodal: two walls,
+        each with its own layer."""
+        spacing = 4.26
+        sheet = [(x * 2.46, y * spacing, 0.0)
+                 for x in range(10) for y in range(6)]
+        separation = 11.0
+        positions = [(x, y, z + layer * separation)
+                     for layer in range(2) for x, y, z in sheet]
+        atoms = Atoms(f"C{len(positions)}", positions=positions,
+                      cell=[24.6, 25.56, 2 * separation], pbc=True)
+        report = analyse_porosity(atoms, samples=20_000, area_points=40,
+                                  temperature=77.0, seed=0)
+
+        assert report.mean_energy < 0.0, "a pore that does not bind is not one"
+        assert report.deepest_energy < report.mean_energy
+        assert len(report.energies) == len(report.energy_histogram)
+        assert report.energy_histogram.sum() > 0
+        # The histogram covers the sampled range, deepest site included.
+        # `energies` are bin CENTRES, so the first one sits half a bin
+        # above the minimum it describes.
+        half = 0.5 * float(report.energies[1] - report.energies[0])
+        assert report.energies.min() - half <= report.deepest_energy + 1e-6
+        assert "well depth" in report.summary()
+
     def test_the_wall_distance_histogram_is_a_distribution(self):
         atoms = levesque_bundle(gap=6.0, diameter=REFERENCE_DIAMETER)
         report = analyse_porosity(atoms, samples=8000, area_points=40, seed=0)
