@@ -291,3 +291,57 @@ python -m carbonforge.adsorption.run <carpeta>/iso_10
 python informe.py <carpeta>                # la tabla, con las seis anteriores
 python figura.py                           # ancho_vs_exceso.png
 ```
+
+## El pozo de un surco: `surco.py`
+
+`curvatura.py` cerró el *por qué* del déficit por m² de las
+superestructuras — su superficie es sobre todo el EXTERIOR de un tubo, y
+una pared convexa tiene menos carbonos al alcance de un punto que una
+lámina plana de la misma densidad: **76.4 %** del pozo plano para un
+(6,6). Eso deja abierta la pregunta de diseño, porque el adsorbente de
+una superestructura no es una pared: donde dos tubos corren paralelos
+dejan un **surco**, y un punto en la hendidura ve dos paredes convexas a
+la vez. `surco.py` mide las tres geometrías con lo único distinto siendo
+la forma (mismo carbono, misma sonda, 77 K, mismo barrido).
+
+| hueco (Å) | rendija (K) | surco (K) | surco / rendija | surco / pared plana |
+|---|---|---|---|---|
+| 3.0 | vacía | -700.9 | -- | 155.4 % |
+| 3.4 | vacía | -696.6 | -- | 154.5 % |
+| 4.0 | vacía | -691.0 | -- | 153.2 % |
+| 5.0 | vacía | -691.9 | -- | 153.4 % |
+| 6.0 | -766.1 | -703.9 | 91.9 % | 156.1 % |
+| **7.0** | **-817.4** | -611.6 | 74.8 % | 135.6 % |
+| 8.0 | -604.5 | -413.6 | 68.4 % | 91.7 % |
+| 10.0 | -488.5 | -174.8 | 35.8 % | 38.8 % |
+| 12.0 | -463.9 | -81.9 | 17.7 % | 18.2 % |
+
+Pared plana suelta: **-451.0 K**. Pared convexa (6,6) suelta: -344.5 K.
+
+Dos conclusiones, y van en direcciones opuestas:
+
+* **El surco paga la convexidad con creces.** -700.9 K contra los
+  -344.5 de la pared desnuda: **2.03 veces**, y **155 %** de una lámina
+  plana. El déficit del 24 % que `curvatura.py` midió no es el final de
+  la cuenta; dos paredes convejas enfrentadas superan a una plana.
+* **Y sigue sin ganarle a una rendija bien elegida.** El mejor surco
+  (-703.9 K a 6 Å) es el **86 %** del mejor pozo de rendija (-817.4 K a
+  7 Å). La superestructura no es un adsorbente mejor que el carbón de
+  rendijas; es uno comparable con una red abierta, que es otro
+  argumento.
+
+**Dos cotas de barrido eran el resultado antes de arreglarlas**, y las
+dos daban números de la superficie equivocada:
+
+* El barrido de la rendija salía por la pared opuesta y encontraba su
+  mínimo en el **exterior de una bicapa**. Así una rendija de 3.0 Å
+  —que no admite nada— se informaba a -503.7 K. Acotado al interior,
+  sale `vacía`, que es la respuesta.
+* El del surco empezaba a 0.5 Å del eje de simetría, y con hueco ancho
+  el sitio más profundo **es el eje**: todos los huecos de 7 Å en
+  adelante informaban su mínimo exactamente en el suelo del barrido. El
+  surco se barre desde 0.
+
+```bash
+uv run python validacion_rendijas/surco.py
+```
