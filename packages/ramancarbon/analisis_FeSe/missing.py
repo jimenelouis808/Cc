@@ -5,8 +5,10 @@ the library which bundled phase puts a strong line at those angles, then
 actually refine the candidates in and see whether the fit moves.
 """
 import sys
-sys.path.insert(0, "/tmp/claude-0/-home-user-Cc/0495242d-7cd2-5e51-b6e4-d3296f40ec00/scratchpad/xrd")
-import numpy as np
+from pathlib import Path
+# common.py sits beside this script; the path this used to
+# carry was a scratch directory that does not exist.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 from common import load, library_map
 from ramancarbon.xrd.powder import reflections
 from ramancarbon.xrd.rietveld import PhaseModel, auto_refine

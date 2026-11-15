@@ -476,6 +476,16 @@ class EchemApp(SectionApp):
         ttk = self.ttk
         tab = ttk.Frame(self.notebook, padding=PAD["md"])
         self.notebook.add(tab, text="  Carga-descarga  ")
+        # The controls that decide what the whole tab reports go ABOVE
+        # the paned window, as the voltammetry tab's do, and not inside
+        # the pane that also holds a figure. Measured at 1366x768 with
+        # them inside it: three rows and a wrapped hint ask for 202 px
+        # of a 208 px pane body, the figure row was left with ONE, and
+        # its toolbar was never drawn. A pane has to be free to shrink;
+        # a row of comboboxes is not.
+        setup = ttk.Frame(tab)
+        setup.pack(fill="x", pady=(0, PAD["sm"]))
+
         paned, (top, middle, bottom) = split_column(tab, (3, 2, 2))
         paned.pack(fill="both", expand=True)
         outer, body = card(top, None)
@@ -484,11 +494,6 @@ class EchemApp(SectionApp):
 
         rate_card, rate_body = card(middle, "Capacitancia y capacidad de velocidad")
         rate_card.pack(fill="both", expand=True)
-        # The controls that decide what the whole tab reports, packed
-        # BEFORE the frame that expands: a fixed row after an expanding
-        # one gets whatever height is left, which is usually none.
-        setup = ttk.Frame(rate_body)
-        setup.pack(fill="x", pady=(0, PAD["sm"]))
         self.gcd_asymmetry_var = self.tk.StringVar(
             value=ASYMMETRY_LABELS[0][1])
         labelled(setup, "Si carga ≠ descarga", lambda p: ttk.Combobox(

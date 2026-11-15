@@ -5428,7 +5428,6 @@ class NanocarbonGUI:
         cancel flag, so running it on the Tk thread would freeze the
         window for exactly as long, with Cancel dead.
         """
-        tk, ttk = self.tk, self.ttk
         rlx = ttk.LabelFrame(parent, text="Relax geometry", padding=8)
         rlx.pack(fill="x", pady=(8, 0))
         self.btn_relax = ttk.Button(rlx, text="Relax the current structure",
@@ -5469,7 +5468,7 @@ class NanocarbonGUI:
             return
         try:
             bond = float(self.var_relax_bond.get())
-        except (self.tk.TclError, ValueError) as exc:
+        except (tk.TclError, ValueError) as exc:
             self._show_error("Invalid bond length", str(exc))
             return
 

@@ -293,13 +293,16 @@ class XPSApp(SectionApp):
         ttk.Button(elements_bar, text="Añadir",
                    command=self._add_element).pack(side="left",
                                                    padx=(0, PAD["xs"]))
-        buttons_bar = ttk.Frame(edit_body)
-        buttons_bar.pack(fill="x", pady=(PAD["xs"], 0))
-        ttk.Button(buttons_bar, text="Quitar el seleccionado",
-                   command=self._remove_element).pack(side="left",
-                                                      padx=(0, PAD["xs"]))
-        ttk.Button(buttons_bar, text="Restablecer",
-                   command=self._reset_elements).pack(side="left")
+        # A wrapping row, for the same reason the component buttons
+        # below are one: «Quitar el seleccionado» and «Restablecer» ask
+        # for 129 px between them and the column is narrower than that
+        # on a 1100 px window, so the second came out 57 px wide --
+        # present, and too small to press.
+        buttons_bar = flow(edit_body)
+        for text, command in (("Quitar el seleccionado", self._remove_element),
+                              ("Restablecer", self._reset_elements)):
+            buttons_bar.add(ttk.Button(buttons_bar.frame, text=text,
+                                       command=command))
         hint(edit_body,
              "Un elemento AÑADIDO a mano no tiene en el espectro la "
              "evidencia que el programa exige para afirmarlo, y su "

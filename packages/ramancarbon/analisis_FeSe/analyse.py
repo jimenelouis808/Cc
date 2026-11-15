@@ -6,9 +6,10 @@ should not be tied together.
 """
 import json
 import sys
+from pathlib import Path
 import time
 
-sys.path.insert(0, "/tmp/claude-0/-home-user-Cc/0495242d-7cd2-5e51-b6e4-d3296f40ec00/scratchpad/xrd")
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 import numpy as np
 from common import load, library_map
 from ramancarbon.xrd.heights import height_agreement

@@ -90,6 +90,22 @@ def split_column(parent, weights: Sequence[int] = (3, 2)):
     A paned window gives each pane a real share AND lets the user drag
     the boundary, which is the actual answer to "I cannot expand it".
 
+    **The weights alone do not do it**, which is the part this had wrong.
+    ttk's panedwindow hands every pane its REQUESTED size first and
+    divides only the surplus by weight, so a tab whose contents ask for
+    more than the window has gets no weighting at all -- the panes are
+    served in order and whatever is left over collapses. Measured on the
+    galvanostatic tab at 1366x768: three panes asking 577, 597 and 1004
+    px inside 720, allocated **1, 230 and 478**. The first pane held the
+    charge-discharge figure, and a pane one pixel tall does not draw its
+    toolbar at all, which is how this was found.
+
+    So the sashes are placed explicitly the first time the widget has a
+    real height, and again whenever it changes: each pane gets its
+    weighted share, with a floor of ``min_pane`` so a figure and its
+    toolbar always fit. Dragging still works -- the placement only runs
+    when the paned window's own height changes, not after a drag.
+
     Returns
     -------
     (ttk.PanedWindow, list[ttk.Frame])
@@ -103,7 +119,59 @@ def split_column(parent, weights: Sequence[int] = (3, 2)):
         frame = ttk.Frame(paned)
         paned.add(frame, weight=int(weight))
         panes.append(frame)
+    if len(panes) > 1:
+        _share_by_weight(paned, [int(w) for w in weights])
     return paned, panes
+
+
+#: Smallest pane `split_column` will leave, in pixels.
+#:
+#: A navigation toolbar is about 40 px and the figure under it needs to
+#: be worth looking at. Below this the pane is not small, it is gone --
+#: and a collapsed pane does not merely look bad, its canvas is never
+#: mapped and its toolbar never drawn.
+MIN_PANE_PX = 140
+
+
+def _share_by_weight(paned, weights: Sequence[int]) -> None:
+    """Place the sashes by weight whenever the pane's height changes.
+
+    Guarded on the height it last laid out for: setting a sash position
+    raises <Configure> on the children, and acting on every one of those
+    would place the sashes in a loop. It also leaves a user's drag
+    alone, because a drag does not change the paned window's own height.
+    """
+    state = {"height": 0}
+
+    def place(_event=None):
+        total = paned.winfo_height()
+        if total <= 1 or total == state["height"]:
+            return
+        state["height"] = total
+        count = len(weights)
+        floor = min(MIN_PANE_PX, total // count)
+        total_weight = sum(weights) or count
+        shares = [max(floor, int(total * w / total_weight)) for w in weights]
+        # The floors can add up to more than there is; take the excess
+        # off the panes that are above their floor, largest first.
+        excess = sum(shares) - total
+        while excess > 0:
+            room = [i for i, h in enumerate(shares) if h > floor]
+            if not room:
+                break
+            index = max(room, key=lambda i: shares[i])
+            take = min(excess, shares[index] - floor)
+            shares[index] -= take
+            excess -= take
+        position = 0
+        for index, height in enumerate(shares[:-1]):
+            position += height
+            try:
+                paned.sashpos(index, position)
+            except Exception:       # noqa: BLE001 - not yet mapped
+                return
+
+    paned.bind("<Configure>", place, add="+")
 
 
 def scrollable_column(parent, width: int = 280):

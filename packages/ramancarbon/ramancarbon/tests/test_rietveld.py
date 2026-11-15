@@ -126,6 +126,20 @@ def test_parameters_can_be_freed_one_group_at_a_time(two_phase):
     assert result.free_parameters == 1
 
 
+#: How much worse the staged protocol may come out and still count as
+#: "never worse", as a FRACTION of R_wp.
+#:
+#: The claim these two tests make is about the protocol, not about the
+#: last digit of a least-squares solve. An absolute 1e-9 on an R_wp of
+#: 0.0487 is 2e-8 relative -- tighter than the optimiser's own
+#: convergence -- and it duly failed on a different scipy: 0.048667120
+#: against 0.048667105, a difference of 3e-7 relative, while passing
+#: locally. This file's own tables show a protocol that really is worse
+#: differing in the THIRD decimal, so 1e-5 is three hundred times the
+#: observed noise and still two orders inside anything meaningful.
+STAGED_TOLERANCE = 1e-5
+
+
 def test_the_staged_protocol_is_never_worse_than_freeing_everything(two_phase):
     """The claim that survives a change of bounds.
 
@@ -167,7 +181,7 @@ def test_the_staged_protocol_is_never_worse_than_freeing_everything(two_phase):
     manual = refine(two_phase, phases, parameters=parameters)
 
     assert manual.free_parameters == staged.free_parameters
-    assert staged.r_wp <= manual.r_wp + 1e-9
+    assert staged.r_wp <= manual.r_wp * (1 + STAGED_TOLERANCE)
 
 
 def test_freeing_coordinates_from_scratch_is_never_better(two_phase):
@@ -201,7 +215,7 @@ def test_freeing_coordinates_from_scratch_is_never_better(two_phase):
     at_once = refine(two_phase, phases, parameters=parameters)
 
     assert at_once.free_parameters == staged.free_parameters
-    assert staged.r_wp <= at_once.r_wp + 1e-9
+    assert staged.r_wp <= at_once.r_wp * (1 + STAGED_TOLERANCE)
 
     # And the staged route's answer for the coordinate is the right one:
     # this pattern was built at the published z, so the refined shift

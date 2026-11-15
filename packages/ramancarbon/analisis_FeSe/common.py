@@ -1,5 +1,4 @@
 """Shared setup for the two samples."""
-import numpy as np
 from ramancarbon.xrd.io import read_pattern
 from ramancarbon.xrd.reference import load_library
 

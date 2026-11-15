@@ -147,11 +147,15 @@ def test_element_colouring_actually_separates_the_elements(app):
     app.on_build()
     _pump_until_idle(app.root, app)
 
-    app.var_colour_by.set("element")
+    # `var_preview_colour`, NOT `var_colour_by`: the render panel owns
+    # that second name and `_atom_colours` has never read it. Setting it
+    # left the preview on "element", so "plain" came back with two
+    # colours and the test failed about the app instead of about itself.
+    app.var_preview_colour.set("element")
     element = set(app._atom_colours(app._ring_of_atom()))
-    app.var_colour_by.set("ring")
+    app.var_preview_colour.set("ring")
     ring = set(app._atom_colours(app._ring_of_atom()))
-    app.var_colour_by.set("plain")
+    app.var_preview_colour.set("plain")
     plain = set(app._atom_colours(app._ring_of_atom()))
 
     assert "N" in app.atoms.get_chemical_symbols(), "the doping did not happen"

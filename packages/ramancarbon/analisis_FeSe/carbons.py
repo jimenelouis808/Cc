@@ -10,10 +10,10 @@ carbon model is being compared and not the background's inability to
 follow a fluorescence hump.
 """
 import sys
+from pathlib import Path
 from dataclasses import replace
 
-sys.path.insert(0, "/tmp/claude-0/-home-user-Cc/0495242d-7cd2-5e51-b6e4-d3296f40ec00/scratchpad/xrd")
-import numpy as np
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 from common import load, library_map
 from ramancarbon.xrd.rietveld import PhaseModel, auto_refine
 

@@ -6,7 +6,10 @@ profile ceiling or the carbon's scale.  So it is the one part of this
 analysis the fluorescence background cannot corrupt.
 """
 import sys
-sys.path.insert(0, "/tmp/claude-0/-home-user-Cc/0495242d-7cd2-5e51-b6e4-d3296f40ec00/scratchpad/xrd")
+from pathlib import Path
+# common.py sits beside this script; the path this used to
+# carry was a scratch directory that does not exist.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 import numpy as np
 from common import load
 from ramancarbon.xrd.search import find_peaks, identify_phases

@@ -1,7 +1,8 @@
 """Is S1's carbon graphite, or a turbostratic carbon?"""
-import sys, time
-sys.path.insert(0, "/tmp/claude-0/-home-user-Cc/0495242d-7cd2-5e51-b6e4-d3296f40ec00/scratchpad/xrd")
-import numpy as np
+import sys
+import time
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 from common import load, library_map
 from ramancarbon.xrd.rietveld import auto_refine, PhaseModel
 

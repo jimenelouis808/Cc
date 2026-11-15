@@ -45,6 +45,7 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any, Iterable, Sequence
 
+import numpy as np
 from ase import Atoms
 from ase.io import read, write
 
@@ -381,8 +382,14 @@ def run_isotherm(folder: str | Path,
     if porosity_options.get("radio_sonda_a") is not None:
         kwargs["probe_radius"] = float(porosity_options["radio_sonda_a"])
     report = analyse_porosity(atoms, **kwargs)
+    # Every ARRAY is dropped, rather than the two that existed when this
+    # was written. A distribution belongs in the report and not in a
+    # request's summary, and naming the fields meant that adding one --
+    # the wall-distance histogram, then the energy one -- wrote a
+    # `TypeError: Object of type ndarray is not JSON serializable` into
+    # a worker nobody was watching, hours after the folder was accepted.
     porosity = {k: v for k, v in asdict(report).items()
-                if k not in ("pore_diameters", "pore_histogram")}
+                if not isinstance(v, np.ndarray)}
     porosity["warnings"] = list(report.warnings)
 
     # The cheap refusal the whole module is ordered around: a framework
