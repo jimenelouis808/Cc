@@ -345,3 +345,81 @@ dos daban números de la superficie equivocada:
 ```bash
 uv run python validacion_rendijas/surco.py
 ```
+
+## ¿A qué presión llena cada geometría? `llenado.py`
+
+`curvatura.py` y `surco.py` miden la **profundidad** de un pozo. Eso no
+es la respuesta de diseño: lo que se elige es cuánto se adsorbe a la
+presión disponible, y a baja presión eso es la **pendiente inicial** de
+la isoterma — el coeficiente de Henry, que es una media de Widom sobre
+la celda vacía y cuesta segundos donde una isoterma cuesta días
+(`adsorption/henry.py`).
+
+Es el límite del **mismo** GCMC, no un segundo modelo: el mismo
+reservorio (`VirialGas.activity`) y el mismo par H₂-C con corrección de
+Feynman-Hibbs. `tests/test_adsorption_henry.py` fija las dos mitades de
+esa afirmación: a 1 kPa el GCMC cae sobre la tangente (6.03 moléculas
+frente a 6.19, un 2.5 %) y a 10 kPa ya se ha separado un 25 %, que es
+donde acaba el régimen lineal.
+
+Dos geometrías, un mando cada una, misma química:
+
+| | mejor pendiente | K_H (mol/kg/MPa) | pozo más profundo | q_st (kJ/mol) |
+|---|---|---|---|---|
+| rendija | H = 6.6 Å (canal 3.5 Å) | **8660 ± 50** | H = 6.4 Å | 7.81 |
+| haz de tubos (surcos) | hueco = 4.0 Å | 4252 ± 107 | hueco = 3.8 Å | **8.96** |
+
+**Las dos columnas no premian a la misma geometría, y eso es el
+resultado.**
+
+* **El surco gana en profundidad de pozo**, 8.96 contra 7.81 kJ/mol — y
+  gana por más de lo que `surco.py` sugería. La razón es geométrica y
+  corrige el encuadre de esa sección: el surco de un haz triangular es
+  una cuña de **tres** tubos, no de dos, y el punto en ella ve tres
+  paredes convexas. La hipótesis del surco queda confirmada en su mejor
+  versión.
+* **La rendija gana en pendiente por gramo**, 8660 contra 4252: un
+  factor **2.04**. Y el
+  motivo no es el pozo: `K_H` es **por kilogramo de armazón**, y un haz
+  gasta la mayor parte de su carbono en paredes de tubo que miran a un
+  interior vacío, mientras que en una rendija cada carbono da a un poro
+  que trabaja. **Sitios mejores, y menos de ellos por gramo.**
+
+Así que la respuesta a "¿llena antes una red abierta?" es **no** — pero
+por un factor 2, no por el 86 % que sugería comparar pozos de dos tubos,
+y el límite real no es la convexidad sino la **densidad de sitios por
+gramo**. Que es un problema distinto y con otra cura: no ensanchar el
+poro, sino adelgazar el armazón.
+
+Tres cosas que el barrido enseñó y que un barrido grueso habría
+escondido:
+
+* **`K_H` va como `exp(q_st/RT)` y `RT` es 0.64 kJ/mol a 77 K**, así que
+  un pozo 1.8 kJ/mol más profundo es un factor 16. La serie gruesa de
+  `construye.py` (6, 7, 8, 10, 14, 20 Å) **se salta el óptimo de la
+  rendija**: da 760 a 6.0 y 717 a 8.0 con 8660 en medio. Un barrido
+  demasiado grueso no desenfoca el óptimo, informa de otro adsorbente.
+* **El 6.0 Å del haz que usa la referencia no es su óptimo.** Levesque
+  probó 3.4 y 6.0 y encontró 6.0 mejor de los dos, lo cual es cierto;
+  el máximo está en 4.0 Å, con `K_H` 5.5 veces el de 6.0 (4252 contra 775). Las
+  isotermas ya corridas en este repositorio están todas en 6.0.
+* **El error propio de la media de Widom subestima el del haz.** Las
+  semillas coinciden al 1 % en una rendija y al 6 % en un haz cerca de
+  su pico, porque allí los sitios profundos son una fracción pequeña de
+  una celda grande. `llenado.py` corre dos semillas y publica la
+  separación entre ellas, no el error interno.
+
+Lo que esto **no** mide: super-grafeno ni supertubo. Esos llevan nodos,
+y un nodo no es ni surco ni rendija. El haz es el adsorbente de surcos
+en su forma idealizada —todo surco, ningún nodo— y, a diferencia de
+cualquier superestructura de este repositorio, tiene una isoterma
+publicada detrás (`validacion_GCMC/`).
+
+Tampoco mide una presión de media carga: eso necesita una carga de
+saturación, que sale de una isoterma y no del límite de cobertura cero.
+`HenryReport.half_filling_pressure` la calcula si se le da una, y dice
+que el supuesto de Langmuir es un supuesto.
+
+```bash
+uv run python validacion_rendijas/llenado.py
+```
