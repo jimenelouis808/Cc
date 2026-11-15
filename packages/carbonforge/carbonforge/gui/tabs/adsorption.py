@@ -29,6 +29,8 @@ from typing import Optional
 
 from ase import Atoms
 
+from carbonforge.gui.scroll import scrollable_column
+
 #: Temperatures with a published bulk reservoir. Offered as a menu rather
 #: than a free field because the virial is fitted to measured densities
 #: and these are the ones that exist; a typed 200 K would be refused
@@ -66,9 +68,13 @@ class AdsorptionTab:
         outer = ttk.Frame(parent, padding=8)
         outer.pack(fill="both", expand=True)
 
-        left = ttk.Frame(outer, width=360)
-        left.pack(side="left", fill="y", padx=(0, 8))
-        left.pack_propagate(False)
+        # The three numbered steps are taller than the window, so this
+        # column HAS to scroll: it used to be a fixed-width frame with
+        # `pack_propagate(False)`, which clipped steps 2 and 3 away with
+        # nothing on screen saying there was more below them.
+        column = ttk.Frame(outer)
+        column.pack(side="left", fill="y", padx=(0, 8))
+        left = scrollable_column(tk, ttk, column, width=360)
         right = ttk.Frame(outer)
         right.pack(side="right", fill="both", expand=True)
 
