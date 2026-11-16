@@ -58,6 +58,12 @@ RADII = (2.0, 3.0, 4.0, 5.0)
 #: about 4 A whatever the radius -- the range the slit optimum sits in.
 OFFSETS = (0.5, 2.0, 5.0, 10.0)
 
+#: A refinement pass takes absolute scales instead, because once the
+#: sound/collapsed boundary is bracketed the interesting question is
+#: where in that bracket it falls -- and on this grid it falls between
+#: scale 21 (sound, 337.3 deg) and 26 (collapsed, 325.2) at radius 4.
+#: Offsets above a floor cannot express that; absolute scales can.
+
 
 def main() -> int:
     if len(sys.argv) < 2:
@@ -66,10 +72,24 @@ def main() -> int:
     out = Path(sys.argv[1])
     out.mkdir(parents=True, exist_ok=True)
 
-    for radius in RADII:
+    radii, scales = RADII, None
+    if "--radio" in sys.argv:
+        radii = (float(sys.argv[sys.argv.index("--radio") + 1]),)
+    if "--escalas" in sys.argv:
+        scales = tuple(float(x) for x in
+                       sys.argv[sys.argv.index("--escalas") + 1].split(","))
+
+    for radius in radii:
         floor = 2.0 * (radius + BLEND) + FREE_TUBE
-        for offset in OFFSETS:
-            scale = floor + offset
+        wanted = scales if scales is not None else tuple(
+            floor + offset for offset in OFFSETS)
+        for scale in wanted:
+            if scale <= floor:
+                print(f"super-cubic_r{radius:g}_s{scale:g}: REFUSED -- "
+                      f"under the builder's own floor of {floor:.1f} A "
+                      f"at radius {radius:g} and blend {BLEND:g}",
+                      flush=True)
+                continue
             name = f"super-cubic_r{radius:g}_s{scale:g}"
             target = out / f"{name}.extxyz"
             record = out / f"{name}.json"
