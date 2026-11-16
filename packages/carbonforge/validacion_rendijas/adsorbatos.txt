@@ -1,0 +1,37 @@
+warning: The `UV_NATIVE_TLS` environment variable is deprecated and will be removed in a future release. Use `UV_SYSTEM_CERTS` instead.
+200000 inserciones x 2 semillas, cada adsorbato a la temperatura que lo pone en el estado del H2 a 77 K
+
+### H2  —  T = 77 K (T/Tc = 2.33), σ con C = 3.180 Å, ε = 32.0 K
+  rendija óptima: H = 6.6 Å, K_H = 8.66e+03 ± 50.2, q_st = 7.76 kJ/mol
+  aviso (super-cubic): the Widom average's own standard error is 6 % of it; raise `samples`. `exp(-beta U)` is dominated by the deepest points, so a cell that is mostly vacuum converges slowly.
+  aviso (super-cubic): the Widom average's own standard error is 7 % of it; raise `samples`. `exp(-beta U)` is dominated by the deepest points, so a cell that is mostly vacuum converges slowly.
+  super-cubic     K_H = 4.86e+03 ± 83.7, q_st =  8.85     0.56× la mejor rendija
+  super-square    K_H = 4.28e+03 ± 63.3, q_st =  8.47     0.49× la mejor rendija
+  super-graphene  K_H = 4.09e+03 ± 104, q_st =  8.60     0.47× la mejor rendija
+
+### Ne  —  T = 104 K (T/Tc = 2.33), σ con C = 3.096 Å, ε = 32.1 K
+  rendija óptima: H = 6.4 Å, K_H = 333 ± 1.43, q_st = 7.75 kJ/mol
+  super-cubic     K_H = 107 ± 2.25, q_st =  7.67     0.32× la mejor rendija
+  super-square    K_H = 107 ± 0.343, q_st =  7.48     0.32× la mejor rendija
+  super-graphene  K_H = 101 ± 2.32, q_st =  7.52     0.30× la mejor rendija
+
+### Ar  —  T = 352 K (T/Tc = 2.33), σ con C = 3.404 Å, ε = 57.9 K
+  rendija óptima: H = 7.0 Å, K_H = 6.32 ± 0.0237, q_st = 17.56 kJ/mol
+  super-cubic     K_H = 3.4 ± 0.0204, q_st = 14.99     0.54× la mejor rendija
+  super-square    K_H = 3.45 ± 0.00757, q_st = 15.80     0.55× la mejor rendija
+  super-graphene  K_H = 3.22 ± 0.0384, q_st = 15.84     0.51× la mejor rendija
+
+### CH4  —  T = 445 K (T/Tc = 2.33), σ con C = 3.566 Å, ε = 64.4 K
+  aviso (rendija 6.0): the Boltzmann-weighted mean energy is not negative, so this framework does not bind hydrogen at all at this temperature.
+  rendija óptima: H = 7.4 Å, K_H = 4.33 ± 0.0155, q_st = 21.26 kJ/mol
+  super-cubic     K_H = 2.56 ± 0.00183, q_st = 19.01     0.59× la mejor rendija
+  super-square    K_H = 2.53 ± 0.00986, q_st = 20.12     0.59× la mejor rendija
+  super-graphene  K_H = 2.36 ± 0.0295, q_st = 20.06     0.54× la mejor rendija
+
+### N2  —  T = 295 K (T/Tc = 2.33), σ con C = 3.550 Å, ε = 51.6 K
+  aviso (rendija 6.0): the Boltzmann-weighted mean energy is not negative, so this framework does not bind hydrogen at all at this temperature.
+  rendija óptima: H = 7.4 Å, K_H = 16.9 ± 0.0624, q_st = 16.49 kJ/mol
+  super-cubic     K_H = 9.6 ± 0.02, q_st = 17.19     0.57× la mejor rendija
+  super-square    K_H = 9.77 ± 0.0487, q_st = 17.27     0.58× la mejor rendija
+  super-graphene  K_H = 9.03 ± 0.138, q_st = 17.12     0.53× la mejor rendija
+

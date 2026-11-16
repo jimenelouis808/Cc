@@ -584,3 +584,60 @@ razón que el test existía para cazar.
 ```bash
 uv run python validacion_rendijas/adsorbatos.py <carpeta>
 ```
+
+### El resultado: ningún adsorbato rescata a las superredes
+
+| adsorbato | T (K) | σ con C (Å) | H óptimo (Å) | K_H rendija | mejor superred | razón |
+|---|---|---|---|---|---|---|
+| Ne | 104 | 3.096 | 6.4 | 333 | súper-cúbico 107 | **0.32×** |
+| H₂ | 77 | 3.180 | 6.6 | 8660 | súper-cúbico 4862 | **0.56×** |
+| Ar | 352 | 3.404 | 7.0 | 6.32 | súper-cuadrado 3.45 | **0.55×** |
+| N₂ | 295 | 3.550 | 7.4 | 16.9 | súper-cuadrado 9.77 | **0.58×** |
+| CH₄ | 445 | 3.566 | 7.4 | 4.33 | súper-cúbico 2.56 | **0.59×** |
+
+(Las `K_H` **no son comparables entre filas**: cada una está a su
+propia temperatura, y `K_H` depende exponencialmente de ella. Lo
+comparable es la razón dentro de cada fila.)
+
+**La hipótesis era que una molécula mayor cerraría la brecha. No la
+cierra.** La razón se queda entre 0.3 y 0.6 a lo largo de un rango de
+σ de 3.10 a 3.57 Å — sube de 0.56 a 0.59 del H₂ al CH₄, que es ruido
+al lado del factor 2 que haría falta.
+
+Y el barrido dice por qué, con una regularidad que no esperaba:
+
+```
+H_óptimo = 2.13 σ − 0.19      (r = 0.997 sobre los cinco)
+```
+
+**El óptimo de la rendija es el que aloja exactamente una capa
+molecular, y ese ancho existe para cualquier molécula.** La rendija
+tiene un parámetro libre y se reajusta a lo que se le dé; el canal de
+una superred está fijado por la geometría de su nodo en 18–20 Å —cinco
+capas moleculares— y no se reajusta a nada. La comparación nunca fue
+«superred contra rendija», fue «superred contra la mejor rendija *para
+esta molécula*», y la rendija siempre tiene una.
+
+El Ne es el caso que lo confirma por el otro lado: es **más pequeño**
+que el H₂, estrecha el óptimo a 6.4 Å y hunde la razón a 0.32. Si el
+tamaño manda, tiene que empeorar al encoger, y empeora.
+
+**Así que la pregunta estaba mal dirigida, y la propia respuesta dice
+hacia dónde.** Lo que le falta a la superred no es un adsorbato
+distinto: es su propio parámetro libre. `scale` y `tube_radius` son
+argumentos de `build_supernetwork`, y el canal de 20 Å del
+súper-cúbico sale de `scale=34, tube_radius=5`, que es un preset, no
+un óptimo. Estrechar la celda hacia su mínimo construible es
+exactamente el ajuste que la rendija ya disfruta, y es lo único
+medido aquí que podría cambiar la tabla. Eso sí hay que probarlo
+—cada celda es una construcción de minutos— pero es una búsqueda en un
+parámetro, no en el catálogo.
+
+Sobre la elección de adsorbatos: el **Ar** es el único donde un solo
+centro Lennard-Jones no es aproximación ninguna; el **CH₄** es el
+átomo unido estándar y es buen modelo; el **N₂** de un solo centro
+pierde su elongación y su cuadrupolo, así que vale para la tendencia y
+no para citar un número suyo. El **CO₂** no está, y no por descuido.
+
+El súper-fcc se dejó fuera a propósito: con H₂ ya pierde un factor 7
+por su canal de 7.3 Å, y una molécula mayor sólo puede empeorarlo.
