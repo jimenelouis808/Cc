@@ -38,6 +38,7 @@ script reports `K_H` and `q_st` and not an excess density.
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -128,6 +129,33 @@ def embed(atoms: Atoms) -> tuple[Atoms, list[int], float]:
     return big, repeat, GAP if free else 0.0
 
 
+def soundness(source: Path) -> tuple[bool | None, float | None]:
+    """``(collapsed, angle_sum_min)`` from the builder's json, if any.
+
+    The check itself lives in `nanocarbon_lab` and the packages do not
+    import each other, so the verdict travels in the json beside the
+    extxyz and this reads it. Without it this script measures whatever
+    it is handed and cannot tell a tuned cell from a pinched one --
+    which matters because a pinched tube IS a narrow slit and offers
+    spuriously deep sites. Measured on the super-cubic grid, the cell
+    with the HIGHEST coefficient of ten (23128 against the best slit's
+    8660) had an angle sum of 325.2 deg, past tetrahedral, so it is
+    not a hybridisation at all.
+
+    `None` means the json says nothing about it -- an older handoff --
+    and the row is reported with that stated rather than assumed
+    sound.
+    """
+    record = source.with_suffix(".json")
+    if not record.exists():
+        return None, None
+    try:
+        data = json.loads(record.read_text())
+    except (OSError, ValueError):
+        return None, None
+    return data.get("collapsed"), data.get("angle_sum_min")
+
+
 def measure(atoms: Atoms, label: str, samples: int = SAMPLES) -> dict:
     """Henry coefficient, heat and channel, as `llenado.py` reports them."""
     runs = [henry_constant(atoms, temperature=TEMPERATURE, samples=samples,
@@ -166,7 +194,10 @@ def main() -> int:
     for source in sources:
         atoms = read(str(source))
         big, repeat, gap = embed(atoms)
+        collapsed, angle_sum = soundness(source)
         row = measure(big, source.stem, samples=samples)
+        row["collapsed"] = collapsed
+        row["angle_sum_min"] = angle_sum
         row["repeticion"] = repeat
         row["hueco_a"] = gap
         row["atomos_uno"] = len(atoms)
@@ -176,14 +207,33 @@ def main() -> int:
 
     print(f"\nH2 a {TEMPERATURE:.0f} K, límite de cobertura cero, "
           f"{samples} inserciones x {len(SEEDS)} semillas\n")
-    print("| estructura | átomos | canal (Å) | área (m²/g) | "
-          "K_H (mol/kg/MPa) | q_st (kJ/mol) |")
-    print("|---|---|---|---|---|---|")
-    for row in sorted(rows, key=lambda r: -r["k_h"]):
-        print(f"| {row['nombre']} | {row['atomos']} | "
-              f"{row['canal_a']:.2f} | {row['area_m2_g']:.0f} | "
-              f"{row['k_h']:.0f} ± {row['k_h_error']:.0f} | "
-              f"{row['q_st']:.2f} |")
+    # Sound and collapsed are listed SEPARATELY rather than ranked
+    # together, because a collapsed wall's coefficient is not a worse
+    # answer to the same question -- it is an answer about a different
+    # structure, and ranking the two in one table invites quoting the
+    # top row.
+    for heading, wanted in (("sanas", False), ("colapsadas", True),
+                            ("sin veredicto", None)):
+        family = [r for r in rows if r["collapsed"] is wanted]
+        if not family:
+            continue
+        print(f"#### {heading}")
+        if wanted:
+            print("La pared está doblada más que un carbono tetraédrico "
+                  "(328.4°), así que es un tubo pinzado — una rendija "
+                  "estrecha con otro nombre. **Estos K_H no son del "
+                  "diseño que se pedía.**")
+        print("| estructura | átomos | canal (Å) | área (m²/g) | "
+              "K_H (mol/kg/MPa) | q_st (kJ/mol) | ángulo mín (°) |")
+        print("|---|---|---|---|---|---|---|")
+        for row in sorted(family, key=lambda r: -r["k_h"]):
+            angle = ("—" if row["angle_sum_min"] is None
+                     else f"{row['angle_sum_min']:.1f}")
+            print(f"| {row['nombre']} | {row['atomos']} | "
+                  f"{row['canal_a']:.2f} | {row['area_m2_g']:.0f} | "
+                  f"{row['k_h']:.0f} ± {row['k_h_error']:.0f} | "
+                  f"{row['q_st']:.2f} | {angle} |")
+        print()
 
     for row in rows:
         for warning in row["avisos"]:

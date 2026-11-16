@@ -7,9 +7,15 @@ Parameters are the shipped presets, not invented ones -- the audit in
 nanocarbon_lab/CLAUDE.md is at these numbers and super-fcc at any other
 scale runs for an hour and a half.
 """
-import json, sys, time
+from __future__ import annotations
+
+import json
+import sys
+import time
 from pathlib import Path
+
 from ase.io import write
+
 from nanocarbon_lab.builders.supernetwork import build_supernetwork
 
 OUT = Path(sys.argv[1])
