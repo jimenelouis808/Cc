@@ -45,7 +45,7 @@ import numpy as np
 from ase import Atoms
 from scipy.spatial import cKDTree
 
-from .potentials import H2_C
+from .potentials import H2_C, PairParameters
 
 #: Avogadro's number.
 AVOGADRO: float = 6.02214076e23
@@ -363,8 +363,12 @@ def analyse_porosity(
 def _framework_energy(
     points: np.ndarray, tree: cKDTree, edges: np.ndarray,
     temperature: float, cutoff: float = 12.0,
+    pair: PairParameters | None = None,
 ) -> np.ndarray:
-    """H2-framework potential energy at each point, in kelvin.
+    """Adsorbate-framework potential energy at each point, in kelvin.
+
+    `pair` defaults to :data:`~.potentials.H2_C`, so every caller that
+    does not name an adsorbate keeps measuring hydrogen.
 
     The same pair parameters and the same Feynman-Hibbs correction the
     Monte Carlo uses, at the temperature asked for, so this is the
@@ -377,6 +381,7 @@ def _framework_energy(
     """
     from .potentials import H2_C, feynman_hibbs
 
+    pair = H2_C if pair is None else pair
     wrapped = np.mod(points, edges)
     np.clip(wrapped, 0.0, np.nextafter(edges, 0.0), out=wrapped)
     neighbours = tree.query_ball_point(wrapped, cutoff)
@@ -387,7 +392,7 @@ def _framework_energy(
         delta = tree.data[near] - point
         delta -= edges * np.round(delta / edges)
         r = np.maximum(np.linalg.norm(delta, axis=1), 1e-6)
-        out[index] = float(np.sum(feynman_hibbs(r, H2_C, temperature)))
+        out[index] = float(np.sum(feynman_hibbs(r, pair, temperature)))
     return out
 
 

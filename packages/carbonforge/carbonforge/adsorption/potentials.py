@@ -83,12 +83,25 @@ class PairParameters:
     source
         Where the numbers come from. Carried so a reproduced isotherm
         can say which parameter set produced it.
+    critical_temperature
+        The molecule's own critical temperature in kelvin, or 0 when it
+        is not known or the pair is a cross pair rather than a fluid.
+        It is carried because the adsorption code has to know whether
+        the reservoir is a gas at all: below it the fluid condenses,
+        a pore fills by capillary condensation rather than adsorption,
+        and a zero-coverage limit is a tangent to an isotherm whose
+        linear stretch ends at the saturation pressure -- which can be
+        many orders of magnitude below anything anybody would run.
+        That is why 77 K is the temperature for hydrogen (critical at
+        33 K, so comfortably a gas) and is **not** a temperature at
+        which argon, nitrogen or methane can be compared with it.
     """
 
     epsilon: float
     sigma: float
     reduced_mass: float
     source: str = ""
+    critical_temperature: float = 0.0
 
 
 #: H2-H2, Levesque 2002 §2: ε/k = 36.7 K, σ = 2.958 Å. The reduced mass
@@ -97,6 +110,7 @@ class PairParameters:
 H2_H2 = PairParameters(
     epsilon=36.7, sigma=2.958, reduced_mass=MASS_H2 / 2.0,
     source="Levesque et al., J. Phys.: Condens. Matter 14 (2002) 9285, §2",
+    critical_temperature=32.98,
 )
 
 #: H2-C, same source: ε/k = 32.05 K, σ = 3.18 Å. The framework is rigid,
@@ -105,6 +119,164 @@ H2_C = PairParameters(
     epsilon=32.05, sigma=3.18, reduced_mass=MASS_H2,
     source="Levesque et al., J. Phys.: Condens. Matter 14 (2002) 9285, §2",
 )
+
+
+#: Masses of the other adsorbates offered, in amu.
+MASS_AR: float = 39.948
+MASS_NE: float = 20.1797
+MASS_CH4: float = 16.043
+MASS_N2: float = 28.0134
+
+
+def carbon_self() -> PairParameters:
+    """The framework carbon's OWN Lennard-Jones pair, derived not quoted.
+
+    Lorentz-Berthelot says a cross pair is ``sqrt(e1 e2)`` and
+    ``(s1 + s2)/2``, so :data:`H2_C` and :data:`H2_H2` between them
+    already fix carbon: ``e_C = e_H2C^2 / e_H2`` and
+    ``s_C = 2 s_H2C - s_H2``. That returns 27.99 K and 3.402 A, which
+    is the graphite parameter set the whole literature uses -- and
+    arriving at it this way means a second copy of those numbers
+    cannot drift from the two pairs the validated isotherm was
+    computed with.
+
+    The reduced mass is carbon's, and is unused: the framework is
+    rigid, so every Feynman-Hibbs term here takes the adsorbate's mass
+    (the wall does not recoil).
+    """
+    return PairParameters(
+        epsilon=H2_C.epsilon ** 2 / H2_H2.epsilon,
+        sigma=2.0 * H2_C.sigma - H2_H2.sigma,
+        reduced_mass=MASS_C,
+        source="Lorentz-Berthelot, inverted from H2_C and H2_H2",
+    )
+
+
+#: H2's reduced temperature at the 77 K everything in this repository
+#: is measured at: 77 / 32.98. Comparing adsorbates means comparing
+#: them at the SAME reduced temperature, or the comparison mixes the
+#: molecule with the thermodynamic state it is in.
+H2_REDUCED_AT_77: float = 77.0 / 32.98
+
+
+def matched_temperature(adsorbate: PairParameters,
+                        reduced: float = H2_REDUCED_AT_77) -> float:
+    """The temperature putting `adsorbate` at reduced temperature `reduced`.
+
+    Hydrogen at 77 K sits at ``T/T_c = 2.33``, well clear of
+    condensation. Argon, nitrogen and methane at 77 K are all BELOW
+    their critical temperatures, so at that temperature they are not
+    the same kind of fluid and a Henry coefficient compared across them
+    would be reporting the state, not the molecule. This returns the
+    temperature at which each is in the state hydrogen is in at 77 K.
+
+    It is the comparison that isolates **size**, which is the design
+    question. It is not an application temperature: methane matched to
+    hydrogen's 77 K lands at 445 K, and nobody stores methane there.
+    """
+    if adsorbate.critical_temperature <= 0.0:
+        raise ValueError(
+            "this pair carries no critical temperature, so there is no "
+            "reduced temperature to match. Set `critical_temperature` "
+            "on it, or pass the temperature you want directly.")
+    return reduced * adsorbate.critical_temperature
+
+
+def with_carbon(adsorbate: PairParameters) -> PairParameters:
+    """The adsorbate-carbon cross pair, by Lorentz-Berthelot.
+
+    The reduced mass is carried straight through from `adsorbate`,
+    because against a rigid framework it is the molecule's own mass --
+    the wall does not recoil.
+
+    **So the pair handed in must carry the molecular mass, not a
+    fluid-fluid reduced mass**, and that is a trap worth stating: a
+    self-pair describing two molecules colliding takes half the
+    molecular mass, and :data:`H2_H2` is exactly such a pair (Levesque
+    defines its ``m_r`` as "the reduced mass of a pair of hydrogen
+    molecules"). Handing that one in gives 1.008 amu where the wall
+    pair wants 2.016, and the Feynman-Hibbs term goes as ``1/mu``, so
+    the correction comes out **twice** what it should -- invisible in
+    the shape of every output it touches, which is the same way the
+    ``hbar^2/k_B`` constant was once wrong by three.
+    :data:`H2_SELF` is the entry to use against a wall, and a test
+    pins that ``with_carbon(H2_SELF)`` reproduces :data:`H2_C`
+    exactly, masses included.
+    """
+    carbon = carbon_self()
+    return PairParameters(
+        epsilon=float(np.sqrt(adsorbate.epsilon * carbon.epsilon)),
+        sigma=0.5 * (adsorbate.sigma + carbon.sigma),
+        reduced_mass=adsorbate.reduced_mass,
+        source=f"Lorentz-Berthelot of ({adsorbate.source}) with carbon",
+    )
+
+
+#: H2 against a WALL: the same well and diameter as :data:`H2_H2` with
+#: the molecular mass in place of the fluid-fluid reduced one. See
+#: :func:`with_carbon` for why the two cannot be the same object.
+H2_SELF = PairParameters(
+    epsilon=H2_H2.epsilon, sigma=H2_H2.sigma, reduced_mass=MASS_H2,
+    source=H2_H2.source + " (molecular mass, for a rigid wall)",
+    critical_temperature=H2_H2.critical_temperature,
+)
+
+#: Argon, Ar-Ar. The benchmark adsorbate, and the one case where a
+#: single Lennard-Jones centre is not an approximation at all: argon is
+#: a sphere. Rowley/standard values, which every simulation of argon on
+#: graphite uses.
+AR_AR = PairParameters(
+    epsilon=119.8, sigma=3.405, reduced_mass=MASS_AR,
+    source="standard Ar Lennard-Jones (eps/k 119.8 K, sigma 3.405 A)",
+    critical_temperature=150.69,
+)
+
+#: Neon, Ne-Ne. Here as the light-but-not-hydrogen case: its well is
+#: H2's almost exactly while its mass is ten times larger, so it
+#: separates "deep well" from "quantum" in any result that moves.
+NE_NE = PairParameters(
+    epsilon=36.8, sigma=2.789, reduced_mass=MASS_NE,
+    source="standard Ne Lennard-Jones (eps/k 36.8 K, sigma 2.789 A)",
+    critical_temperature=44.49,
+)
+
+#: Methane, as ONE united-atom site -- the TraPPE-UA value. Methane is
+#: nearly spherical and this is the standard coarse-graining of it, so
+#: a single centre is a good model rather than a resigned one.
+CH4_CH4 = PairParameters(
+    epsilon=148.0, sigma=3.73, reduced_mass=MASS_CH4,
+    source="TraPPE-UA methane (eps/k 148 K, sigma 3.73 A)",
+    critical_temperature=190.56,
+)
+
+#: Nitrogen as one site, which is an APPROXIMATION and is offered with
+#: that said. N2 is elongated (bond 1.10 A) and carries a quadrupole;
+#: a single centre keeps neither, so it misses how the molecule lies
+#: against a wall and how it packs in a pore of its own width. Useful
+#: for a trend across molecule sizes, not for a number to quote.
+N2_N2 = PairParameters(
+    epsilon=95.05, sigma=3.698, reduced_mass=MASS_N2,
+    source="one-site N2 (eps/k 95.05 K, sigma 3.698 A) -- NO quadrupole, "
+           "NO elongation; a trend, not a prediction",
+    critical_temperature=126.19,
+)
+
+#: The adsorbates this module offers against carbon, by name.
+#:
+#: **CO2 is deliberately absent.** It is linear and strongly
+#: quadrupolar, and its interaction with a carbon wall is dominated by
+#: that quadrupole -- a single Lennard-Jones centre does not
+#: approximate CO2, it replaces it with a different molecule. Adding a
+#: one-site CO2 here would produce numbers that look like the others
+#: and mean much less, so it needs a multi-site potential first. Build
+#: a :class:`PairParameters` by hand if you want to try one anyway.
+ADSORBATES: dict[str, PairParameters] = {
+    "H2": H2_SELF,
+    "Ne": NE_NE,
+    "Ar": AR_AR,
+    "CH4": CH4_CH4,
+    "N2": N2_N2,
+}
 
 
 def lennard_jones(r: np.ndarray, pair: PairParameters) -> np.ndarray:

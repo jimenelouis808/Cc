@@ -498,3 +498,89 @@ colapsada.
 #   python construye_super.py <carpeta>
 uv run python validacion_rendijas/llenado_super.py <carpeta> 1000000
 ```
+
+## Otros adsorbatos: `adsorbatos.py`
+
+La rendija que gana a 6.6 Å gana **porque es estrecha**: un canal de
+3.55 Å, apenas más que el diámetro del propio H₂, con las dos paredes
+al alcance a la vez. Un adsorbato más grande no cabe ahí, la rendija
+tiene que abrirse para alojarlo y al abrirse sus dos paredes dejan de
+actuar juntas. Los canales de las superredes son de 18–20 Å y no se
+enteran. **Así que una molécula mayor debería cerrar la brecha**, y la
+pregunta es si la cierra lo suficiente.
+
+### Hay que comparar a temperatura REDUCIDA igualada, no a la misma temperatura
+
+Esto es la mitad del trabajo y es donde estaba la trampa. 77 K le va al
+hidrógeno porque su temperatura crítica son 33 K: es gas por un factor
+2.33. **El Ar, el N₂ y el CH₄ a 77 K están todos por debajo de su
+crítica** (151, 126 y 191 K), así que ahí el poro no adsorbe, se llena
+por condensación capilar, y una pendiente de cobertura cero es la
+tangente a una isoterma cuyo tramo lineal acaba en la presión de
+saturación — del orden de 10⁻⁵ Pa para el metano. Medido a 77 K de
+todos modos, el CH₄ da **1.6×10¹⁰ mol/kg/MPa** contra los 714 del H₂:
+un número sobre el estado, no sobre la molécula.
+
+`potentials.matched_temperature` pone cada uno donde está el H₂ a 77 K
+(Ne 104 K, N₂ 295 K, Ar 352 K, CH₄ 445 K), y `henry_constant` **avisa**
+cuando se le pide una temperatura por debajo de la crítica del
+adsorbato. Eso no es una temperatura de aplicación —nadie almacena
+metano a 445 K— es la comparación que aísla la **geometría**, que es la
+pregunta de diseño. La respuesta de ingeniería necesita cada adsorbato
+a su temperatura de trabajo, y es otra tabla.
+
+### El carbono sale de lo que ya había, y una trampa de masa
+
+Lorentz-Berthelot invertido sobre `H2_C` y `H2_H2` fija el carbono:
+ε = 27.99 K, σ = 3.402 Å, que es el juego de parámetros de grafito de
+toda la literatura. Derivarlo así en vez de copiarlo significa que no
+puede desviarse de los dos pares con los que se calculó la isoterma
+validada, y `with_carbon(H2_SELF)` reproduce `H2_C` exacto.
+
+**`H2_H2` lleva la masa reducida de un par de moléculas (la mitad),
+porque describe dos moléculas chocando.** Contra una pared rígida la
+masa es la de la molécula: la pared no retrocede. El término de
+Feynman-Hibbs va como `1/μ`, así que pasar `H2_H2` donde va `H2_SELF`
+duplica la corrección cuántica — invisible en la forma de todo lo que
+toca, igual que la constante `ħ²/k_B` que una vez estuvo mal por tres.
+`H2_SELF` existe para eso y un test fija la diferencia.
+
+### Y el fallo que esto destapó: el recorte tiene que llegar a las dos sumas
+
+Una inserción solapada tiene energía finita pero astronómica (10²⁰ K y
+más, del término r⁻¹²). El peso de Boltzmann se calcula con la energía
+**recortada**, y la media ponderada usaba la energía **sin recortar**:
+un número que se desvanece multiplicado por uno enorme. A 77 K el
+factor es `exp(-130)` y el producto desaparece; a 352 K es `exp(-28)` y
+no, y el pozo medio salió **-4.6×10⁹ kJ/mol**. O sea que el fallo era
+invisible a la única temperatura a la que se había medido nada en este
+repositorio, y apareció en el primer adsorbato que exigió otra.
+
+Tres cosas se arreglaron a la vez, y las tres eran la misma
+negligencia:
+
+* el recorte (`henry.ENERGY_CAP`) se aplica una vez y alimenta las dos
+  sumas;
+* el guardia de calor implausible leía `heat > limite` y el fallo
+  producía **-4.6e9**, así que no lo veía: un guardia de cordura que
+  sólo mira hacia un lado no es un guardia;
+* `adsorbatos.py` descartaba todos los avisos del informe salvo el de
+  la crítica — y el aviso que sí saltó («no liga nada») era
+  exactamente éste. Los avisos de un informe son parte de su
+  resultado, y ahora se imprimen.
+
+Un test mide ahora `q_st` para los cinco adsorbatos a su temperatura
+igualada y exige que caiga en un rango físico, que es la prueba que
+faltaba: todo estaba medido a una sola temperatura.
+
+**Y un test estaba verde por culpa del fallo.** `test_the_temperature_
+enters_twice` afirmaba que `q_st` baja al subir la temperatura; es
+falso, porque `q_st = -<U> + RT` y `RT` pasa de 0.64 kJ/mol a 77 K a
+2.44 a 293, así que el calor **sube** mientras el pozo ponderado se
+hace más profundo al enfriar (-573 K contra -550 K). Pasaba porque el
+desbordamiento sin recortar envenenaba el caso caliente — verde por la
+razón que el test existía para cazar.
+
+```bash
+uv run python validacion_rendijas/adsorbatos.py <carpeta>
+```

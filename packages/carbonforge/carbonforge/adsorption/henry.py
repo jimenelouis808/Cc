@@ -60,10 +60,18 @@ import numpy as np
 from ase import Atoms
 from scipy.spatial import cKDTree
 
-from .bulk import VirialGas, fit_virial
 from .gcmc import AVOGADRO, CUTOFF
 from .porosity import _edges, _framework_energy
-from .potentials import MASS_C, MASS_H2
+from .potentials import (
+    H2_SELF,
+    MASS_C,
+    MASS_H2,
+    PairParameters,
+    with_carbon,
+)
+
+#: Boltzmann's constant in J/K, for the ideal-gas activity.
+BOLTZMANN: float = 1.380649e-23
 
 #: Gas constant in kJ/(mol K), for the isosteric heat.
 GAS_CONSTANT_KJ: float = 8.314462618e-3
@@ -72,6 +80,14 @@ GAS_CONSTANT_KJ: float = 8.314462618e-3
 #: the report says so. `exp(-beta U)` is dominated by the deepest few
 #: points, so a cell that is mostly vacuum needs many samples.
 ERROR_LIMIT: float = 0.05
+
+#: Energies past this, in kelvin, are overlaps rather than states: the
+#: Boltzmann factor of 1e4 K is exp(-130) at 77 K and exp(-28) at
+#: 352 K, so in neither case does such a point contribute. It is
+#: applied to the energy BEFORE the weight and before the weighted
+#: mean, and using it in only one of the two is what produced a mean
+#: well depth of -4.6e9 kJ/mol at 352 K.
+ENERGY_CAP: float = 1.0e4
 
 #: Points per block when the energies are evaluated. The neighbour
 #: lists of a whole sample at once are what runs out of memory: a
@@ -178,7 +194,7 @@ def henry_constant(
     temperature: float = 77.0,
     samples: int = 200_000,
     cutoff: float = CUTOFF,
-    gas: VirialGas | None = None,
+    adsorbate: PairParameters | None = None,
     seed: int = 0,
     chunk: int = CHUNK,
 ) -> HenryReport:
@@ -202,11 +218,15 @@ def henry_constant(
         Pair cutoff in Å. Must be at most half the shortest cell edge,
         for the reason the GCMC refuses it otherwise: above that the
         minimum image is not the only image inside the cutoff.
-    gas
-        The reservoir. Defaults to the virial fitted at `temperature`;
-        it is used only to convert a slope into pressure units, and the
-        Henry coefficient is a zero-pressure limit where fugacity and
-        pressure coincide.
+    adsorbate
+        The molecule's SELF pair, which is crossed with carbon by
+        Lorentz-Berthelot here. Defaults to
+        :data:`~.potentials.H2_SELF`, which reproduces
+        :data:`~.potentials.H2_C` exactly, so leaving it out measures
+        hydrogen with the pair the validated isotherm used.
+        :data:`~.potentials.ADSORBATES` holds the ones offered; note
+        that each is a SINGLE Lennard-Jones centre, which is exact for
+        argon, good for methane and an approximation for nitrogen.
     seed
         For the insertion points.
     chunk
@@ -233,7 +253,7 @@ def henry_constant(
         raise ValueError("an empty cell has no framework to adsorb on")
 
     warnings: list[str] = []
-    gas = gas if gas is not None else fit_virial(temperature)
+    pair = with_carbon(H2_SELF if adsorbate is None else adsorbate)
 
     rng = np.random.default_rng(seed)
     points = rng.random((samples, 3)) * edges
@@ -249,13 +269,23 @@ def henry_constant(
     for start in range(0, samples, max(1, chunk)):
         block = points[start:start + max(1, chunk)]
         energy = _framework_energy(block, tree, edges, temperature,
-                                   cutoff=cutoff)
-        weight = np.exp(-beta * np.clip(energy, -1e4, 1e4))
+                                   cutoff=cutoff, pair=pair)
+        # Clipped ONCE and used for both sums, which is the whole
+        # point: an overlap's energy is finite but astronomic (1e20 K
+        # and up), and weighting the UNCLIPPED value by a Boltzmann
+        # factor computed from the clipped one is a product of a
+        # vanishing number with an enormous one. At 77 K the factor is
+        # exp(-130) and kills it; at 352 K it is exp(-28), and the
+        # weighted mean energy came back as -4.6e9 kJ/mol. The bug was
+        # therefore invisible at the only temperature anything had
+        # been measured at.
+        clipped = np.clip(energy, -ENERGY_CAP, ENERGY_CAP)
+        weight = np.exp(-beta * clipped)
         finite = np.isfinite(energy)
         weight[~finite] = 0.0
         total += float(weight.sum())
         total_squared += float(np.square(weight).sum())
-        total_weighted += float(np.sum(weight[finite] * energy[finite]))
+        total_weighted += float(np.sum(weight[finite] * clipped[finite]))
 
     average = total / samples
     if samples > 1:
@@ -270,23 +300,50 @@ def henry_constant(
     # <U> weighted by the same factor: the well a molecule sits in.
     mean_energy = total_weighted / total if total > 0.0 else 0.0
 
-    # Loading per unit pressure. <N> = a(P) V <exp(-bU)> with the
-    # activity in inverse cubic angstrom, exactly as the GCMC uses it,
-    # so this is that simulation's own low-pressure limit.
+    # Loading per unit pressure. <N> = a(P) V <exp(-bU)>, with the
+    # activity `beta f` in inverse cubic angstrom exactly as the GCMC
+    # uses it, so this is that simulation's own low-pressure limit.
+    #
+    # And in that limit the reservoir is the SAME for every adsorbate:
+    # fugacity tends to pressure as pressure tends to zero, so
+    # `beta f -> P/(k_B T)` with no virial in it. Using the fitted H2
+    # virial here instead would be wrong in principle for any other
+    # molecule and makes no difference for hydrogen -- measured, it
+    # departs from this limit by 7 parts per million at 1e-4 MPa. So
+    # the ideal form is the one written, and `fit_virial` belongs to
+    # the finite-pressure code where it earns its keep.
     volume = float(np.prod(edges))
     carbon_kg = len(atoms) * MASS_C / AVOGADRO * 1e-3
-    # One MPa, then divided out: the activity is linear in fugacity and
-    # fugacity is linear in pressure as pressure goes to zero, so the
-    # ratio is the limit and not a finite difference.
-    reference_mpa = 1e-4
-    molecules = gas.activity(reference_mpa) * 1e-30 * volume * average
-    coefficient = molecules / AVOGADRO / carbon_kg / reference_mpa
+    # Per pascal, in inverse cubic angstrom, then scaled to MPa.
+    activity_per_mpa = 1e6 / (BOLTZMANN * temperature) * 1e-30
+    molecules_per_mpa = activity_per_mpa * volume * average
+    coefficient = molecules_per_mpa / AVOGADRO / carbon_kg
     error = coefficient * (spread / average) if average > 0.0 else 0.0
 
     # q_st = -<U>_Boltzmann + RT, in kJ/mol. The kelvin-to-kJ/mol
     # conversion is the gas constant, the energies being per molecule
     # in units of k_B.
     heat = (-mean_energy + temperature) * GAS_CONSTANT_KJ
+
+    # Is the reservoir a gas at all? Below the critical temperature it
+    # is not, and the linear stretch this whole function describes ends
+    # at the saturation pressure rather than where the pore fills --
+    # which for methane at 77 K is around 1e-5 Pa. A coefficient is
+    # still returned, because the arithmetic is the arithmetic, but it
+    # is not comparable with a supercritical one and it is not what
+    # anybody means by a filling pressure.
+    critical = (H2_SELF if adsorbate is None else adsorbate
+                ).critical_temperature
+    if 0.0 < temperature < critical:
+        warnings.append(
+            f"{temperature:.0f} K is below this adsorbate's critical "
+            f"temperature of {critical:.0f} K, so the reservoir is not "
+            "a gas: the pore fills by capillary condensation and the "
+            "linear regime ends at the saturation pressure, which can "
+            "be many orders of magnitude below any working pressure. "
+            "Compare adsorbates at the same REDUCED temperature "
+            "(potentials.matched_temperature) rather than at the same "
+            "temperature.")
 
     if average <= 0.0:
         warnings.append(
@@ -299,9 +356,9 @@ def henry_constant(
             f"{100 * spread / average:.0f} % of it; raise `samples`. "
             "`exp(-beta U)` is dominated by the deepest points, so a "
             "cell that is mostly vacuum converges slowly.")
-    if heat > IMPLAUSIBLE_HEAT_KJ:
+    if abs(heat) > IMPLAUSIBLE_HEAT_KJ:
         warnings.append(
-            f"a zero-coverage heat of {heat:.0f} kJ/mol is an order of "
+            f"a zero-coverage heat of {heat:.3g} kJ/mol is an order of "
             "magnitude past any van der Waals well on carbon, so the "
             "sample is wrong rather than the structure remarkable. "
             "Check that the cell is the one intended and that its "
