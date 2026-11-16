@@ -211,6 +211,30 @@ PRESETS: dict[str, dict[str, object]] = {
     "Super-square (knees, tubes on a square net)": {
         "mode_kind": "supernetwork (knees)", "knee_net": "super-square",
         "knee_k": 12, "knee_rows": 5, "anneal": 0},
+    # --- the same two nets shaped for ADSORPTION rather than for the
+    # bond spread. See `builders.knee.ADSORPTION_SHAPE_TABLES` for the
+    # measurements and for why only these two gain anything: for
+    # Schwarz D and super-graphene the bond-spread shape already is
+    # the best uptake measured, so they have no second entry.
+    #
+    # Schwarz P with a 7-row arm instead of 9: the cell drops from
+    # 31.9 to 22.4 A and the free channel from 14.61 to 9.17, which
+    # takes H2 uptake at 77 K from 352 to 1037 mol/kg/MPa. 488 atoms,
+    # {6: 216, 7: 24}, the same -24 the genus fixes. Still the weakest
+    # of the crystalline family, and worth having because it is the
+    # crystalline super-cubic -- the meshed catalogue's name for this
+    # exact object.
+    "Schwarz P (knees, for adsorption)": {
+        "mode_kind": "schwarzite (knees)", "knee_cell": "primitive",
+        "knee_k": 20, "knee_rows": 7, "anneal": 0},
+    # The square net's default is too TIGHT, not too wide: 4.74 A of
+    # channel against sigma = 3.18 A for H2 on carbon. A 7-row arm
+    # opens it to 10.49 and takes uptake from 3137 to 4496. 372 atoms,
+    # {5: 4, 6: 164, 7: 16} -- four pentagons at the crossing poles,
+    # where they belong, and -12 as its V-E fixes.
+    "Super-square (knees, for adsorption)": {
+        "mode_kind": "supernetwork (knees)", "knee_net": "super-square",
+        "knee_k": 12, "knee_rows": 7, "anneal": 0},
     # 536 atoms, {6: 240, 7: 6} and not one pentagon -- exactly the six
     # heptagons Gauss-Bonnet asks of a three-arm node, where the meshed
     # route returns fifty pentagons and thirty-eight heptagons. Bonds

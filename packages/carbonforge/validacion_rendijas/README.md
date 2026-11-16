@@ -727,11 +727,10 @@ Tres lecturas, y la primera corrige el miedo con el que se empezó:
   le gana a la rendija con una pared que nadie puede discutir**:
   1.49×, muro a 342.2°, censo exactamente `{6:608, 7:96}` = el −96 que
   fija su topología, y enlaces 1.353–1.451 Å. Y se construye en 10 s.
-* **El canal manda, con un óptimo entre 6 y 10 Å.** 6.72 → 12861,
-  10.03 → 9425, 14.61 → 352, 15.80 → 153: la schwarzita P y el giroide
-  pierden **dos órdenes de magnitud** por tener el canal demasiado
-  ancho, y el súper-cuadrado cristalino pierde por el contrario, con
-  4.74 Å ya es demasiado estrecho para σ(H₂-C) = 3.18 Å.
+* **El canal parecía mandar, con un óptimo entre 6 y 10 Å** — 6.72 →
+  12861, 10.03 → 9425, 14.61 → 352, 15.80 → 153 — y el barrido de
+  formas de la sección siguiente **refuta esa lectura**: el canal es
+  un triaje barato, no el predictor. Lo que `K_H` sigue es `q_st`.
 
 Y `q_st` sigue sin ordenar como `K_H`: el súper-cúbico `r4_s21` tiene
 el pozo más profundo de los sanos (9.98) y la schwarzita D tiene 1.5
@@ -745,5 +744,73 @@ python afina_cubico.py <carpeta> --radio 4 --escalas 22,23,24
 python construye_cristalinas.py <carpeta>        # láminas de rodillas
 python construye_schwarzitas.py <carpeta>        # P, D y giroide
 # en carbonforge:
+uv run python validacion_rendijas/llenado_super.py <carpeta> 1000000
+```
+
+## Barrer la forma cristalina, y lo que el canal NO predice
+
+Las formas por defecto de la ruta cristalina minimizan la **dispersión
+de enlaces**, que es el objetivo correcto para una estructura y el
+equivocado para un adsorbente. `nanocarbon_lab/barre_cristalinas.py`
+barre circunferencia y filas de brazo en las cinco familias y
+`canales.py` tría por canal; `llenado_super.py` mide las supervivientes.
+
+**71 formas pedidas, 17 construidas, y las 17 sanas** — la ruta
+cristalina no colapsó ni una, frente a 6 de 10 de la mallada, y todas
+cumplen el presupuesto que su topología fija. Lo que no cierra, no
+cierra: el resto son rechazos del nodo, no paredes malas.
+
+Cuatro supervivientes del triaje (canal 5.5–11 Å **y** enlaces en la
+ventana sp² 1.30–1.55 Å), medidas a 10⁶ × 2 semillas
+(`cristalinas_forma_1M.txt`):
+
+| estructura | canal (Å) | área (m²/g) | K_H | q_st |
+|---|---|---|---|---|
+| **schwarzita D (18, 5)** | 6.72 | 1721 | **12861 ± 139** | 9.75 |
+| **súper-grafeno (22, 5)** | 10.03 | 1635 | **9425 ± 187** | 9.78 |
+| súper-cuadrado (12, 7) | 10.49 | 1587 | 4496 ± 3 | 7.90 |
+| Schwarz P (20, 7) | 9.17 | **2159** | 1037 ± 15 | 6.83 |
+
+### Dos correcciones a lo escrito más arriba
+
+* **El canal es un triaje, no el predictor.** El Schwarz P estrechado a
+  9.17 Å da 1037 mientras el súper-grafeno a **10.03 Å** da 9425: nueve
+  veces más por un canal **más ancho**. Lo que `K_H` sigue es `q_st`
+  (6.83 contra 9.78), y un sitio profundo necesita paredes cerca por
+  varios lados a la vez — eso es la **densidad de nodos** de la red, no
+  el ancho de su canal. El triaje por canal sigue siendo útil porque es
+  barato y porque dentro de una familia sí ordena; como ley, no.
+* **El área por gramo tampoco es la cifra de mérito**, y ésta es la
+  tercera vez que aparece en este estudio: el Schwarz P (20, 7) tiene
+  **la mayor área de las cuatro, 2159 m²/g, y la penúltima captación.**
+
+### Y el resultado para quien venga después
+
+* **Estrechar el Schwarz P funciona y no le alcanza.** Acortar el brazo
+  de 9 a 7 filas lleva la celda de 31.9 a 22.4 Å y el canal de 14.61 a
+  9.17, y la captación de 352 a 1037 — un factor 3, y sigue siendo la
+  más débil de las cuatro.
+* **Para la schwarzita D y el súper-grafeno, la forma de dispersión de
+  enlaces YA es la forma de adsorción.** Los dos objetivos coinciden
+  ahí, y es por lo que no tienen entrada propia en la tabla nueva.
+* **El giroide no tiene forma en la banda.** Cierra sólo en
+  circunferencia 16 y 20, su canal más estrecho es 15.80 Å, y estrechar
+  el tubo le rompe la pared antes que el canal — sus brazos salen a
+  120°, así que su celda es espaciosa por construcción.
+
+Las dos formas que sí ganan algo están guardadas en
+`nanocarbon_lab`: `builders/knee.ADSORPTION_SHAPE_TABLES` con las
+medidas, `adsorption_knee_shape(mode, kind)` para leerlas, y los
+presets `Schwarz P (knees, for adsorption)` y `Super-square (knees,
+for adsorption)`, cada uno con su censo fijado en
+`tests/test_presets.py`. Un estudio posterior no tiene que volver a
+barrer esto.
+
+```bash
+# en nanocarbon_lab:
+python barre_cristalinas.py <carpeta>
+python barre_cristalinas.py <carpeta> --familia diamond
+# en carbonforge:
+uv run python validacion_rendijas/canales.py <carpeta>        # triaje
 uv run python validacion_rendijas/llenado_super.py <carpeta> 1000000
 ```

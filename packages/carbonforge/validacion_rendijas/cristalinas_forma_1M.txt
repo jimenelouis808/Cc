@@ -1,0 +1,16 @@
+warning: The `UV_NATIVE_TLS` environment variable is deprecated and will be removed in a future release. Use `UV_SYSTEM_CERTS` instead.
+knee-diamond_k18_n5: 1440 -> 1440 átomos (x[1, 1, 1]), hueco 0.0 Å
+knee-primitive_k20_n7: 488 -> 3904 átomos (x[2, 2, 2]), hueco 0.0 Å
+knee-super-graphene_k22_n5: 920 -> 1840 átomos (x[1, 1, 2]), hueco 3.4 Å
+knee-super-square_k12_n7: 372 -> 2976 átomos (x[2, 2, 2]), hueco 3.4 Å
+
+H2 a 77 K, límite de cobertura cero, 1000000 inserciones x 2 semillas
+
+#### sanas
+| estructura | átomos | canal (Å) | área (m²/g) | K_H (mol/kg/MPa) | q_st (kJ/mol) | ángulo mín (°) |
+|---|---|---|---|---|---|---|
+| knee-diamond_k18_n5 | 1440 | 6.72 | 1721 | 12861 ± 139 | 9.75 | 342.2 |
+| knee-super-graphene_k22_n5 | 1840 | 10.03 | 1635 | 9425 ± 187 | 9.78 | 353.4 |
+| knee-super-square_k12_n7 | 2976 | 10.49 | 1587 | 4496 ± 3 | 7.90 | 345.0 |
+| knee-primitive_k20_n7 | 3904 | 9.17 | 2159 | 1037 ± 15 | 6.83 | 353.4 |
+

@@ -3795,6 +3795,81 @@ KNEE_SHAPE_TABLES: dict[str, tuple[str, dict[str, tuple[int, int]]]] = {
 }
 
 
+#: ``mode -> kind -> (circumference, arm_rows)`` for ADSORPTION, which
+#: is a different objective from the one the tables above answer.
+#:
+#: `DEFAULT_SCHWARZITE_SHAPE` and `DEFAULT_SUPERNET_SHAPE` minimise the
+#: relaxed bond spread, which is the right objective for a structure.
+#: An adsorbent is judged on uptake per gram instead, and the two do
+#: not always agree. Measured for H2 at 77 K in the zero-coverage
+#: limit (carbonforge's `adsorption.henry`, 10^6 insertions over two
+#: seeds; see its `validacion_rendijas/README.md`):
+#:
+#: ===================  =========  =========  ==============  ======
+#: shape                channel A  area m2/g  K_H mol/kg/MPa  q_st
+#: ===================  =========  =========  ==============  ======
+#: diamond (18, 5)           6.72       1721          12861    9.75
+#: super-graphene (22, 5)   10.03       1635           9425    9.78
+#: super-square (12, 7)     10.49       1587           4496    7.90
+#: super-square (12, 5)      4.74       1847           3137    7.69
+#: primitive (20, 7)         9.17       2159           1037    6.83
+#: primitive (20, 9)        14.61       2540            352    5.90
+#: gyroid (20, 5)           15.80       2549            153    4.64
+#: ===================  =========  =========  ==============  ======
+#:
+#: Three things that table settles, and the first two are corrections:
+#:
+#: * **The channel is a triage, not the predictor.** Primitive at a
+#:   9.17 A channel reads 1037 while super-graphene at 10.03 reads
+#:   9425 -- nine times more through a WIDER channel. `K_H` tracks
+#:   `q_st` instead, and a deep site needs walls close on several
+#:   sides at once, which is the net's node density rather than its
+#:   channel width.
+#: * **Area per gram is not the figure of merit either.** Primitive
+#:   (20, 7) carries the most area of any shape here, 2159 m2/g, and
+#:   the second-lowest uptake.
+#: * **For diamond and super-graphene the bond-spread shape IS the
+#:   adsorption shape**, so they are absent below: a table entry that
+#:   repeats the default would be a second place for it to drift.
+#:   Only primitive and super-square gain anything, and what they gain
+#:   is a shorter or longer arm rather than a different tube.
+#:
+#: The gyroid has no entry because it has no shape in the band: it
+#: closes only at circumference 16 and 20, its narrowest channel is
+#: 15.80 A, and narrowing the tube breaks the wall rather than the
+#: channel -- its arms leave at 120 deg, so its cell is roomy by
+#: construction.
+ADSORPTION_SHAPE_TABLES: dict[str, dict[str, tuple[int, int]]] = {
+    # Schwarz P is the crystalline super-cubic: one node of six arms
+    # per cell, budget -24, the same object the meshed catalogue calls
+    # super-cubic. Shortening the arm from 9 rows to 7 takes the cell
+    # from 31.9 to 22.4 A and the channel from 14.61 to 9.17, which
+    # trebles the uptake -- and still leaves it the weakest of the
+    # four, for the reason above.
+    "schwarzite (knees)": {"primitive": (20, 7)},
+    # The square net's own default is TOO TIGHT rather than too wide:
+    # a 4.74 A channel against sigma = 3.18 A for H2 on carbon cannot
+    # hold a molecule with both walls in reach, so the longer arm helps
+    # here by opening the pore instead of closing it.
+    "supernetwork (knees)": {"super-square": (12, 7)},
+}
+
+
+def adsorption_knee_shape(mode: str, kind: str) -> tuple[int, int] | None:
+    """``(circumference, arm_rows)`` measured best for uptake per gram.
+
+    ``None`` means this kind has no adsorption shape of its own --
+    either because its bond-spread default already is the best one
+    measured (diamond, super-graphene) or because no shape it can
+    build reaches the band (the gyroid). Callers fall back to
+    :func:`default_knee_shape`.
+
+    See :data:`ADSORPTION_SHAPE_TABLES` for the measurements and for
+    why the channel and the area are both poor predictors.
+    """
+    return ADSORPTION_SHAPE_TABLES.get(mode, {}).get(kind)
+
+
 def default_knee_shape(mode: str, kind: str) -> tuple[int, int] | None:
     """``(circumference, arm_rows)`` for one knee mode's kind.
 
