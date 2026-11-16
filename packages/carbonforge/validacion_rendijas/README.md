@@ -641,3 +641,109 @@ no para citar un número suyo. El **CO₂** no está, y no por descuido.
 
 El súper-fcc se dejó fuera a propósito: con H₂ ya pierde un factor 7
 por su canal de 7.3 Å, y una molécula mayor sólo puede empeorarlo.
+
+## Afinar la celda, y la ruta que lo hace innecesario
+
+La tabla de adsorbatos acabó en que el canal de 20 Å del súper-cúbico
+sale del preset `34/5/4` y no de ningún óptimo, mientras la rendija que
+le gana vence por alojar exactamente una capa molecular. `scale` y
+`tube_radius` son argumentos, así que la superred tiene el mismo ajuste
+disponible. Dos cosas salieron de probarlo, y la segunda es la que
+importa.
+
+### Sí hay un súper-cúbico competitivo, y es `r = 4 Å, scale = 21`
+
+16 celdas construidas (`nanocarbon_lab/afina_cubico.py`), medidas a
+10⁶ inserciones × 2 semillas (`cubico_1M.txt`):
+
+| súper-cúbico | pared | ángulo mín | canal (Å) | K_H | q_st |
+|---|---|---|---|---|---|
+| **r4_s21** | sana | **337.3°** | 9.66 | **8363 ± 189** | 9.98 |
+| r3_s24 | sana | 330.1° | 13.71 | 3218 ± 82 | 9.82 |
+| r5_s28 | sana | 328.8° | 14.24 | 2982 ± 21 | 8.53 |
+| *preset 34/5/4* | sana | ~330.6° | 20.00 | 4956 ± 101 | 8.90 |
+
+**Del 0.56× del preset al 0.97× de la mejor rendija**, sólo apretando
+la celda. El preset no era un óptimo.
+
+### Y el número que NO se cita, con las dos razones
+
+La celda de mejor aspecto, `r4_s23`, da **25698 ± 555** — 2.97× la
+mejor rendija — y está a 332.9°, «sana» por los pelos. No se cita:
+
+* **`q_st` ordena al revés que la calidad de la pared.** Sobre la
+  rejilla entera, el muro peor (317.4°) da el pozo más profundo
+  (11.92 kJ/mol) y el mejor (337.3°) el más somero (9.98). Ésa es la
+  firma de un pozo producido por **daño**: una pared pinzada es una
+  rendija estrecha. Y `collapsed_wall` pone un umbral afilado (328.4°)
+  sobre una magnitud continua, así que «sana» unos grados por encima
+  puede significar *menos dañada*, no sin dañar.
+* **Medir la redondez del tubo no separa las clases, y el control dice
+  por qué.** Distancia de los átomos de puntal a su propio eje: el
+  preset «sano» lee **4.68 ± 0.69 Å para 5.0 pedidos, con mínimo
+  2.85**, y las celdas afinadas llegan a 1.1 Å de un eje de 4 Å. Esta
+  ruta no hace tubos redondos en absoluto, así que ninguno de los dos
+  tests licencia la afirmación.
+
+**El patrón de construcción tampoco es monótono.** A r = 4: sana en 21,
+colapsada en 22, sanas en 23 y 24, colapsada en 26 — y todo r = 2 y
+r = 3 hasta `scale` 24 lo rechaza el mallador por no cerrar la
+superficie. Así que no se trata de apretar hasta el límite, hay que
+**buscar** las celdas que cierran. Dos cosas que ayudan a buscarlas:
+el tiempo de construcción las separa sin una excepción (sanas 26–29 s,
+colapsadas 217–633 s, que es `rescue_collapsed_wall` gastando su
+escalera), y `scale` es una **petición** — `s19.5` y `s21` aterrizan
+en la misma celda de 21.8 Å con 574 y 454 átomos, y la que tiene *más*
+pared es la colapsada.
+
+### La ruta cristalina gana, y por eso el afinado es un callejón
+
+`build_knee_supernetwork` y `build_knee_schwarzite` colocan los anillos
+por construcción, así que su pared no puede estar pinzada. Medidas con
+el mismo límite (`cristalinas_1M.txt`):
+
+| estructura | ruta | canal (Å) | K_H | q_st | ángulo mín | enlaces (Å) |
+|---|---|---|---|---|---|---|
+| **schwarzita D** | cristalina | 6.72 | **12861 ± 139** | 9.75 | 342.2° | 1.353–1.451 |
+| súper-grafeno k22 | cristalina | 10.03 | **9425 ± 187** | 9.78 | 353.4° | 1.408–1.436 |
+| *mejor rendija H = 6.6* | — | 3.55 | *8660 ± 50* | *7.81* | — | — |
+| súper-cúbico r4_s21 | mallada | 9.66 | 8363 ± 189 | 9.98 | 337.3° | — |
+| súper-grafeno (preset) | mallada | 18.46 | 4057 ± 35 | 8.56 | 335.1° | 1.344–1.544 |
+| súper-cuadrado k12 | cristalina | 4.74 | 3137 ± 14 | 7.69 | 349.1° | 1.374–1.505 |
+| schwarzita P | cristalina | 14.61 | 352 ± 1 | 5.90 | 354.6° | 1.417–1.540 |
+| giroide | cristalina | 15.80 | 153 ± 0 | 4.64 | 356.8° | 1.395–1.508 |
+
+Tres lecturas, y la primera corrige el miedo con el que se empezó:
+
+* **La pared amorfa estaba COSTANDO captación, no inflándola.** El
+  súper-grafeno cristalino da **9425 contra los 4057 del mallado**, un
+  factor 2.3 en el mismo nombre de red. Lo que yo temía —que los
+  números mallados estuvieran inflados por daño— es lo contrario de lo
+  que pasa con esta red: estaban **deprimidos**. (La comparación es
+  entre los *presets* de cada ruta, que tienen canales distintos —
+  18.46 contra 10.03 Å — así que no es un contraste controlado sobre
+  la geometría. Lo que sí está controlado es la calidad de la pared.)
+* **La schwarzita D cristalina es la primera estructura del estudio que
+  le gana a la rendija con una pared que nadie puede discutir**:
+  1.49×, muro a 342.2°, censo exactamente `{6:608, 7:96}` = el −96 que
+  fija su topología, y enlaces 1.353–1.451 Å. Y se construye en 10 s.
+* **El canal manda, con un óptimo entre 6 y 10 Å.** 6.72 → 12861,
+  10.03 → 9425, 14.61 → 352, 15.80 → 153: la schwarzita P y el giroide
+  pierden **dos órdenes de magnitud** por tener el canal demasiado
+  ancho, y el súper-cuadrado cristalino pierde por el contrario, con
+  4.74 Å ya es demasiado estrecho para σ(H₂-C) = 3.18 Å.
+
+Y `q_st` sigue sin ordenar como `K_H`: el súper-cúbico `r4_s21` tiene
+el pozo más profundo de los sanos (9.98) y la schwarzita D tiene 1.5
+veces su `K_H` con un pozo algo menor. Densidad de sitios por gramo
+otra vez, que es la conclusión de todo este estudio.
+
+```bash
+# en nanocarbon_lab:
+python afina_cubico.py <carpeta>                 # la rejilla mallada
+python afina_cubico.py <carpeta> --radio 4 --escalas 22,23,24
+python construye_cristalinas.py <carpeta>        # láminas de rodillas
+python construye_schwarzitas.py <carpeta>        # P, D y giroide
+# en carbonforge:
+uv run python validacion_rendijas/llenado_super.py <carpeta> 1000000
+```

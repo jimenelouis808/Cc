@@ -1,0 +1,48 @@
+warning: The `UV_NATIVE_TLS` environment variable is deprecated and will be removed in a future release. Use `UV_SYSTEM_CERTS` instead.
+super-cubic_r2_s17: 432 -> 3456 átomos (x[2, 2, 2]), hueco 0.0 Å
+super-cubic_r2_s22: 306 -> 306 átomos (x[1, 1, 1]), hueco 0.0 Å
+super-cubic_r3_s24: 420 -> 420 átomos (x[1, 1, 1]), hueco 0.0 Å
+super-cubic_r4_s18: 416 -> 3328 átomos (x[2, 2, 2]), hueco 0.0 Å
+super-cubic_r4_s19.5: 574 -> 4592 átomos (x[2, 2, 2]), hueco 0.0 Å
+super-cubic_r4_s20: 494 -> 3952 átomos (x[2, 2, 2]), hueco 0.0 Å
+super-cubic_r4_s21: 454 -> 3632 átomos (x[2, 2, 2]), hueco 0.0 Å
+super-cubic_r4_s22: 468 -> 3744 átomos (x[2, 2, 2]), hueco 0.0 Å
+super-cubic_r4_s23: 492 -> 3936 átomos (x[2, 2, 2]), hueco 0.0 Å
+super-cubic_r4_s24: 502 -> 502 átomos (x[1, 1, 1]), hueco 0.0 Å
+super-cubic_r4_s26: 546 -> 546 átomos (x[1, 1, 1]), hueco 0.0 Å
+super-cubic_r5_s18.5: 504 -> 4032 átomos (x[2, 2, 2]), hueco 0.0 Å
+super-cubic_r5_s20: 516 -> 4128 átomos (x[2, 2, 2]), hueco 0.0 Å
+super-cubic_r5_s23: 532 -> 4256 átomos (x[2, 2, 2]), hueco 0.0 Å
+super-cubic_r5_s28: 796 -> 796 átomos (x[1, 1, 1]), hueco 0.0 Å
+
+H2 a 77 K, límite de cobertura cero, 1000000 inserciones x 2 semillas
+
+#### sanas
+| estructura | átomos | canal (Å) | área (m²/g) | K_H (mol/kg/MPa) | q_st (kJ/mol) | ángulo mín (°) |
+|---|---|---|---|---|---|---|
+| super-cubic_r4_s23 | 3936 | 11.67 | 1902 | 25698 ± 555 | 11.45 | 332.9 |
+| super-cubic_r4_s24 | 502 | 12.02 | 2024 | 10183 ± 131 | 10.12 | 330.9 |
+| super-cubic_r4_s21 | 3632 | 9.66 | 1800 | 8363 ± 189 | 9.98 | 337.3 |
+| super-cubic_r3_s24 | 420 | 13.71 | 2008 | 3218 ± 82 | 9.82 | 330.1 |
+| super-cubic_r5_s28 | 796 | 14.24 | 2146 | 2982 ± 21 | 8.53 | 328.8 |
+| super-cubic_r5_s23 | 4256 | 8.15 | 1906 | 1576 ± 4 | 7.96 | 328.5 |
+
+#### colapsadas
+La pared está doblada más que un carbono tetraédrico (328.4°), así que es un tubo pinzado — una rendija estrecha con otro nombre. **Estos K_H no son del diseño que se pedía.**
+| estructura | átomos | canal (Å) | área (m²/g) | K_H (mol/kg/MPa) | q_st (kJ/mol) | ángulo mín (°) |
+|---|---|---|---|---|---|---|
+| super-cubic_r4_s19.5 | 4592 | 8.02 | 1732 | 29688 ± 1091 | 11.92 | 317.4 |
+| super-cubic_r4_s26 | 546 | 14.70 | 1978 | 23401 ± 735 | 11.61 | 325.2 |
+| super-cubic_r4_s22 | 3744 | 11.33 | 1827 | 11162 ± 102 | 10.30 | 325.7 |
+| super-cubic_r4_s18 | 3328 | 7.45 | 1666 | 5268 ± 219 | 9.86 | 325.0 |
+| super-cubic_r5_s18.5 | 4032 | 5.94 | 1663 | 3126 ± 12 | 8.68 | 304.1 |
+| super-cubic_r4_s20 | 3952 | 8.80 | 1740 | 3071 ± 3 | 8.90 | 327.0 |
+| super-cubic_r5_s20 | 4128 | 5.82 | 1697 | 1213 ± 23 | 7.66 | 318.6 |
+| super-cubic_r2_s17 | 3456 | 11.35 | 1780 | 133 ± 2 | 5.83 | 309.7 |
+| super-cubic_r2_s22 | 306 | 16.95 | 2526 | 59 ± 1 | 4.13 | 324.8 |
+
+  aviso (super-cubic_r3_s24): the Widom average's own standard error is 5 % of it; raise `samples`. `exp(-beta U)` is dominated by the deepest points, so a cell that is mostly vacuum converges slowly.
+  aviso (super-cubic_r4_s19.5): the Widom average's own standard error is 6 % of it; raise `samples`. `exp(-beta U)` is dominated by the deepest points, so a cell that is mostly vacuum converges slowly.
+  aviso (super-cubic_r4_s19.5): the Widom average's own standard error is 7 % of it; raise `samples`. `exp(-beta U)` is dominated by the deepest points, so a cell that is mostly vacuum converges slowly.
+  aviso (super-cubic_r4_s23): the Widom average's own standard error is 7 % of it; raise `samples`. `exp(-beta U)` is dominated by the deepest points, so a cell that is mostly vacuum converges slowly.
+  aviso (super-cubic_r4_s26): the Widom average's own standard error is 8 % of it; raise `samples`. `exp(-beta U)` is dominated by the deepest points, so a cell that is mostly vacuum converges slowly.

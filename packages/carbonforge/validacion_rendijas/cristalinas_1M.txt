@@ -1,0 +1,18 @@
+warning: The `UV_NATIVE_TLS` environment variable is deprecated and will be removed in a future release. Use `UV_SYSTEM_CERTS` instead.
+knee-schwarzite-diamond: 1440 -> 1440 átomos (x[1, 1, 1]), hueco 0.0 Å
+knee-schwarzite-gyroid: 1744 -> 1744 átomos (x[1, 1, 1]), hueco 0.0 Å
+knee-schwarzite-primitive: 968 -> 968 átomos (x[1, 1, 1]), hueco 0.0 Å
+knee-super-graphene_k22: 920 -> 1840 átomos (x[1, 1, 2]), hueco 3.4 Å
+knee-super-square_k12: 180 -> 1440 átomos (x[2, 2, 2]), hueco 3.4 Å
+
+H2 a 77 K, límite de cobertura cero, 1000000 inserciones x 2 semillas
+
+#### sanas
+| estructura | átomos | canal (Å) | área (m²/g) | K_H (mol/kg/MPa) | q_st (kJ/mol) | ángulo mín (°) |
+|---|---|---|---|---|---|---|
+| knee-schwarzite-diamond | 1440 | 6.72 | 1721 | 12861 ± 139 | 9.75 | 342.2 |
+| knee-super-graphene_k22 | 1840 | 10.03 | 1635 | 9425 ± 187 | 9.78 | 353.4 |
+| knee-super-square_k12 | 1440 | 4.74 | 1847 | 3137 ± 14 | 7.69 | 349.1 |
+| knee-schwarzite-primitive | 968 | 14.61 | 2540 | 352 ± 1 | 5.90 | 354.6 |
+| knee-schwarzite-gyroid | 1744 | 15.80 | 2549 | 153 ± 0 | 4.64 | 356.8 |
+
