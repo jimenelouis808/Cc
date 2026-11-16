@@ -56,7 +56,7 @@ from carbonforge.adsorption.potentials import (
 )
 
 from llenado import slit
-from llenado_super import embed
+from llenado_super import embed, soundness
 
 #: Slit wall separations to scan per adsorbate. Wider than `llenado.py`
 #: at the top end, because the optimum is expected to move out with the
@@ -64,12 +64,17 @@ from llenado_super import embed
 SEPARATIONS = (6.0, 6.4, 6.6, 7.0, 7.4, 7.8, 8.2, 8.6, 9.0, 9.5,
                10.0, 11.0, 12.0, 14.0)
 
-#: The superlattices worth the time. Super-fcc is left out: with
-#: hydrogen it loses a factor of 7 because twelve tubes at one node
-#: leave a 7.3 A channel against the others' 18-20, and a LARGER
-#: molecule can only make that worse. Nothing is learnt by watching it
-#: get worse, and it is the slowest cell here.
-WANTED = ("super-cubic", "super-square", "super-graphene")
+#: Every structure in the folder is measured, and which ones are in
+#: the folder is the caller's choice. It was a hardcoded list of three
+#: meshed nets, which stopped being the right set the moment the
+#: crystalline route turned out to beat them: Schwarz D at (18, 5)
+#: reads 12861 mol/kg/MPa for H2 against super-graphene's meshed 4057.
+#: Point this at a folder holding the structures the question is about.
+#:
+#: Super-fcc is worth leaving OUT of such a folder: with hydrogen it
+#: loses a factor of 7 because twelve tubes at one node leave a 7.3 A
+#: channel against the others' 18-20, a larger molecule can only make
+#: that worse, and it is the slowest cell here.
 
 #: Insertion attempts and seeds, as in the rest of the folder.
 SAMPLES = 200_000
@@ -110,14 +115,25 @@ def main() -> int:
     folder = Path(sys.argv[1])
     samples = int(sys.argv[2]) if len(sys.argv) > 2 else SAMPLES
 
+    sources = sorted(folder.glob("*.extxyz"))
+    if not sources:
+        print(f"no hay .extxyz en {folder}")
+        return 1
     supers = {}
-    for name in WANTED:
-        source = folder / f"{name}.extxyz"
-        if not source.exists():
-            print(f"falta {source}")
-            return 1
+    for source in sources:
+        collapsed, angle_sum = soundness(source)
+        if collapsed:
+            # A pinched wall is a narrow slit wearing another name, so
+            # measuring it here would answer a different question with
+            # this table's labels.
+            print(f"{source.stem}: saltada, pared colapsada "
+                  f"(ángulo mínimo {angle_sum:.1f}°)")
+            continue
         big, _repeat, _gap = embed(read(str(source)))
-        supers[name] = big
+        supers[source.stem] = big
+    if not supers:
+        print("ninguna estructura sana en la carpeta")
+        return 1
 
     print(f"{samples} inserciones x {len(SEEDS)} semillas, cada adsorbato "
           "a la temperatura que lo pone en el estado del H2 a 77 K\n")
@@ -148,7 +164,7 @@ def main() -> int:
               f"K_H = {best[1]:.3g} ± {best[2]:.3g}, q_st = {best[3]:.2f} "
               f"kJ/mol", flush=True)
 
-        for label, atoms in supers.items():
+        for label, atoms in sorted(supers.items()):
             coefficient, spread, heat, notes = henry(
                 atoms, adsorbate, temperature, samples)
             for note in notes:
