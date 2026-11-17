@@ -36,10 +36,10 @@ BOND = 1.42
 
 OPT: dict[str, float] = {
     "placas": 5,
-    "barras": 9,
+    "barras": 26,
     "contacto": 3.0,     # A, FeSe atom to wall carbon inside a tube
     "piso": 9.0,         # A, one plate's shell to the next one's
-    "holgura": 9.0,      # A, between two rods
+    "holgura": 5.0,      # A, between two rods
     "campo": 85.0,       # A, half-width of the field the rods fall in
     "semilla": 0,
 }

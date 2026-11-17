@@ -822,3 +822,28 @@ Los tres proyectos están en `blend/` a 1600×2000, y sus pruebas a
 800×1000 y 48 muestras en `render/portada/`. La anémona usa
 `--atom-scale 1.0 --bond-scale 1.3 --fill 1.2` para que los tubos se
 lean a esa distancia.
+
+### El estilo `revista` y la escena conjunta
+
+`portada_blend.py --style revista` es un estilo propio del guion para
+portada de alto impacto: fondo índigo profundo degradado a casi negro,
+carbono perla con borde cian, **Fe cobre pulido y Se verde azulado a
+radio de van der Waals** (Fe 2.00 Å, Batsanov; Se 1.90 Å, Bondi), luz
+principal cálida, contraluz fría fuerte y un acento magenta bajo para
+que las sombras tengan color. `--efecto` añade cualquier efecto de
+`render_cnt` (p. ej. `dust:color=amber,count=260,strength=4`). El
+`halo` volumétrico no sirve aquí: su densidad está en metros y a escala
+de ångström llena el cuadro de niebla.
+
+| proyecto | escena | opciones |
+|---|---|---|
+| `revista_anemona_fina` | 26 brazos finos | `--atom-scale 1.0 --bond-scale 1.3 --fill 1.2` |
+| `revista_barras` | 20 barras (de 26 pedidas, las que caben sin tocarse) | bokeh cian y polvo ámbar, `--fill 1.08` |
+| `revista_conjunta` | `escena_conjunta.py`: anémona compacta de 18 brazos, arco de 4 placas envueltas que giran de canto a frente, abanico de 7 barras | `--view front --fill 0.93`, polvo ámbar |
+
+`escena_conjunta.py` coloca cada pieza, la comprueba contra todo lo ya
+colocado y, si se acerca más que `holgura` (6 Å), la aparta del centro
+del cuadro e imprime cuánto. La composición final no aparta ninguna.
+La anémona compacta sale de
+`anemona_tubos.py --brazos 18 --ramas_max 0 --finos 0.5 --anillos_min 12
+--anillos_max 22 --fe_cada 520 --semilla 3 --nombre anemona_conjunta`.

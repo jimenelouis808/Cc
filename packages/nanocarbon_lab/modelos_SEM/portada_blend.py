@@ -31,6 +31,7 @@ something the .blend carries.
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -51,6 +52,60 @@ import styles as style_defs  # noqa: E402
 SOLID_RADIUS = {"Fe": 1.22, "Se": 1.30}
 
 BOND_MAX = 1.75      # A, C-C
+
+#: Van der Waals radii for the ``revista`` look, in A: Fe from Batsanov
+#: (2001), Se and C from Bondi (1964). At these the metal is a closed
+#: space-filling solid, which is how a cover draws a particle.
+VDW_RADIUS = {"Fe": 2.00, "Se": 1.90}
+
+#: The ``revista`` palette: a deep indigo field, carbon as pearl with a
+#: cold rim, iron as polished copper and selenium as teal -- warm
+#: against cold, so the metal and the shell never merge into one hue.
+REVISTA_MATERIALS = {
+    "C": style_defs.MaterialSpec(
+        base_color=(0.62, 0.70, 0.80, 1.0), metallic=0.85, roughness=0.18,
+        clearcoat=0.6, coat_roughness=0.05, specular_tint=(0.80, 0.90, 1.0),
+        rim=2.2, rim_color=(0.35, 0.80, 1.00), rim_power=3.0),
+    "Fe": style_defs.MaterialSpec(
+        base_color=(0.96, 0.43, 0.15, 1.0), metallic=1.0, roughness=0.16,
+        clearcoat=0.4, coat_roughness=0.04, specular_tint=(1.0, 0.70, 0.45),
+        rim=0.8, rim_color=(1.00, 0.55, 0.25), rim_power=4.0),
+    "Se": style_defs.MaterialSpec(
+        base_color=(0.04, 0.58, 0.62, 1.0), metallic=0.9, roughness=0.20,
+        clearcoat=0.4, coat_roughness=0.05, specular_tint=(0.55, 1.0, 0.95),
+        rim=0.8, rim_color=(0.30, 1.00, 0.90), rim_power=4.0),
+}
+REVISTA_BOND = dataclasses.replace(REVISTA_MATERIALS["C"], rim=1.4)
+
+
+def revista_style(base: style_defs.Style) -> style_defs.Style:
+    """`base` re-lit for a high-impact cover.
+
+    The field is a deep indigo graded to near-black, so the subject's
+    cold rim reads against it; the key is warm and high, a strong cold
+    back light draws every silhouette, and a magenta kicker low on the
+    far side gives the shadows a colour instead of black.
+    """
+    return dataclasses.replace(
+        base,
+        name="revista",
+        background=style_defs.Background(
+            kind="gradient", top=(0.020, 0.024, 0.075),
+            bottom=(0.002, 0.003, 0.010), strength=1.0),
+        lights=[
+            style_defs.LightSpec("AREA", 3400.0, (1.00, 0.88, 0.70),
+                                 (7.0, -7.0, 9.0), size=7.0),
+            style_defs.LightSpec("AREA", 4200.0, (0.40, 0.75, 1.00),
+                                 (-4.0, 9.0, 5.0), size=5.0),
+            style_defs.LightSpec("AREA", 1300.0, (0.85, 0.30, 0.95),
+                                 (-9.0, -3.0, -4.0), size=10.0),
+            style_defs.LightSpec("AREA", 700.0, (0.55, 0.65, 1.00),
+                                 (0.0, -10.0, 1.0), size=16.0),
+        ],
+        effects=(fx.EffectSpec("glare", {"strength": 0.42, "size": 0.55,
+                                         "threshold": 0.70,
+                                         "maximum": 3.0}),),
+    )
 
 
 def read_extxyz(path: Path) -> tuple[list[str], np.ndarray, np.ndarray]:
@@ -123,7 +178,12 @@ def main() -> int:
     parser.add_argument("--png", type=Path, default=None,
                         help="also render a still here")
     parser.add_argument("--style", default="core_shell_cover",
-                        choices=style_defs.list_styles())
+                        choices=[*style_defs.list_styles(), "revista"],
+                        help="a package style, or `revista`: this "
+                             "script's high-impact look, metals at vdW")
+    parser.add_argument("--efecto", action="append", default=[],
+                        help="an extra effect, as render_cnt takes it, "
+                             "e.g. bokeh:color=cyan,count=40 (repeatable)")
     parser.add_argument("--view", default="auto")
     parser.add_argument("--fill", type=float, default=0.95,
                         help="fraction of the frame the scene takes")
@@ -142,15 +202,21 @@ def main() -> int:
     symbols, positions, _groups = read_extxyz(args.extxyz)
     symbols = np.asarray(symbols)
     bpy.ops.wm.read_factory_settings(use_empty=True)
-    style = style_defs.get_style(args.style)
+    revista = args.style == "revista"
+    style = (revista_style(style_defs.get_style("core_shell_cover"))
+             if revista else style_defs.get_style(args.style))
 
     # --- atoms: one carrier of vertices per element, in the style's
     # own element materials.
     present = [key for key in ("C", "Fe", "Se") if (symbols == key).any()]
-    specs = style_defs.materials_for(style, "element", present, "style")
+    specs = ([REVISTA_MATERIALS.get(key, REVISTA_MATERIALS["C"])
+              for key in present] if revista
+             else style_defs.materials_for(style, "element", present,
+                                           "style"))
+    radii = VDW_RADIUS if revista else SOLID_RADIUS
     carriers = []
     for key, spec in zip(present, specs, strict=True):
-        size = SOLID_RADIUS.get(
+        size = radii.get(
             key, style_defs.element_radius(key) * args.atom_scale
             * style.atom_scale)
         ball = primitive(
@@ -186,7 +252,8 @@ def main() -> int:
         lambda: bpy.ops.mesh.primitive_cylinder_add(
             vertices=10, radius=0.12 * args.bond_scale * style.bond_scale,
             depth=float(np.median(length)), end_fill_type="NOTHING"),
-        render_cnt.material_from_spec("mat_bond", bond_specs[0]))
+        render_cnt.material_from_spec(
+            "mat_bond", REVISTA_BOND if revista else bond_specs[0]))
     carriers.append(instanced("enlaces_CC", corners, faces, stick, "FACES"))
 
     # --- the studio: the style's own, placed by the pipeline's own
@@ -198,10 +265,12 @@ def main() -> int:
         render_cnt._add_floor(style.background, center, radius,
                               bottom=float(positions[:, 2].min()) - 1.5)
     render_cnt._setup_lights(style, center, radius)
-    render_cnt._setup_camera(
+    centre, framed = render_cnt._setup_camera(
         style, carriers, style.camera_lens_mm, args.resolution,
         view=args.view, fill=args.fill, points=positions)
-    specs = list(style.effects)
+    specs = list(style.effects) + [fx.parse_effect(text)
+                                   for text in args.efecto]
+    fx.build_effects(specs, centre, framed, positions)
     render_cnt._setup_render(style, SimpleNamespace(
         engine="cycles", resolution=args.resolution,
         transparent_background=False, samples=args.samples,
