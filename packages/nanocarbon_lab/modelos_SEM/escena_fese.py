@@ -1,37 +1,23 @@
-"""FeSe plates and rods in CRYSTALLINE carbon: the 900 C field, redone.
+"""FeSe plates and FeSe rods as two clean scenes.
 
     uv run python modelos_SEM/escena_fese.py
-    uv run python modelos_SEM/escena_fese.py --placas 8 --barras 16
+    uv run python modelos_SEM/escena_fese.py --placas 7 --barras 12
 
-`construir.py` coats the hexagonal plate and the tetragonal rod with a
-meshed graphitic shell. That shell is sound and amorphous-walled, and
-in a picture it reads as a lumpy sack. This scene applies what the
-anemone taught:
+Two scenes, because a plate and a rod in one frame compete:
 
-* **The carbon is built on its lattice, never meshed.** A rod's carbon
-  is a capped nanotube (`build_capped_cnt`: hexagons along the barrel,
-  six pentagons a cap). A plate's carbon is flat graphene -- a plane is
-  developable, so the flakes are exact by construction.
-* **The crystal is cut by its container.** A rod is tetragonal FeSe
-  carved to the tube's own cavity: everything inside the wall and no
-  closer to it than the contact. A sphere or a capsule dropped in
-  leaves gaps a picture shows at once.
-* **Sizes vary.** Three plates and three rods, drawn from at random.
-* **Every placement is checked** against a measured clearance, and a
-  piece that does not clear is re-drawn or left out. The count that
-  made it is printed.
+* **`escena_placas`** -- the hexagonal FeSe plate, wrapped all the way
+  round in its graphitic shell, shown as a column of plates each turned
+  a step further from face-on to edge-on.
+* **`escena_barras_tubo`** -- tetragonal FeSe rods, each carved to the
+  cavity of a capped nanotube built on its lattice, as a sparse heap.
 
-What this is NOT: a plate's rim is bare. A graphene flake covers each
-basal face at the van der Waals distance, and the six side faces are
-open, because closing them on a lattice needs a prismatic cage this
-package does not build. This is a SCENE: each piece is rigid, the
-pieces are placed and nothing is relaxed together.
+Every piece is rigid and placed; nothing is relaxed together. The
+closest pair of atoms in each scene is printed.
 """
 
 from __future__ import annotations
 
 import sys
-import time
 import warnings
 from pathlib import Path
 
@@ -39,7 +25,7 @@ import construir
 import numpy as np
 from anemona_tubos import rotation_to
 from ase import Atoms
-from ase.io import write
+from ase.io import read, write
 from scipy.spatial import cKDTree
 
 from nanocarbon_lab.builders.capped_cnt import build_capped_cnt
@@ -49,19 +35,14 @@ CIF = HERE / "cif"
 BOND = 1.42
 
 OPT: dict[str, float] = {
-    "placas": 7,
-    "barras": 14,
+    "placas": 5,
+    "barras": 9,
     "contacto": 3.0,     # A, FeSe atom to wall carbon inside a tube
-    "hueco": 3.4,        # A, graphene to the plate's basal face
-    "holgura": 3.3,      # A, between two pieces of the scene
-    "campo": 120.0,      # A, half-width of the field the pieces fall in
-    "alto": 34.0,        # A, half-height of that field
+    "piso": 9.0,         # A, one plate's shell to the next one's
+    "holgura": 9.0,      # A, between two rods
+    "campo": 85.0,       # A, half-width of the field the rods fall in
     "semilla": 0,
 }
-
-#: (circumradius, half thickness) of the three plates, in A. 3.0 is the
-#: floor the crystal allows (see `construir.py`).
-PLATES = ((26.0, 3.0), (34.0, 4.5), (44.0, 6.0))
 
 #: (lattice frequency, body rings) of the three tubes: 77, 96 and
 #: 138 A long, a body ring being 2.13 * freq A. Radius is
@@ -100,20 +81,21 @@ def graphene_hexagon(circumradius: float) -> np.ndarray:
     return np.column_stack((sites, np.zeros(len(sites))))
 
 
-def make_plate(circumradius: float, half: float) -> Atoms:
-    """Hexagonal FeSe between two graphene flakes, c axis along z."""
-    core, _, _, (verdict, _why) = construir.core_from(
-        CIF / "FeSe_hexagonal.cif", "prism",
-        {"radius": circumradius, "half_height": half, "sides": 6})
-    core.positions -= core.positions.mean(axis=0)
-    flake = graphene_hexagon(circumradius + 2.0)
-    top = float(core.positions[:, 2].max()) + OPT["hueco"]
-    bottom = float(core.positions[:, 2].min()) - OPT["hueco"]
-    carbon = np.vstack((flake + [0.0, 0.0, top], flake + [0.0, 0.0, bottom]))
-    piece = Atoms(f"C{len(carbon)}", positions=carbon) + Atoms(
-        core.get_chemical_symbols(), core.positions)
-    piece.info = {"nucleo": core.get_chemical_formula(), "veredicto": verdict}
-    return piece
+def wrapped_plate() -> Atoms:
+    """The hexagonal FeSe plate in its CLOSED graphitic shell.
+
+    `construir.py` builds and checks it (`xyz/placa_H_C.xyz`): the shell
+    is the meshed one, because a lattice cannot close round a prism's
+    rim. Wrapped all the way round was the request, and this is the one
+    piece of the package that does it.
+    """
+    source = HERE / "xyz" / "placa_H_C.xyz"
+    if not source.exists():
+        raise SystemExit("falta xyz/placa_H_C.xyz: corre antes "
+                         "`construir.py --solo placa_H`.")
+    plate = read(str(source))
+    plate.positions -= plate.positions.mean(axis=0)
+    return plate
 
 
 def make_rod(freq: int, rings: int) -> Atoms:
@@ -184,82 +166,88 @@ def picture(atoms: Atoms, path: Path, elevation: float,
     plt.close(fig)
 
 
-def main() -> int:
-    for index, word in enumerate(sys.argv[1:], start=1):
-        if word.startswith("--") and word[2:] in OPT:
-            OPT[word[2:]] = type(OPT[word[2:]])(sys.argv[index + 1])
-    rng = np.random.default_rng(int(OPT["semilla"]))
-    started = time.time()
-
-    plates = [make_plate(*shape) for shape in PLATES]
-    for shape, piece in zip(PLATES, plates, strict=True):
-        print(f"placa R={shape[0]:.0f} Å, grosor {2 * shape[1]:.0f} Å: "
-              f"{piece.info['nucleo']} ({piece.info['veredicto']}) entre "
-              f"dos grafenos, {len(piece)} átomos")
-    rods = [make_rod(*shape) for shape in RODS]
-    for piece in rods:
-        info = piece.info
-        print(f"barra: tubo de radio {info['radio']:.1f} Å y "
-              f"{info['largo']:.0f} Å, anillos {info['censo']}, núcleo "
-              f"{info['nucleo']}, {len(piece)} átomos")
-
-    scene = Atoms()
-    groups: list[int] = []
-    everything = np.empty((0, 3))
-    field, height, gap = OPT["campo"], OPT["alto"], OPT["holgura"]
-    up = np.array([0.0, 0.0, 1.0])
-
-    def drop(piece: Atoms, heading_of, label: int) -> bool:
-        nonlocal scene, everything
-        tree = cKDTree(everything) if len(everything) else None
-        for _ in range(TRIES):
-            turn = rotation_to(up, heading_of(), rng.uniform(0, 2 * np.pi))
-            where = np.array([rng.uniform(-field, field),
-                              rng.uniform(-field, field),
-                              rng.uniform(-height, height)])
-            trial = piece.positions @ turn.T + where
-            if tree is None or float(tree.query(trial)[0].min()) >= gap:
-                scene += Atoms(piece.get_chemical_symbols(), trial)
-                groups.extend([label] * len(piece))
-                everything = np.vstack((everything, trial))
-                return True
-        return False
-
-    def plate_heading() -> np.ndarray:
-        # Lying down, more or less: the normal within ~35 deg of z.
-        tilt = rng.normal(scale=0.35, size=3) * [1.0, 1.0, 0.0] + up
-        return tilt / np.linalg.norm(tilt)
-
-    def rod_heading() -> np.ndarray:
-        # Any way round, but mostly lying in the field.
-        heading = rng.normal(size=3) * [1.0, 1.0, 0.45]
-        return heading / np.linalg.norm(heading)
-
-    placed_plates = sum(
-        drop(plates[int(rng.integers(len(plates)))], plate_heading, 0)
-        for _ in range(int(OPT["placas"])))
-    placed_rods = sum(
-        drop(rods[int(rng.integers(len(rods)))], rod_heading, 1)
-        for _ in range(int(OPT["barras"])))
-    print(f"colocadas: {placed_plates} de {int(OPT['placas'])} placas, "
-          f"{placed_rods} de {int(OPT['barras'])} barras")
-
+def save(scene: Atoms, groups: list[int], name: str, note: str,
+         views: tuple) -> None:
+    """Write one scene's xyz, extxyz and two pictures; print its check."""
     scene.set_array("grupo", np.asarray(groups, dtype=int))
     scene.positions -= scene.positions.mean(axis=0)
     closest = float(cKDTree(scene.positions).query(scene.positions,
                                                    k=2)[0][:, 1].min())
     (HERE / "xyz").mkdir(exist_ok=True)
     (HERE / "img").mkdir(exist_ok=True)
-    write(str(HERE / "xyz" / "escena_fese.xyz"),
+    write(str(HERE / "xyz" / f"{name}.xyz"),
           Atoms(scene.get_chemical_symbols(), scene.positions),
-          comment=f"placas y barras de FeSe en carbono cristalino: "
-                  f"{scene.get_chemical_formula()}; piezas COLOCADAS")
-    write(str(HERE / "xyz" / "escena_fese.extxyz"), scene, format="extxyz")
-    picture(scene, HERE / "img" / "escena_fese.png", 58.0, 20.0)
-    picture(scene, HERE / "img" / "escena_fese_b.png", 20.0, -40.0)
-    print(f"\nescena: {len(scene)} átomos, {scene.get_chemical_formula()}, "
-          f"par más cercano a {closest:.2f} Å, {time.time() - started:.0f} s")
-    print("  xyz/escena_fese.xyz  (.extxyz lleva `grupo`: 0 placas, 1 barras)")
+          comment=f"{note}: {scene.get_chemical_formula()}; piezas COLOCADAS")
+    write(str(HERE / "xyz" / f"{name}.extxyz"), scene, format="extxyz")
+    for suffix, view in zip(("", "_b"), views, strict=True):
+        picture(scene, HERE / "img" / f"{name}{suffix}.png", *view)
+    print(f"{name}: {len(scene)} átomos, {scene.get_chemical_formula()}, "
+          f"par más cercano a {closest:.2f} Å")
+
+
+def main() -> int:
+    for index, word in enumerate(sys.argv[1:], start=1):
+        if word.startswith("--") and word[2:] in OPT:
+            OPT[word[2:]] = type(OPT[word[2:]])(sys.argv[index + 1])
+    rng = np.random.default_rng(int(OPT["semilla"]))
+    up = np.array([0.0, 0.0, 1.0])
+
+    # --- scene 1, the plates: ONE plate seen five ways. A column of
+    # them, each turned a step further from face-on to edge-on, so the
+    # hexagon and the thinness are both on the page and nothing
+    # overlaps. A heap of plates shows neither.
+    plate = wrapped_plate()
+    count = int(OPT["placas"])
+    scene, groups = Atoms(), []
+    placed = np.empty((0, 3))
+    level = 0.0
+    for k in range(count):
+        tilt = np.radians(-70.0 + 140.0 * k / max(count - 1, 1))
+        normal = np.array([0.0, np.sin(tilt), np.cos(tilt)])
+        turned = plate.positions @ rotation_to(up, normal,
+                                               np.radians(11.0 * k)).T
+        # Rise until this plate clears the one under it by the gap.
+        while len(placed) and float(cKDTree(placed).query(
+                turned + [0.0, 0.0, level])[0].min()) < OPT["piso"]:
+            level += 2.0
+        trial = turned + [0.0, 0.0, level]
+        scene += Atoms(plate.get_chemical_symbols(), trial)
+        groups.extend([k] * len(plate))
+        placed = trial
+    save(scene, groups, "escena_placas",
+         f"{count} placas de FeSe hexagonal envueltas en carbono",
+         ((8.0, 25.0), (30.0, -50.0)))
+
+    # --- scene 2, the rods: a sparse heap, as the 900 C field is, but
+    # few of them and none touching.
+    rods = [make_rod(*shape) for shape in RODS]
+    for piece in rods:
+        info = piece.info
+        print(f"barra: tubo de radio {info['radio']:.1f} Å y "
+              f"{info['largo']:.0f} Å, anillos {info['censo']}, núcleo "
+              f"{info['nucleo']}, {len(piece)} átomos")
+    scene, groups = Atoms(), []
+    placed = np.empty((0, 3))
+    made = 0
+    for k in range(int(OPT["barras"])):
+        piece = rods[k % len(rods)]
+        for _ in range(400):
+            heading = rng.normal(size=3) * [1.0, 1.0, 0.35]
+            turn = rotation_to(up, heading / np.linalg.norm(heading), 0.0)
+            where = rng.uniform(-1.0, 1.0, size=3) * [OPT["campo"],
+                                                      OPT["campo"], 22.0]
+            trial = piece.positions @ turn.T + where
+            if not len(placed) or float(cKDTree(placed).query(
+                    trial)[0].min()) >= OPT["holgura"]:
+                scene += Atoms(piece.get_chemical_symbols(), trial)
+                groups.extend([k] * len(piece))
+                placed = np.vstack((placed, trial))
+                made += 1
+                break
+    print(f"barras colocadas: {made} de {int(OPT['barras'])}")
+    save(scene, groups, "escena_barras_tubo",
+         f"{made} barras de FeSe tetragonal en nanotubos",
+         ((55.0, 15.0), (20.0, -40.0)))
     return 0
 
 

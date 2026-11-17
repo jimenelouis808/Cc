@@ -786,18 +786,39 @@ son 55 enlaces cortos dentro de la cáscara del núcleo, que ya venían en
 `particula_Fe3C_C.xyz`. El `.extxyz` lleva la columna `grupo` (0 tubos,
 1 núcleo, 2 Fe₃C de las puntas, 3 Fe).
 
-## Escenas en carbono cristalino
+## Escenas limpias y sus proyectos de Blender
 
-Dos escenas que no usan la ruta mallada (pared amorfa), sino carbono
-construido sobre su red:
-
-| guion | qué hace | salida |
+| guion | escena | qué es |
 |---|---|---|
-| `anemona_tubos.py` | 11 brazos finos (radio 3.9 y 5.9 Å) desde una partícula central; las ramas están **fundidas** a la pared (`build_branched_cnt`: seis heptágonos por unión y nada más), Fe3C en las puntas donde cabe, y Fe que **moja** la pared: cada partícula se hunde, la pared la corta al contacto Fe-C (2.1 Å) y se asienta | `xyz/escena_anemona_tubos.*` — 39 630 átomos, 16 ramas, 199 partículas de Fe |
-| `escena_fese.py` | placas hexagonales de FeSe hexagonal entre dos grafenos planos y barras de FeSe tetragonal talladas a la cavidad de un nanotubo tapado | `xyz/escena_fese.*` — 86 023 átomos, 7 placas y 14 barras |
+| `anemona_tubos.py` | `escena_anemona_tubos` | 11 brazos con 16 ramas **fundidas** a la pared (`build_branched_cnt`: seis heptágonos por unión) |
+| `anemona_tubos.py --brazos 26 --ramas_max 0 --finos 0.4 --nombre escena_anemona_fina` | `escena_anemona_fina` | 26 brazos finos sin ramas, 77 722 átomos |
+| `escena_fese.py` | `escena_placas` | la placa hexagonal de FeSe **envuelta por completo** (la de `construir.py`), cinco veces en columna, girando de frente a canto |
+| `escena_fese.py` | `escena_barras_tubo` | 9 barras de FeSe tetragonal talladas a la cavidad de un nanotubo tapado, sin tocarse |
 
-Lo que NO son: el canto de las placas va desnudo (cerrarlo sobre la red
-pide una jaula prismática que el paquete no construye), los brazos de
-la anémona se apoyan en la partícula central a distancia de van der
-Waals, y el metal está colocado, no relajado. El `.extxyz` lleva la
-columna `grupo` para colorear por pieza.
+En las anémonas el Fe **moja** la pared: cada partícula se hunde, la
+pared la corta al contacto Fe-C (2.1 Å) y se asienta. El metal está
+colocado, no relajado, y los brazos se apoyan en la partícula central a
+distancia de van der Waals.
+
+### `portada_blend.py`: el mismo estilo, en segundos
+
+```bash
+<python con bpy> modelos_SEM/portada_blend.py -- \
+    --extxyz modelos_SEM/xyz/escena_placas.extxyz \
+    --blend modelos_SEM/blend/escena_placas.blend [--png vista.png]
+```
+
+Aplica `core_shell_cover` con las funciones del propio `render_cnt.py`
+(materiales, fondo, luces, cámara medida), pero cada átomo y cada enlace
+es una **instancia**: la escena de 77 722 átomos se monta en segundos y
+el `.blend` pesa 7.6 MB, donde `escenas_blend.sh` midió 88 minutos para
+10 353 átomos. Añade profundidad de campo enfocada al centro y deja el
+suelo fuera (`--floor` lo devuelve): visto desde arriba refleja las
+luces como rectángulos brillantes detrás del sujeto. El *glare* del
+estilo es un pase sobre el PNG, así que va en `--png` y no en el
+`.blend`.
+
+Los tres proyectos están en `blend/` a 1600×2000, y sus pruebas a
+800×1000 y 48 muestras en `render/portada/`. La anémona usa
+`--atom-scale 1.0 --bond-scale 1.3 --fill 1.2` para que los tubos se
+lean a esa distancia.
