@@ -677,3 +677,65 @@ igual con un Blender instalado.
 - **La partícula fuera de la punta**, que era la v1 y sigue siendo la
   otra lectura de tu micrografía: cambiar el signo del desplazamiento en
   `arm_with_particle_inside`.
+
+## La anémona ligera: una sola pieza de carbono
+
+```bash
+uv run python modelos_SEM/anemona.py
+uv run python modelos_SEM/anemona.py --brazos 6 --semilla 3 --fe_particulas 20
+```
+
+`escena_anemona_decorada` (arriba) son ocho tubos tapados colocados
+alrededor de un punto: **28 520 átomos**, brazos que no se tocan, y el
+carburo escondido en una punta no más ancha que el tubo.
+`escena_anemona_ligera` se construye al revés y pesa **5810 átomos**
+(C5338Fe472):
+
+| pieza | qué es | átomos |
+|---|---|---|
+| pared de carbono | UNA superficie cerrada: núcleo, 7 brazos de 36–62 Å, 5 ramas, un bulbo en cada punta | 5256 C |
+| Fe₃C encapsulado | una partícula DENTRO de cada bulbo, tallada a su cavidad | 28–41 por bulbo |
+| Fe decorativo | 33 perlas de α-Fe de 9 átomos sobre los brazos | 297 Fe |
+
+La pared sale de `builders.anemone.build_anemone`, que es nuevo: el
+esqueleto es un **árbol**, y un árbol engrosado es una esfera tenga los
+brazos que tenga (`V − E = 1`), así que el presupuesto de anillos es
++12 exacto y el constructor lo comprueba — censo
+`{5: 145, 6: 2356, 7: 125, 8: 4}`, enlaces 1.322–1.535 Å, cero
+contactos. Es la ruta implícita, o sea pared sana y amorfa (pares 5-7
+donde la curvatura los pide), no una red enrollada.
+
+**Qué está relajado y qué está colocado.** La pared es una estructura
+relajada y comprobada. El metal está **colocado**: nada aquí calcula si
+la cementita llena un bulbo ni si el hierro moja un tubo, y los 2.8 Å
+de contacto son la misma convención de dibujo que `construir.py` usa
+para el hierro sobre una pared. Es un modelo para mirar y para partir
+de él, no una interfase que nadie haya relajado.
+
+Cuatro cosas que costaron una vuelta cada una:
+
+* **Los átomos se van a los bulbos si se les deja.** Con brazos de
+  28–44 Å y bulbos de 10 Å, 3800 de 5400 carbonos eran bulbo y salía
+  un racimo de bolas sobre muñones. Una anémona es sobre todo brazo.
+* **El centro de un bulbo se MIDE, de grueso a fino.** La punta de un
+  brazo largo y fino se desplaza varios Å al relajar; tomar el
+  desplazamiento entre cajas envolventes puso tres de ocho centros
+  sobre su propio tallo, y una captura del tamaño del bulbo dejó otro
+  sin átomos alrededor. Ahora: desplazamiento entre centroides, captura
+  ancha que se estrecha, y al final una esfera por mínimos cuadrados.
+* **Una esfera rígida desperdicia la cavidad.** El bulbo relajado está
+  abollado y la abolladura más honda fija el radio libre: cabían 16
+  átomos donde hay sitio para el doble. La partícula se talla como la
+  tallaría su cáscara — esfera de cementita hasta el radio MEDIO de la
+  pared menos el contacto, menos todo átomo a menos del contacto, menos
+  los que ese corte deja sueltos. **El precio: ya no es 3:1 exacto**
+  (sale Fe/C ≈ 1.8–2.5), y la fórmula impresa es la del fichero.
+* **El asiento de cada perla se COMPRUEBA.** Cerca de una rama el signo
+  de la normal local puede salir hacia dentro, y una perla empujada al
+  interior de un tubo de 3.3 Å no puede librar su pared: una quedó a
+  1.1 Å. La que no descansa al contacto no se dibuja.
+
+El `.extxyz` lleva una columna `grupo` (0 pared, 1 Fe₃C, 2 Fe) para
+colorear u ocultar cada pieza. La pared se guarda en una caché junto a
+los xyz: cambiar el contacto o el número de perlas la reutiliza (2 s)
+en vez de reconstruirla (5 min).
