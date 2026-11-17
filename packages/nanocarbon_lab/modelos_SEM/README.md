@@ -739,3 +739,49 @@ El `.extxyz` lleva una columna `grupo` (0 pared, 1 Fe₃C, 2 Fe) para
 colorear u ocultar cada pieza. La pared se guarda en una caché junto a
 los xyz: cambiar el contacto o el número de perlas la reutiliza (2 s)
 en vez de reconstruirla (5 min).
+
+## La anémona de nanotubos cristalinos (la buena)
+
+```bash
+uv run python modelos_SEM/anemona_tubos.py
+uv run python modelos_SEM/anemona_tubos.py --brazos 24 --semilla 4 --fe_cada 300
+```
+
+`escena_anemona_ligera` (arriba) es topológicamente pulcra y **fea**:
+su pared es la de la ruta mallada, grumosa y con pares 5-7 por todas
+partes, nada que ver con los tubos de hexágonos limpios de un esquema
+de micrografía. `escena_anemona_tubos` vuelve a los brazos cristalinos
+de `construir.py` y los lleva más lejos, sin presupuesto de átomos:
+**68 260 átomos** (C61691Fe6569).
+
+| pieza | qué es | cuánto |
+|---|---|---|
+| brazos | 20 nanotubos tapados construidos sobre su red (`build_capped_cnt`): radios 5.9, 7.9 o 9.8 Å, 10–26 anillos, cada uno curvado distinto | 52 760 C con las ramas |
+| ramas | 14 tubos finos (4.0 o 5.9 Å) que salen de la pared de un brazo, inclinados hacia la punta | — |
+| núcleo | la partícula de Fe₃C en su cáscara grafítica (`xyz/particula_Fe3C_C.xyz`) de la que nacen los brazos | C2416Fe422 |
+| Fe₃C en las puntas | un tapón de cementita cortado por el propio tubo, en 28 de 34 puntas | 2712 átomos |
+| Fe decorativo | 344 perlas de α-Fe de dos tamaños, asentadas a 2.80 Å de la pared | 4110 Fe |
+
+**Es una ESCENA.** Cada tubo es una estructura relajada y comprobada;
+donde se encuentran están colocados a contacto de van der Waals, no
+fundidos, y el metal está colocado y no relajado. Toda colocación se
+comprueba contra una holgura medida —un brazo que no libra se vuelve a
+tirar más lejos, una rama o una perla que no libra se omite— y los
+recuentos impresos son los que entraron. Las seis puntas sin tapón son
+las de los tubos de 4 Å, donde no cabe nada a 2.8 Å de la pared.
+
+Tres cosas de método:
+
+* **El tapón no es 3:1 exacto** (sale C675Fe2037, Fe/C ≈ 3.0 en
+  conjunto pero no en cada punta), porque lo corta la cavidad.
+* **La primera tirada asentó 1077 perlas** —una cada 60 Å²— y los tubos
+  desaparecían debajo. La decoración de una micrografía es una
+  salpicadura, no un recubrimiento: ahora va una cada 420 Å².
+* **El «fuera» de cada átomo se toma de la línea central de su propio
+  tubo**, no de un parche local, que cerca de un vecino da el signo al
+  revés y mete la perla dentro de un tubo ancho, donde además cabe.
+
+El par más cercano de la escena, 1.26 Å, **no es de la colocación**:
+son 55 enlaces cortos dentro de la cáscara del núcleo, que ya venían en
+`particula_Fe3C_C.xyz`. El `.extxyz` lleva la columna `grupo` (0 tubos,
+1 núcleo, 2 Fe₃C de las puntas, 3 Fe).
