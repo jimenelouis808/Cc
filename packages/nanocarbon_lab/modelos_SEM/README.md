@@ -998,3 +998,21 @@ buscan a escala real y bolas y varillas se dibujan F veces más gruesas),
 | `revista_vortice` | `--elev 14 --azim 10 --lente 85 --fill 1.3 --bond-scale 1.4` |
 | `revista_sintesis` | `--calor --elev 10 --lente 85 --fill 0.98 --bola 4 5 6 --ampliar 5 --dopantes 2.0 --bond-scale 1.4` |
 | `revista_sintesis_cerca` | igual, con `--elev 14 --fill 0.86 --encuadrar 0 1 2 3` |
+
+### Primer plano de la superficie de FeSe
+
+`escena_superficie.py` (3113 átomos) es el primer plano de la síntesis,
+**sin coraza de carbono**: el núcleo de corte parejo de
+`placa_H_mixta` tumbado con su cara {10-10} hacia arriba, centrado, y
+dos barras desnudas (`barra_T_nucleo_desnudo`) en V detrás, una espejo
+de la otra. Encima, a **escala real** (de cerca no hace falta ampliar),
+precursores enteros, fragmentos y adátomos de Fe, Se, C y N posados a
+2.4 Å de la superficie, todos al azar: la simetría es de la
+composición, no de las moléculas. En `escena_sintesis.py` los
+precursores vuelven a caer al azar por todo el ancho; solo los
+productos están en espejo.
+
+| proyecto | cámara |
+|---|---|
+| `revista_superficie` | `--calor --elev 26 --lente 85 --fill 0.92 --encuadrar 0 --bola 4 5 6 --bond-scale 1.3` |
+| `revista_superficie_v` | igual, con `--elev 30 --fill 0.97 --encuadrar 0 2` (placa y barras) |

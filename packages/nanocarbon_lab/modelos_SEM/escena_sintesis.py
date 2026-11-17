@@ -23,7 +23,8 @@ the same factor, so their bonds are found at true length:
   in its doped, functionalised shell so the FeSe surface shows, and two
   coated rods crossed in an X behind it; on the right (**1020 C**) a
   carbon nanotube doped with N and Se and carrying oxygen groups, with
-  two more crossed behind it. The molecules above are mirrored too.
+  two more crossed behind it. The symmetry is the composition's: the
+  molecules above fall where they fall.
 
 No captions: the two temperatures are carried by the light --
 `portada_blend.py --calor` washes the left half amber and the right
@@ -226,14 +227,13 @@ def main() -> int:
     gap = OPT["holgura"] * zoom
     floor_z, top_z = products_top + 30.0, products_top + 260.0
     made = {4: 0, 5: 0, 6: 0}
-    for _ in range(count // 2):
+    for _ in range(count):
         builder = PRECURSORS[int(rng.integers(len(PRECURSORS)))]
         mol, fragments = builder()
         for _try in range(200):
             z = rng.uniform(floor_z, top_z)
             depth = (top_z - z) / (top_z - floor_z)      # 0 top, 1 bottom
-            # The left half only; its mirror image fills the right.
-            where = np.array([rng.uniform(-200.0, -14.0),
+            where = np.array([rng.uniform(-205.0, 205.0),
                               rng.uniform(-50.0, 60.0), z])
             turn = construir._random_rotation(rng)
             local = (mol.positions - mol.positions.mean(axis=0)) * zoom
@@ -257,26 +257,21 @@ def main() -> int:
                                         @ jitter.T + centre_piece
                                         + out * spread)
             positions = positions @ turn.T + where
-            mirror = positions * [-1.0, 1.0, 1.0]
-            if clear(positions, gap) and clear(mirror, gap) and float(
-                    cKDTree(positions).query(mirror)[0].min()) >= gap:
+            if clear(positions, gap):
                 add(mol.get_chemical_symbols(), positions, label)
-                add(mol.get_chemical_symbols(), mirror, label)
-                made[label] += 2
+                made[label] += 1
                 break
-    # Single atoms nearest the products, mirrored like the molecules.
-    for _ in range(int(count * 0.35)):
+    # Single atoms nearest the products: Fe over both, Se over the FeSe.
+    for _ in range(int(count * 0.7)):
         symbol = "Fe" if rng.random() < 0.55 else "Se"
+        x = rng.uniform(-205.0, 0.0 if symbol == "Se" else 205.0)
         for _try in range(100):
-            point = np.array([[rng.uniform(-200.0, -14.0),
-                               rng.uniform(-50.0, 60.0),
+            point = np.array([[x, rng.uniform(-50.0, 60.0),
                                rng.uniform(products_top - 10.0,
                                            floor_z + 25.0)]])
-            twin = point * [-1.0, 1.0, 1.0]
-            if clear(point, gap) and clear(twin, gap):
+            if clear(point, gap):
                 add([symbol], point, 6)
-                add([symbol], twin, 6)
-                made[6] += 2
+                made[6] += 1
                 break
     print(f"precursores enteros: {made[4]}, descompuestos: {made[5]}, "
           f"átomos sueltos: {made[6]}")
