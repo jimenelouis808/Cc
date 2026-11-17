@@ -14,6 +14,10 @@ revista --elev 8`).
 * **plates** (`xyz/placa_H_mixta.xyz`) face outward and tip with the
   climb, so they show their faces as they pass the sides.
 
+Round its base, `campo` small anemones (`anemona_mini`, `anemona_mini_b`)
+rest on the ground, over the back and the sides so none hides the
+source.
+
 Every piece is checked against everything already placed and pushed
 outward along its radius until it clears `holgura`; any push is
 printed.
@@ -40,8 +44,12 @@ OPT: dict[str, float] = {
     "radio_base": 130.0, # A, helix radius just above the anemone
     "radio_cima": 300.0, # A, helix radius at the top
     "holgura": 6.0,
+    "campo": 7,          # small anemones on the ground round the base
     "semilla": 0,
 }
+
+#: The small anemones of the field, taken in turn.
+MINIS = ("anemona_mini", "anemona_mini_b")
 
 
 def main() -> int:
@@ -100,6 +108,36 @@ def main() -> int:
         groups.extend([label] * len(trial))
         placed = np.vstack((placed, trial))
 
+    # --- the field: small anemones resting on the ground round the
+    # base, more of them behind than in front so none hides the source.
+    ground = float(a_pos[:, 2].min())
+    minis = [read(str(HERE / "xyz" / f"{name}.extxyz")) for name in MINIS
+             if (HERE / "xyz" / f"{name}.extxyz").exists()]
+    made = 0
+    for k in range(int(OPT["campo"])):
+        mini = minis[k % len(minis)]
+        m_pos = mini.positions - mini.positions.mean(axis=0)
+        # Spread over the back and the sides: -150 to +150 degrees from
+        # straight behind (+y), alternating, at 380 to 640 A.
+        side = -1.0 if k % 2 else 1.0
+        angle = np.radians(90.0 + side * (25.0 + 125.0 * (k / max(
+            OPT["campo"] - 1, 1))))
+        for _ in range(200):
+            spin = rotation_to(up, rng.normal(size=3), rng.uniform(0, 6.3))
+            local = m_pos @ spin.T
+            dist = rng.uniform(380.0, 640.0)
+            where = np.array([dist * np.cos(angle), dist * np.sin(angle),
+                              ground - local[:, 2].min()])
+            trial = local + where
+            if float(cKDTree(placed).query(trial)[0].min()) \
+                    >= OPT["holgura"]:
+                scene += Atoms(mini.get_chemical_symbols(), trial)
+                groups.extend([3] * len(trial))
+                placed = np.vstack((placed, trial))
+                made += 1
+                break
+    print(f"campo: {made} anémonas pequeñas")
+
     scene.set_array("grupo", np.asarray(groups, dtype=int))
     scene.positions -= 0.5 * (scene.positions.max(axis=0)
                               + scene.positions.min(axis=0))
@@ -115,7 +153,8 @@ def main() -> int:
     print(f"\n{name}: {len(scene)} átomos, {scene.get_chemical_formula()}, "
           f"par más cercano a {closest:.2f} Å, caja "
           f"{np.ptp(scene.positions, axis=0).round(0)} Å")
-    print("  (.extxyz lleva `grupo`: 0 anémona, 1 placas, 2 barras)")
+    print("  (.extxyz lleva `grupo`: 0 anémona, 1 placas, 2 barras, "
+          "3 campo)")
     return 0
 
 

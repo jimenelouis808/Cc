@@ -75,7 +75,62 @@ REVISTA_MATERIALS = {
         clearcoat=0.4, coat_roughness=0.05, specular_tint=(0.55, 1.0, 0.95),
         rim=0.8, rim_color=(0.30, 1.00, 0.90), rim_power=4.0),
 }
+REVISTA_MATERIALS.update({
+    "N": style_defs.MaterialSpec(
+        base_color=(0.16, 0.36, 1.00, 1.0), metallic=0.3, roughness=0.22,
+        clearcoat=0.7, coat_roughness=0.04,
+        rim=1.4, rim_color=(0.45, 0.65, 1.00), rim_power=3.5),
+    "O": style_defs.MaterialSpec(
+        base_color=(0.95, 0.10, 0.20, 1.0), metallic=0.3, roughness=0.22,
+        clearcoat=0.7, coat_roughness=0.04,
+        rim=1.2, rim_color=(1.00, 0.45, 0.50), rim_power=3.5),
+    "H": style_defs.MaterialSpec(
+        base_color=(0.92, 0.94, 0.98, 1.0), metallic=0.0, roughness=0.25,
+        clearcoat=0.6, coat_roughness=0.04,
+        rim=0.8, rim_color=(0.80, 0.90, 1.00), rim_power=3.5),
+})
 REVISTA_BOND = dataclasses.replace(REVISTA_MATERIALS["C"], rim=1.4)
+
+#: Elements drawn, in the order their carriers are built.
+ELEMENT_ORDER = ("C", "N", "O", "H", "Fe", "Se")
+
+#: Ball radii for atoms drawn ball-and-stick (bonded, or in a `--bola`
+#: group), in A. Carbon takes the style's own.
+BALL_RADIUS = {"N": 0.44, "O": 0.42, "H": 0.26, "Se": 0.66, "Fe": 0.72}
+
+#: Bonds between non-metals are drawn in three length classes (X-H,
+#: X-X, X-Se), each with a stick of its own median length.
+def _cutoff(a: str, b: str) -> tuple[float, str]:
+    """Bond cutoff and length class for an element pair."""
+    pair = {a, b}
+    if "H" in pair:
+        return (1.25, "XH") if pair != {"H"} else (0.0, "")
+    if "Se" in pair:
+        return (2.10, "XSe") if pair != {"Se"} else (2.45, "XSe")
+    return 1.75, "XX"
+
+
+def all_bonds(symbols: np.ndarray, positions: np.ndarray):
+    """Bonds among the non-metals, and each bond's length class.
+
+    Iron is left out: in a carbide or a selenide its contacts are part
+    of a solid drawn space-filling, and in ferrocene the ring-to-metal
+    contact is a hapto bond, which a stick would misdraw.
+    """
+    light = np.flatnonzero(symbols != "Fe")
+    pairs = carbon_bonds(positions[light], 2.45)
+    if not len(pairs):
+        return np.empty((0, 2), dtype=int), np.empty(0, dtype=object)
+    pairs = light[pairs]
+    keep, classes = [], []
+    lengths = np.linalg.norm(positions[pairs[:, 0]] - positions[pairs[:, 1]],
+                             axis=1)
+    for (i, j), length in zip(pairs, lengths, strict=True):
+        cutoff, label = _cutoff(symbols[i], symbols[j])
+        keep.append(length < cutoff)
+        classes.append(label)
+    keep = np.asarray(keep)
+    return pairs[keep], np.asarray(classes, dtype=object)[keep]
 
 
 def revista_style(base: style_defs.Style) -> style_defs.Style:
@@ -174,6 +229,46 @@ def primitive(name: str, make, mat: bpy.types.Material) -> bpy.types.Object:
     return obj
 
 
+def add_labels(path: Path, camera: bpy.types.Object) -> int:
+    """3D captions from a scene's `.rotulos.json`, facing the camera.
+
+    Each entry is ``{"texto": str, "pos": [x, y, z], "tam": float,
+    "color": [r, g, b]}`` in the scene's own coordinates and A. The
+    text glows rather than being lit, so it reads the same wherever
+    the lamps are, and it is a real object: move or retype it in
+    Blender like any other.
+    """
+    if not path.exists():
+        return 0
+    import json
+    entries = json.loads(path.read_text())
+    for k, entry in enumerate(entries):
+        bpy.ops.object.text_add(location=entry["pos"])
+        text = bpy.context.active_object
+        text.name = f"rotulo_{k}"
+        text.data.body = entry["texto"]
+        text.data.size = float(entry.get("tam", 12.0))
+        text.data.align_x, text.data.align_y = "CENTER", "CENTER"
+        text.data.extrude = 0.04 * text.data.size
+        mat = bpy.data.materials.new(f"mat_rotulo_{k}")
+        mat.use_nodes = True
+        nodes = mat.node_tree.nodes
+        nodes.clear()
+        emission = nodes.new("ShaderNodeEmission")
+        emission.inputs["Color"].default_value = (
+            *entry.get("color", (1.0, 0.85, 0.6)), 1.0)
+        emission.inputs["Strength"].default_value = float(
+            entry.get("brillo", 3.0))
+        output = nodes.new("ShaderNodeOutputMaterial")
+        mat.node_tree.links.new(emission.outputs[0],
+                                output.inputs["Surface"])
+        text.data.materials.append(mat)
+        track = text.constraints.new("TRACK_TO")
+        track.target = camera
+        track.track_axis, track.up_axis = "TRACK_Z", "UP_Y"
+    return len(entries)
+
+
 def main() -> int:
     argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
@@ -198,6 +293,22 @@ def main() -> int:
                         help="lens in mm, overriding the style's. Short "
                              "(24-35) brings the camera close, so what is "
                              "in front grows against what is behind")
+    parser.add_argument("--bola", type=int, nargs="+", default=None,
+                        help="`grupo` values drawn ball-and-stick whatever "
+                             "their bonds, e.g. a cloud of precursor "
+                             "molecules whose iron has no stick")
+    parser.add_argument("--ampliar", type=float, default=1.0,
+                        help="factor by which the `--bola` groups were "
+                             "magnified about each molecule's own centre "
+                             "in the scene: their bonds are found at true "
+                             "scale and their balls and sticks drawn this "
+                             "much thicker, so a magnified molecule reads "
+                             "as a molecule and not as a stretched one")
+    parser.add_argument("--dopantes", type=float, default=1.0,
+                        help="ball radius factor for bonded N, O, H and Se "
+                             "outside the `--bola` groups: the dopants and "
+                             "grafted groups of a wall, which at cover "
+                             "scale are otherwise too small to see")
     parser.add_argument("--encuadrar", type=int, nargs="+", default=None,
                         help="frame only the atoms whose `grupo` is one of "
                              "these, e.g. the hero of a field; the rest of "
@@ -227,55 +338,102 @@ def main() -> int:
     style = (revista_style(style_defs.get_style("core_shell_cover"))
              if revista else style_defs.get_style(args.style))
 
-    # --- atoms: one carrier of vertices per element, in the style's
-    # own element materials.
-    present = [key for key in ("C", "Fe", "Se") if (symbols == key).any()]
-    specs = ([REVISTA_MATERIALS.get(key, REVISTA_MATERIALS["C"])
-              for key in present] if revista
-             else style_defs.materials_for(style, "element", present,
-                                           "style"))
+    # --- bonds first, because they decide how an atom is drawn: one
+    # that is bonded to something belongs to a molecule or a lattice
+    # and is drawn as a ball; one with no bond is part of a crystal core
+    # and fills its van der Waals sphere. That is what lets a selenium
+    # dopant in a tube wall be a small ball while the selenium of the
+    # FeSe core beside it is a solid surface.
+    zoom = float(args.ampliar)
+    magnified = (np.isin(groups, args.bola) if args.bola and zoom != 1.0
+                 else np.zeros(len(positions), dtype=bool))
+    rest = np.flatnonzero(~magnified)
+    pairs, classes = all_bonds(symbols[rest], positions[rest])
+    pairs = rest[pairs] if len(pairs) else pairs
+    if magnified.any():
+        # Found at true scale: the scene keeps magnified molecules at
+        # least `zoom` times a contact apart, so dividing by `zoom`
+        # brings each one back to its own bond lengths without bringing
+        # two of them into bonding distance.
+        big = np.flatnonzero(magnified)
+        more, more_classes = all_bonds(symbols[big], positions[big] / zoom)
+        if len(more):
+            pairs = np.vstack((pairs.reshape(-1, 2), big[more]))
+            classes = np.concatenate((classes, more_classes + "_amp"))
+    bonded = np.zeros(len(positions), dtype=bool)
+    bonded[pairs.ravel()] = True
+    if args.bola:
+        bonded |= np.isin(groups, args.bola)
+
+    # --- atoms: one carrier of vertices per (element, radius).
+    present = [key for key in ELEMENT_ORDER if (symbols == key).any()]
     radii = VDW_RADIUS if revista else SOLID_RADIUS
     carriers = []
-    for key, spec in zip(present, specs, strict=True):
-        size = radii.get(
-            key, style_defs.element_radius(key) * args.atom_scale
-            * style.atom_scale)
-        ball = primitive(
-            f"esfera_{key}",
-            lambda size=size: bpy.ops.mesh.primitive_ico_sphere_add(
-                subdivisions=2 if size < 1.0 else 3, radius=size),
-            render_cnt.material_from_spec(f"mat_element_{key}", spec))
-        carriers.append(instanced(f"atomos_{key}", positions[symbols == key],
-                                  [], ball, "VERTS"))
+    for key in present:
+        spec = (REVISTA_MATERIALS.get(key, REVISTA_MATERIALS["C"])
+                if revista else style_defs.materials_for(
+                    style, "element", [key], "style")[0])
+        mat = render_cnt.material_from_spec(f"mat_element_{key}", spec)
+        ball_size = (BALL_RADIUS.get(key, 0.45) if key in BALL_RADIUS
+                     else style_defs.element_radius(key) * args.atom_scale
+                     * style.atom_scale)
+        if key == "C":
+            ball_size = (style_defs.element_radius(key) * args.atom_scale
+                         * style.atom_scale)
+        solid_size = radii.get(key, ball_size)
+        for tag, size, mask in (("", solid_size,
+                                 (symbols == key) & ~bonded),
+                                ("_bola", ball_size * (
+                                    args.dopantes if key != "C" else 1.0),
+                                 (symbols == key) & bonded & ~magnified),
+                                ("_amp", ball_size * zoom,
+                                 (symbols == key) & magnified)):
+            if not mask.any():
+                continue
+            ball = primitive(
+                f"esfera_{key}{tag}",
+                lambda size=size: bpy.ops.mesh.primitive_ico_sphere_add(
+                    subdivisions=2 if size < 1.0 else 3, radius=size),
+                mat)
+            carriers.append(instanced(f"atomos_{key}{tag}", positions[mask],
+                                      [], ball, "VERTS"))
 
-    # --- bonds: one tiny triangle per C-C pair, normal along the bond.
-    carbon = positions[symbols == "C"]
-    pairs = carbon_bonds(carbon, BOND_MAX)
-    start, end = carbon[pairs[:, 0]], carbon[pairs[:, 1]]
-    axis = end - start
-    length = np.linalg.norm(axis, axis=1)
-    axis /= length[:, None]
-    helper = np.where(np.abs(axis[:, :1]) < 0.9, [[1.0, 0.0, 0.0]],
-                      [[0.0, 1.0, 0.0]])
-    u = np.cross(axis, helper)
-    u /= np.linalg.norm(u, axis=1)[:, None]
-    v = np.cross(axis, u)
-    middle = 0.5 * (start + end)
-    corners = np.empty((len(pairs) * 3, 3))
-    for k, angle in enumerate((0.0, 2.0 * np.pi / 3.0, 4.0 * np.pi / 3.0)):
-        corners[k::3] = middle + 0.05 * (np.cos(angle) * u
-                                         + np.sin(angle) * v)
-    faces = [(3 * k, 3 * k + 1, 3 * k + 2) for k in range(len(pairs))]
+    # --- bonds: one tiny triangle per pair, normal along the bond, and
+    # one carrier per length class so every stick is its bond's length.
     bond_specs, _split = style_defs.bond_materials(
         style, "element", ["C"], "auto", "style")
-    stick = primitive(
-        "enlace",
-        lambda: bpy.ops.mesh.primitive_cylinder_add(
-            vertices=10, radius=0.12 * args.bond_scale * style.bond_scale,
-            depth=float(np.median(length)), end_fill_type="NOTHING"),
-        render_cnt.material_from_spec(
-            "mat_bond", REVISTA_BOND if revista else bond_specs[0]))
-    carriers.append(instanced("enlaces_CC", corners, faces, stick, "FACES"))
+    bond_mat = render_cnt.material_from_spec(
+        "mat_bond", REVISTA_BOND if revista else bond_specs[0])
+    for label in np.unique(classes):
+        chosen = pairs[classes == label]
+        start, end = positions[chosen[:, 0]], positions[chosen[:, 1]]
+        axis = end - start
+        length = np.linalg.norm(axis, axis=1)
+        axis /= length[:, None]
+        helper = np.where(np.abs(axis[:, :1]) < 0.9, [[1.0, 0.0, 0.0]],
+                          [[0.0, 1.0, 0.0]])
+        u = np.cross(axis, helper)
+        u /= np.linalg.norm(u, axis=1)[:, None]
+        v = np.cross(axis, u)
+        middle = 0.5 * (start + end)
+        corners = np.empty((len(chosen) * 3, 3))
+        for k, angle in enumerate((0.0, 2.0 * np.pi / 3.0,
+                                   4.0 * np.pi / 3.0)):
+            corners[k::3] = middle + 0.05 * (np.cos(angle) * u
+                                             + np.sin(angle) * v)
+        faces = [(3 * k, 3 * k + 1, 3 * k + 2) for k in range(len(chosen))]
+        depth = float(np.median(length))
+        radius = 0.12 * args.bond_scale * style.bond_scale * (
+            zoom if str(label).endswith("_amp") else 1.0)
+
+        def cylinder(depth=depth, radius=radius):
+            bpy.ops.mesh.primitive_cylinder_add(
+                vertices=10, radius=radius, depth=depth,
+                end_fill_type="NOTHING")
+
+        stick = primitive(f"enlace_{label}", cylinder, bond_mat)
+        carriers.append(instanced(f"enlaces_{label}", corners, faces,
+                                  stick, "FACES"))
 
     # --- the studio: the style's own, placed by the pipeline's own
     # functions against this scene's size.
@@ -334,6 +492,8 @@ def main() -> int:
             positions - np.asarray(cam.location), axis=1).max())
         cam.data.clip_start = min(cam.data.clip_start, 1.0)
         cam.data.clip_end = max(cam.data.clip_end, 1.2 * reach)
+    labels = add_labels(args.extxyz.with_suffix(".rotulos.json"),
+                        bpy.context.scene.camera)
     specs = list(style.effects) + [fx.parse_effect(text)
                                    for text in args.efecto]
     fx.build_effects(specs, centre, framed, positions)
@@ -370,7 +530,8 @@ def main() -> int:
     bpy.ops.wm.save_as_mainfile(filepath=str(args.blend.resolve()),
                                 compress=True)
     print(f"{args.blend}: {len(positions)} átomos, {len(pairs)} enlaces "
-          f"C-C, estilo {args.style}, radio {radius:.0f} Å")
+          f"entre no metales, {labels} rótulos, estilo {args.style}, "
+          f"radio {radius:.0f} Å")
     if args.png is not None:
         bpy.ops.render.render(write_still=True)
         for spec in specs:

@@ -916,3 +916,47 @@ la escena (si no, todo lo que está detrás de la protagonista se corta).
 |---|---|
 | `revista_campo` | `--elev 9 --lente 28 --fill 0.72 --encuadrar 0` |
 | `revista_vortice` | `--elev 24 --azim 10 --fill 1.05` |
+
+### Solo anémonas, vórtice sobre un campo, y la síntesis
+
+- **`escena_anemonas`** = `escena_campo.py --fondo 7 --barras 0 --placas
+  0 --nombre escena_anemonas` (141 541 átomos): la protagonista y siete
+  anémonas pequeñas alternando `anemona_mini` y `anemona_mini_b` (14
+  brazos, 18 623 átomos: `anemona_tubos.py --brazos 14 --ramas_max 0
+  --finos 0.4 --anillos_min 10 --anillos_max 18 --fe_cada 700 --semilla
+  11 --hundir 4 --nombre anemona_mini_b`). Primer plano con `--lente 50
+  --fill 1.1 --encuadrar 0`: la protagonista llena el cuadro y las demás
+  quedan detrás, desenfocadas.
+- **`escena_vortice.py`** ahora pone `campo` anémonas pequeñas (7) en el
+  suelo alrededor de la base (284 133 átomos).
+- **`escena_sintesis.py`** (14 885 átomos): arriba acetonitrilo,
+  ferroceno y selenourea enteros, construidos átomo a átomo; más abajo
+  los mismos rotos en sus fragmentos (CH3 + CN, Fe + dos C5H5, Se +
+  C(NH2)2), cada vez más separados; luego átomos sueltos de Fe y Se; y
+  abajo los productos: a 900 °C la placa con la coraza dopada y
+  funcionalizada (`placa_H_NSeO`) alrededor del núcleo de corte parejo,
+  con una ventana abierta en media cara para ver el FeSe, y dos barras
+  `barra_T_NSeO`; a 1020 °C dos `nanotubo_NSeO` con más grupos de
+  oxígeno injertados. Los fragmentos son un dibujo de la química, no una
+  simulación: qué enlace se rompe primero no se calcula. **Moléculas,
+  fragmentos y átomos sueltos van ampliados ×5**, cada uno sobre su
+  propio centro, y un rótulo lo dice: a escala real una molécula de 5 Å
+  junto a una placa de 70 Å es una mota. Los rótulos se escriben en
+  `xyz/escena_sintesis.rotulos.json` y `portada_blend.py` los convierte
+  en texto 3D luminoso orientado a la cámara; van sobre el suelo, porque
+  bajo él el espejo les cortaba el pie (y "1020" se leía "1030").
+
+`portada_blend.py` ahora dibuja enlaces entre todos los no metales en
+tres clases de longitud (X-H, X-X, X-Se), con colores para N, O y H en
+`revista`. Un átomo enlazado se dibuja como bola y uno sin enlaces
+(núcleo cristalino) como esfera de van der Waals, así el Se dopante de
+un tubo es una bola y el del FeSe una superficie. Opciones nuevas:
+`--bola GRUPO...`, `--ampliar F` (los enlaces de los grupos `--bola` se
+buscan a escala real y bolas y varillas se dibujan F veces más gruesas),
+`--dopantes F` (agranda N, O, H y Se de las paredes) y los rótulos.
+
+| proyecto | cámara |
+|---|---|
+| `revista_anemonas` | `--elev 12 --lente 50 --fill 1.1 --encuadrar 0` |
+| `revista_vortice` | `--elev 16 --azim 10 --fill 1.22` |
+| `revista_sintesis` | `--elev 6 --fill 0.92 --bola 4 5 6 --ampliar 5 --dopantes 2.2` |

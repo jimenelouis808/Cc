@@ -3,15 +3,18 @@ and FeSe rods and plates lying about on the ground between them.
 
     uv run python modelos_SEM/escena_campo.py
     uv run python modelos_SEM/escena_campo.py --fondo 3 --barras 40
+    uv run python modelos_SEM/escena_campo.py --fondo 7 --barras 0 \
+        --placas 0 --nombre escena_anemonas      # anemones only
 
 Laid out for a camera on -y looking along +y, low (`portada_blend.py
 --style revista --elev 10`), with the mirror floor under everything:
 
 * **the hero** (`xyz/anemona_conjunta.extxyz`, 18 arms) stands well in
   front, so a short lens (`--lente 24`) makes it loom over the rest;
-* **the background** is `xyz/anemona_mini.extxyz` (12 short arms, about
-  half the atoms) placed two to three hero radii behind, each turned
-  differently so the copies do not read as one;
+* **the background** takes `xyz/anemona_mini.extxyz` and
+  `xyz/anemona_mini_b.extxyz` in turn (12 and 14 short arms, half the
+  hero's atoms or less), up to eight of them, behind and to the sides,
+  each turned differently so the copies do not read as one;
 * **the ground** carries rods lying down at random headings and a few
   plates, flat or leaning, scattered between and around them.
 
@@ -42,7 +45,12 @@ OPT: dict[str, float] = {
     "placas": 5,
     "holgura": 5.0,      # A, closest any two pieces may come
     "semilla": 2,
+    "nombre": "escena_campo",
 }
+
+#: The background anemones, taken in turn: two different small builds,
+#: so a crowd of them does not read as one model copied.
+MINIS = ("anemona_mini", "anemona_mini_b")
 
 #: Where the background anemones stand: (x, y, lift), y into the page.
 #: Lift is above the ground, so they rest at different heights.
@@ -50,7 +58,8 @@ OPT: dict[str, float] = {
 #: in, anything behind the hero within about two of its radii of the
 #: axis is hidden by it.
 BACK = ((-430.0, 260.0, 10.0), (470.0, 380.0, 0.0), (-140.0, 760.0, 30.0),
-        (720.0, 820.0, 20.0))
+        (720.0, 820.0, 20.0), (-640.0, 900.0, 0.0), (260.0, 1000.0, 40.0),
+        (-360.0, 1250.0, 20.0), (620.0, 1350.0, 10.0))
 
 TRIES = 300
 
@@ -83,10 +92,12 @@ def main() -> int:
     add(hero.get_chemical_symbols(), h_pos + [30.0, -420.0, 0.0], 0)
     print(f"protagonista: {len(hero)} átomos, suelo a z = {ground:.0f} Å")
 
-    mini = read(str(HERE / "xyz" / "anemona_mini.extxyz"))
-    m_pos = mini.positions - mini.positions.mean(axis=0)
+    minis = [read(str(HERE / "xyz" / f"{name}.extxyz")) for name in MINIS
+             if (HERE / "xyz" / f"{name}.extxyz").exists()]
     made = 0
-    for x, y, lift in BACK[:int(OPT["fondo"])]:
+    for index, (x, y, lift) in enumerate(BACK[:int(OPT["fondo"])]):
+        mini = minis[index % len(minis)]
+        m_pos = mini.positions - mini.positions.mean(axis=0)
         for _ in range(TRIES):
             turn = construir._random_rotation(rng)
             local = m_pos @ turn.T
@@ -96,7 +107,7 @@ def main() -> int:
                 add(mini.get_chemical_symbols(), trial, 1)
                 made += 1
                 break
-    print(f"fondo: {made} anémonas de {len(mini)} átomos")
+    print(f"fondo: {made} anémonas ({', '.join(MINIS[:len(minis)])})")
 
     # --- the ground: rods lying down, plates flat or leaning.
     rods = [make_rod(*shape) for shape in RODS[:2]]
@@ -140,7 +151,7 @@ def main() -> int:
                               + scene.positions.min(axis=0))
     closest = float(cKDTree(scene.positions).query(scene.positions,
                                                    k=2)[0][:, 1].min())
-    name = "escena_campo"
+    name = str(OPT["nombre"])
     write(str(HERE / "xyz" / f"{name}.xyz"),
           Atoms(scene.get_chemical_symbols(), scene.positions),
           comment=f"campo de anémonas con barras y placas de FeSe: "
