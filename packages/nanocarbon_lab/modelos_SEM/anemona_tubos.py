@@ -17,17 +17,18 @@ arms. This goes back to those arms and takes them further:
 * **They grow from a central carbide particle** in its graphitic shell
   (`xyz/particula_Fe3C_C.xyz`), which is what an anemone of
   catalytically grown tubes radiates from.
-* **Thin branches leave some arms**, base against the arm's wall at the
-  graphitic contact, leaning toward the tip.
-* **Fe3C fills the tip of every tube.** Not a sphere dropped in: a plug
-  of cementite cut by the tube itself -- everything inside the tip and
-  no closer to the wall than the contact -- which is how a tip-growth
-  catalyst particle sits.
-* **Fe beads decorate the walls**, two sizes, blue-noise seated along
-  each tube's own outward normal.
+* **Branches are FUSED into the arm's wall** (`build_branched_cnt`):
+  one carbon network, a ring of six heptagons round each junction and
+  nothing else out of place. They were placed at van der Waals contact
+  before, and read as loose sticks lying on the arms.
+* **Fe3C fills the tip of every tube it fits in**, arm or branch. Not a
+  sphere dropped in: a plug of cementite cut by the tube itself.
+* **Fe decorates the walls as caps that WET the tube.** Each bead is
+  sunk toward the wall and cut by it at the Fe-C contact, so it sits on
+  the carbon with a footprint instead of touching it at one atom.
 
-This is a SCENE. Each tube is a relaxed, checked structure; where they
-meet they are placed at van der Waals contact, not fused, and the metal
+This is a SCENE. Each arm is a relaxed, checked structure; the arms
+stand off the central particle at van der Waals contact, and the metal
 is placed and not relaxed. Every placement is CHECKED against a
 measured clearance, and a piece that does not clear is re-drawn or left
 out -- the count that made it is printed.
@@ -46,37 +47,43 @@ from ase import Atoms
 from ase.io import read, write
 from scipy.spatial import cKDTree
 
-from nanocarbon_lab.builders.capped_cnt import build_capped_cnt
+from nanocarbon_lab.builders.branched_cnt import build_branched_cnt
 
 HERE = Path(__file__).resolve().parent
 CIF = HERE / "cif"
 
 OPT: dict[str, float] = {
-    "brazos": 20,
-    "ramas": 14,
-    "anillos_min": 10, "anillos_max": 26,   # body rings of an arm
+    "brazos": 11,
+    "ramas_max": 2,                         # fused branches per arm, at most
+    "anillos_min": 22, "anillos_max": 44,   # body rings of an arm
     "curva_max": 0.9,                       # `waviness` of the arc
-    "contacto": 2.8,                        # A, metal atom to wall atom
+    "contacto": 2.8,                        # A, carbide atom to wall atom
+    # A, decorating iron to wall. An Fe-C contact, not a van der Waals
+    # one: at 2.8 the beads read as hovering over the tubes.
+    "fe_contacto": 2.1,
+    # Fraction of its radius a bead is sunk toward the wall before the
+    # wall cuts it. 0 is a sphere touching at a point.
+    "fe_hundido": 0.45,
     "hueco": 3.4,                           # A, carbon to carbon
     # A^2 of wall per Fe bead. SPARSE on purpose: at 60 the first run
-    # seated 1077 beads and the tubes disappeared under them. The
-    # decoration in a micrograph is a sprinkle, not a coat.
+    # seated 1077 beads and the tubes disappeared under them.
     "fe_cada": 420.0,
     "semilla": 0,
 }
 
 #: Lattice frequency -> how often an arm takes it. The radius is
-#: 1.96 * freq A, so these are 5.9, 7.9 and 9.8 A.
-ARM_FREQS = ((3, 0.45), (4, 0.35), (5, 0.20))
+#: 1.96 * freq A, so these are 3.9 and 5.9 A: thin tubes.
+ARM_FREQS = ((2, 0.3), (3, 0.7))
 
-#: Branches are thinner than what they leave.
-BRANCH_FREQS = (2, 3)
+#: Branches are thinner than what they leave, so only the freq-3 arms
+#: carry them.
+BRANCH_FREQ = 2
 
-#: Radii of the two decorating bead sizes, in A.
-BEADS = (2.6, 3.6)
+#: Radii of the two decorating bead sizes BEFORE the wall cuts them.
+BEADS = (3.4, 4.6)
 
 #: Tries at seating one arm or one branch before giving it up.
-TRIES = 80
+TRIES = 240
 
 #: A plug is this many tube radii long (drawn between the two).
 PLUG_LENGTH = (1.6, 2.8)
@@ -125,50 +132,76 @@ def centreline(positions: np.ndarray) -> np.ndarray:
     return np.asarray(points)
 
 
-def make_tube(freq: int, rings: int, waviness: float, seed: int) -> dict:
-    """One capped tube in its own frame: base at the origin, pointing +z."""
+def make_arm(freq: int, rings: int, branches: int, waviness: float,
+             seed: int) -> dict:
+    """One arm in its own frame: base at the origin, pointing +z.
+
+    A capped tube with `branches` thinner tubes fused into its wall.
+    Carries each atom's outward normal and its `part` (0 trunk, 1.. a
+    branch), both from the builder rather than guessed from positions.
+    """
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        tube = build_capped_cnt(n_body_rings=rings, freq=freq, shape="arc",
-                                waviness=waviness, vacuum=10.0, seed=seed)
+        tube = build_branched_cnt(
+            freq=freq, n_body_rings=rings, branches=branches,
+            branch_freq=min(BRANCH_FREQ, freq), branch_rings=(8, 16),
+            branch_tilt=38.0, shape="arc", waviness=waviness, seed=seed)
     positions = np.asarray(tube.positions, dtype=float)
-    line = centreline(positions)
+    part = np.asarray(tube.info["part"], dtype=int)
+    line = centreline(positions[part == 0])
     if line[-1][2] < line[0][2]:
         line = line[::-1]
     # The base is the END of the wall, not the first slice's centroid:
     # step back along the first tangent by the cap's own reach.
     tangent = line[1] - line[0]
     tangent /= np.linalg.norm(tangent)
-    reach = float(((positions - line[0]) @ -tangent).max())
+    reach = float(((positions[part == 0] - line[0]) @ -tangent).max())
     base = line[0] - tangent * reach
     turn = rotation_to(tangent, np.array([0.0, 0.0, 1.0]), 0.0)
     return {"positions": (positions - base) @ turn.T,
-            "radius": float(tube.info.get("radius", 1.96 * freq)),
-            "freq": freq, "rings": rings}
+            "normals": np.asarray(tube.info["normals"]) @ turn.T,
+            "part": part, "radius": float(tube.info["radius"]),
+            "branch_radius": 1.96 * min(BRANCH_FREQ, freq),
+            "n_branches": int(tube.info["n_branches"]),
+            "census": tube.info["ring_counts"],
+            "geometry": tube.info["geometry"]}
 
 
-def placed_tube(piece: dict, origin: np.ndarray, direction: np.ndarray,
-                roll: float) -> dict:
-    """The tube moved so its base sits at `origin` heading along `direction`."""
+def placed_arm(piece: dict, origin: np.ndarray, direction: np.ndarray,
+               roll: float) -> dict:
+    """The arm moved so its base sits at `origin` heading along `direction`.
+
+    Also lists its `tips` -- the trunk's and each branch's -- as
+    (atoms of that part, unit tangent out of the tip, tube radius),
+    which is what a plug of carbide is cut against.
+    """
     turn = rotation_to(np.array([0.0, 0.0, 1.0]), direction, roll)
     positions = piece["positions"] @ turn.T + origin
-    line = centreline(positions)
+    part = piece["part"]
+    trunk = positions[part == 0]
+    line = centreline(trunk)
     if np.linalg.norm(line[-1] - origin) < np.linalg.norm(line[0] - origin):
         line = line[::-1]
-    # Outward normal and fractional position of every atom, off the
-    # tube's own centreline -- so "outside" never has to be guessed
-    # from a local patch, which gets the sign wrong near a neighbour.
     dense = np.concatenate([np.linspace(a, b, 12, endpoint=False)
                             for a, b in zip(line[:-1], line[1:], strict=True)]
                            + [line[-1:]])
-    index = cKDTree(dense).query(positions)[1]
-    outward = positions - dense[index]
-    outward /= np.maximum(np.linalg.norm(outward, axis=1)[:, None], 1e-9)
-    tip_tangent = line[-1] - line[-2]
-    tip_tangent /= np.linalg.norm(tip_tangent)
-    return {"positions": positions, "outward": outward,
-            "fraction": index / max(len(dense) - 1, 1), "line": dense,
-            "radius": piece["radius"], "tip_tangent": tip_tangent}
+    distance, index = cKDTree(dense).query(positions)
+    tangent = line[-1] - line[-2]
+    tips = [(trunk, tangent / np.linalg.norm(tangent), piece["radius"])]
+    for label in range(1, int(part.max()) + 1):
+        atoms = positions[part == label]
+        if len(atoms) < 30:
+            continue
+        # Root: where the branch meets the trunk. Tip: the far end.
+        away = distance[part == label]
+        root = atoms[np.argsort(away)[:10]].mean(axis=0)
+        far = atoms[np.argsort(away)[-10:]].mean(axis=0)
+        heading = far - root
+        tips.append((atoms, heading / np.linalg.norm(heading),
+                     piece["branch_radius"]))
+    return {"positions": positions, "outward": piece["normals"] @ turn.T,
+            "fraction": index / max(len(dense) - 1, 1), "part": part,
+            "radius": piece["radius"], "tips": tips}
 
 
 def clear_of(positions: np.ndarray, tree: cKDTree | None,
@@ -177,9 +210,9 @@ def clear_of(positions: np.ndarray, tree: cKDTree | None,
     return tree is None or float(tree.query(positions)[0].min()) >= gap
 
 
-def plug(tube: dict, block: Atoms, contact: float,
+def plug(wall: cKDTree, tip: tuple, block: Atoms, contact: float,
          rng: np.random.Generator) -> Atoms:
-    """Cementite filling the tube's tip, cut by the tube itself.
+    """Cementite filling one tube tip, cut by the tube itself.
 
     Kept: atoms inside the barrel near the tip, no closer to any wall
     atom than `contact`, and not left without a neighbour by that cut.
@@ -187,24 +220,60 @@ def plug(tube: dict, block: Atoms, contact: float,
     is how a tip-growth catalyst sits -- and it is no longer exactly
     3:1, which the scene's summary states.
     """
-    positions = tube["positions"]
-    wall = cKDTree(positions)
-    tangent = tube["tip_tangent"]
-    apex = positions[np.argmax(positions @ tangent)]
-    length = tube["radius"] * rng.uniform(*PLUG_LENGTH)
+    atoms, tangent, radius = tip
+    apex = atoms[np.argmax(atoms @ tangent)]
+    length = radius * rng.uniform(*PLUG_LENGTH)
     centre = apex - tangent * (0.5 * length + contact)
     local = block.positions - block.positions.mean(axis=0)
     local = local @ construir._random_rotation(rng).T + centre
     along = (local - apex) @ tangent
     across = np.linalg.norm((local - apex) - np.outer(along, tangent), axis=1)
     keep = ((along < 0.0) & (along > -(length + contact))
-            & (across < tube["radius"] - 1.0)
+            & (across < radius - 1.0)
             & (wall.query(local)[0] >= contact))
     out = block[keep]
     out.positions = local[keep]
     if len(out) > 1:
         near = cKDTree(out.positions).query(out.positions, k=2)[0][:, 1]
         out = out[near <= LOOSE]
+    return out
+
+
+def wetting_bead(block: Atoms, seat: np.ndarray, normal: np.ndarray,
+                 solid: cKDTree, contact: float, sink: float,
+                 rng: np.random.Generator) -> Atoms:
+    """An iron bead sunk onto the wall and cut by it.
+
+    The block's centre goes `contact + (1 - sink) * radius` out along
+    the normal -- so a fraction `sink` of its radius would be inside
+    the contact layer -- and every atom closer to anything solid than
+    `contact` is removed. What is left is a cap whose flat side follows
+    the tube: it touches the carbon over a footprint, not at one atom.
+    Atoms the cut leaves without an iron neighbour go too.
+    """
+    local = ((block.positions - block.positions.mean(axis=0))
+             @ construir._random_rotation(rng).T)
+    radius = float(np.linalg.norm(local, axis=1).max())
+    where = local + seat + normal * (contact + (1.0 - sink) * radius)
+    # Outside the wall only: the bead may not reach through a hexagon.
+    keep = ((solid.query(where)[0] >= contact)
+            & ((where - seat) @ normal > 0.5 * contact))
+    out = block[keep]
+    out.positions = where[keep]
+    if len(out) > 1:
+        near = cKDTree(out.positions).query(out.positions, k=2)[0][:, 1]
+        out = out[near <= LOOSE]
+    # The cut is on a crystal, so its lowest surviving plane can sit up
+    # to a layer above the contact. Settle the cap down until its
+    # nearest atom is AT the contact -- a few passes, since a step
+    # along the normal does not close an oblique gap one for one.
+    for _ in range(4):
+        if not len(out):
+            break
+        slack = float(solid.query(out.positions)[0].min()) - contact
+        if slack < 0.02:
+            break
+        out.positions -= normal * slack
     return out
 
 
@@ -273,11 +342,16 @@ def main() -> int:
     freqs = np.array([f for f, _ in ARM_FREQS])
     weights = np.array([w for _, w in ARM_FREQS])
     tubes: list[dict] = []
+    fused = heptagons = 0
+    bond_low, bond_high = np.inf, 0.0
     for arm in range(arms):
         freq = int(rng.choice(freqs, p=weights / weights.sum()))
         rings = int(rng.integers(OPT["anillos_min"], OPT["anillos_max"] + 1))
-        piece = make_tube(freq, rings, rng.uniform(0.15, OPT["curva_max"]),
-                          int(rng.integers(1 << 30)))
+        wanted = (int(rng.integers(1, int(OPT["ramas_max"]) + 1))
+                  if freq > BRANCH_FREQ else 0)
+        piece = make_arm(freq, rings, wanted,
+                         rng.uniform(0.15, OPT["curva_max"]),
+                         int(rng.integers(1 << 30)))
         tree = cKDTree(everything) if len(everything) else None
         seated = None
         for attempt in range(TRIES):
@@ -285,9 +359,9 @@ def main() -> int:
             # further out with each failed try.
             lean = directions[arm] + rng.normal(scale=0.10, size=3)
             lean /= np.linalg.norm(lean)
-            origin = lean * (start_radius + gap + 0.6 * attempt)
-            trial = placed_tube(piece, origin, lean,
-                                rng.uniform(0.0, 2.0 * np.pi))
+            origin = lean * (start_radius + gap + 0.6 * (attempt // 6))
+            trial = placed_arm(piece, origin, lean,
+                               rng.uniform(0.0, 2.0 * np.pi))
             if clear_of(trial["positions"], tree, gap - 0.2):
                 seated = trial
                 break
@@ -295,65 +369,48 @@ def main() -> int:
             continue
         tubes.append(seated)
         everything = np.vstack((everything, seated["positions"]))
+        fused += piece["n_branches"]
+        heptagons += piece["census"].get(7, 0)
+        bond_low = min(bond_low, piece["geometry"]["bond_min"])
+        bond_high = max(bond_high, piece["geometry"]["bond_max"])
+        print(f"  brazo {arm + 1}: radio {piece['radius']:.1f} Å, "
+              f"{len(piece['positions'])} C, {piece['n_branches']} ramas "
+              f"fundidas, {time.time() - started:.0f} s", flush=True)
     print(f"brazos: {len(tubes)} de {arms}, "
-          f"{sum(len(t['positions']) for t in tubes)} C")
+          f"{sum(len(t['positions']) for t in tubes)} C; {fused} ramas "
+          f"fundidas con {heptagons} heptágonos (6 por unión); enlaces "
+          f"{bond_low:.3f}-{bond_high:.3f} Å")
 
-    # --- branches: thin tubes leaving an arm's wall.
-    branches = 0
-    for _ in range(int(OPT["ramas"])):
-        tree = cKDTree(everything)
-        for _try in range(TRIES):
-            host = tubes[int(rng.integers(len(tubes)))]
-            eligible = np.flatnonzero((host["fraction"] > 0.3)
-                                      & (host["fraction"] < 0.75))
-            seat = int(rng.choice(eligible))
-            normal = host["outward"][seat]
-            line = host["line"]
-            near = int(host["fraction"][seat] * (len(line) - 1))
-            tangent = line[min(near + 3, len(line) - 1)] - line[max(near - 3, 0)]
-            tangent /= np.linalg.norm(tangent)
-            theta = np.radians(rng.uniform(40.0, 65.0))
-            heading = np.cos(theta) * tangent + np.sin(theta) * normal
-            piece = make_tube(int(rng.choice(BRANCH_FREQS)),
-                              int(rng.integers(5, 11)),
-                              rng.uniform(0.1, 0.4),
-                              int(rng.integers(1 << 30)))
-            origin = host["positions"][seat] + normal * gap
-            trial = placed_tube(piece, origin, heading,
-                                rng.uniform(0.0, 2.0 * np.pi))
-            if clear_of(trial["positions"], tree, gap - 0.4):
-                tubes.append(trial)
-                everything = np.vstack((everything, trial["positions"]))
-                branches += 1
-                break
-    print(f"ramas: {branches} de {int(OPT['ramas'])}")
-
-    # --- cementite in every tip.
+    # --- cementite in every tip it fits in, trunk and branch alike.
     block, _, _, _ = construir.core_from(
         CIF / "Fe3C_cementita.cif", "sphere", {"radius": 16.0})
     carbide = Atoms()
-    filled = 0
+    filled = tips = 0
+    wall = cKDTree(everything)
     for tube in tubes:
-        particle = plug(tube, block, contact, rng)
-        if len(particle) >= 6:
-            carbide += particle
-            filled += 1
-    print(f"Fe3C: {filled} de {len(tubes)} puntas, {len(carbide)} átomos "
+        for tip in tube["tips"]:
+            tips += 1
+            particle = plug(wall, tip, block, contact, rng)
+            if len(particle) >= 6:
+                carbide += particle
+                filled += 1
+    print(f"Fe3C: {filled} de {tips} puntas, {len(carbide)} átomos "
           f"({carbide.get_chemical_formula()})")
 
-    # --- iron on the walls.
+    # --- iron wetting the walls.
+    fe_contact, sink = OPT["fe_contacto"], OPT["fe_hundido"]
     solid = np.vstack((everything, carbide.positions))
     tree = cKDTree(solid)
     beads = [construir.core_from(CIF / "Fe_alfa.cif", "sphere",
                                  {"radius": r})[0] for r in BEADS]
     iron = Atoms()
-    centres: list[np.ndarray] = []
     seats: list[np.ndarray] = []
+    count = 0
     for tube in tubes:
-        area = 2.0 * np.pi * tube["radius"] * float(
-            np.linalg.norm(np.diff(tube["line"], axis=0), axis=1).sum())
-        eligible = np.flatnonzero((tube["fraction"] > 0.08)
-                                  & (tube["fraction"] < 0.86))
+        area = 2.62 * len(tube["positions"])        # A^2 per sp2 carbon
+        eligible = np.flatnonzero((tube["part"] > 0)
+                                  | ((tube["fraction"] > 0.08)
+                                     & (tube["fraction"] < 0.9)))
         for _ in range(int(round(area / OPT["fe_cada"]))):
             draw = rng.choice(eligible, size=24, replace=False)
             if seats:
@@ -363,27 +420,23 @@ def main() -> int:
                 pick = int(draw[int(np.argmax(far))])
             else:
                 pick = int(draw[0])
-            bead = beads[int(rng.integers(len(beads)))]
-            local = ((bead.positions - bead.positions.mean(axis=0))
-                     @ construir._random_rotation(rng).T)
-            reach = float(np.linalg.norm(local, axis=1).max())
             seat, normal = tube["positions"][pick], tube["outward"][pick]
-            where = seat + normal * construir._seating(local, seat, normal,
-                                                       tree, contact)
-            # Checked, both against every wall and against other beads.
-            if float(tree.query(local + where)[0].min()) < contact - 0.05:
+            if seats and float(np.linalg.norm(
+                    np.asarray(seats) - seat, axis=1).min()) < 2.4 * BEADS[1]:
                 continue
-            if any(np.linalg.norm(where - c) < reach + r + 2.0
-                   for c, r in centres):
+            bead = wetting_bead(beads[int(rng.integers(len(beads)))], seat,
+                                normal, tree, fe_contact, sink, rng)
+            if len(bead) < 8:
                 continue
-            placed = bead.copy()
-            placed.positions = local + where
-            iron += placed
-            centres.append((where, reach))
+            iron += bead
             seats.append(seat)
-    print(f"Fe: {len(centres)} partículas, {len(iron)} átomos; la más "
-          f"hundida a {tree.query(iron.positions)[0].min():.2f} Å "
-          f"(contacto {contact:.1f} Å)")
+            count += 1
+    gaps = tree.query(iron.positions)[0]
+    touching = int((gaps < fe_contact + 0.6).sum())
+    print(f"Fe: {count} partículas, {len(iron)} átomos; el más cercano al "
+          f"carbono a {gaps.min():.2f} Å (contacto {fe_contact:.1f} Å), "
+          f"{touching / max(count, 1):.1f} átomos de Fe por partícula en "
+          "contacto con la pared")
 
     # --- assemble, with a `grupo` column: 0 tubes, 1 core particle,
     # 2 the cementite in the tips, 3 the decorating iron.

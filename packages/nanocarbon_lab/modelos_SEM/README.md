@@ -785,3 +785,19 @@ El par más cercano de la escena, 1.26 Å, **no es de la colocación**:
 son 55 enlaces cortos dentro de la cáscara del núcleo, que ya venían en
 `particula_Fe3C_C.xyz`. El `.extxyz` lleva la columna `grupo` (0 tubos,
 1 núcleo, 2 Fe₃C de las puntas, 3 Fe).
+
+## Escenas en carbono cristalino
+
+Dos escenas que no usan la ruta mallada (pared amorfa), sino carbono
+construido sobre su red:
+
+| guion | qué hace | salida |
+|---|---|---|
+| `anemona_tubos.py` | 11 brazos finos (radio 3.9 y 5.9 Å) desde una partícula central; las ramas están **fundidas** a la pared (`build_branched_cnt`: seis heptágonos por unión y nada más), Fe3C en las puntas donde cabe, y Fe que **moja** la pared: cada partícula se hunde, la pared la corta al contacto Fe-C (2.1 Å) y se asienta | `xyz/escena_anemona_tubos.*` — 39 630 átomos, 16 ramas, 199 partículas de Fe |
+| `escena_fese.py` | placas hexagonales de FeSe hexagonal entre dos grafenos planos y barras de FeSe tetragonal talladas a la cavidad de un nanotubo tapado | `xyz/escena_fese.*` — 86 023 átomos, 7 placas y 14 barras |
+
+Lo que NO son: el canto de las placas va desnudo (cerrarlo sobre la red
+pide una jaula prismática que el paquete no construye), los brazos de
+la anémona se apoyan en la partícula central a distancia de van der
+Waals, y el metal está colocado, no relajado. El `.extxyz` lleva la
+columna `grupo` para colorear por pieza.
