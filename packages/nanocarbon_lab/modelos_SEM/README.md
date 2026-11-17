@@ -889,3 +889,30 @@ La anémona compacta sale de
 | `revista_anemona_fina` | `--elev 20 --azim 25 --atom-scale 1.0 --bond-scale 1.3 --fill 1.1` |
 | `revista_placas` | `--elev 12 --azim 20 --fill 0.95` |
 | `revista_barras` | `--elev 32 --azim 10 --fill 1.05` |
+
+### Campo de anémonas y vórtice
+
+- **`escena_campo.py`** (180 344 átomos): la protagonista
+  (`anemona_conjunta`, 18 brazos) bien adelantada; tres copias giradas
+  de `anemona_mini` (12 brazos cortos, 14 019 átomos, construida con
+  `anemona_tubos.py --brazos 12 --ramas_max 0 --finos 0.6 --anillos_min
+  10 --anillos_max 16 --fe_cada 800 --semilla 7 --hundir 4 --nombre
+  anemona_mini`) a los lados y detrás; y en el suelo 36 barras tumbadas
+  y 5 placas planas o inclinadas, todas sobre un mismo plano, que es
+  donde el render pone el espejo. Las de fondo van abiertas a los lados
+  a propósito: con lente corta y de cerca, lo que queda detrás de la
+  protagonista a menos de unos dos radios del eje queda tapado.
+- **`escena_vortice.py`** (172 188 átomos): 40 placas y barras en una
+  hélice que se abre al subir (130 → 300 Å de radio, 560 Å de alto, 2.2
+  vueltas) saliendo de la anémona; las barras siguen la tangente de la
+  hélice y las placas miran hacia fuera.
+
+`portada_blend.py` gana `--lente` (mm; corta para que lo de delante
+crezca frente a lo de atrás) y `--encuadrar GRUPO...`, que encuadra solo
+esos grupos del `.extxyz` y amplía el recorte lejano de la cámara a toda
+la escena (si no, todo lo que está detrás de la protagonista se corta).
+
+| proyecto | cámara |
+|---|---|
+| `revista_campo` | `--elev 9 --lente 28 --fill 0.72 --encuadrar 0` |
+| `revista_vortice` | `--elev 24 --azim 10 --fill 1.05` |

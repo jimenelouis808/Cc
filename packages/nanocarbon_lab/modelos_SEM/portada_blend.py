@@ -194,6 +194,14 @@ def main() -> int:
                              "overrides --view. On a floor this sets "
                              "where the horizon falls: higher puts it "
                              "above the subject")
+    parser.add_argument("--lente", type=float, default=None,
+                        help="lens in mm, overriding the style's. Short "
+                             "(24-35) brings the camera close, so what is "
+                             "in front grows against what is behind")
+    parser.add_argument("--encuadrar", type=int, nargs="+", default=None,
+                        help="frame only the atoms whose `grupo` is one of "
+                             "these, e.g. the hero of a field; the rest of "
+                             "the scene stays where it is, round and behind")
     parser.add_argument("--azim", type=float, default=0.0,
                         help="camera azimuth in degrees from the front")
     parser.add_argument("--fill", type=float, default=0.95,
@@ -212,7 +220,7 @@ def main() -> int:
                         help="no floor, even for `revista`")
     args = parser.parse_args(argv)
 
-    symbols, positions, _groups = read_extxyz(args.extxyz)
+    symbols, positions, groups = read_extxyz(args.extxyz)
     symbols = np.asarray(symbols)
     bpy.ops.wm.read_factory_settings(use_empty=True)
     revista = args.style == "revista"
@@ -314,8 +322,18 @@ def main() -> int:
             if obj.type == "LIGHT":
                 obj.light_linking.receiver_collection = excluded
     centre, framed = render_cnt._setup_camera(
-        style, carriers, style.camera_lens_mm, args.resolution,
-        view=args.view, fill=args.fill, points=positions)
+        style, carriers, args.lente or style.camera_lens_mm, args.resolution,
+        view=args.view, fill=args.fill,
+        points=(positions[np.isin(groups, args.encuadrar)]
+                if args.encuadrar else positions))
+    if args.encuadrar:
+        # The clip range was fitted to the framed atoms alone; widen it
+        # to the whole scene, or everything behind the hero is cut off.
+        cam = bpy.context.scene.camera
+        reach = float(np.linalg.norm(
+            positions - np.asarray(cam.location), axis=1).max())
+        cam.data.clip_start = min(cam.data.clip_start, 1.0)
+        cam.data.clip_end = max(cam.data.clip_end, 1.2 * reach)
     specs = list(style.effects) + [fx.parse_effect(text)
                                    for text in args.efecto]
     fx.build_effects(specs, centre, framed, positions)
