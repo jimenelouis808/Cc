@@ -4,7 +4,7 @@ and FeSe rods and plates lying about on the ground between them.
     uv run python modelos_SEM/escena_campo.py
     uv run python modelos_SEM/escena_campo.py --fondo 3 --barras 40
     uv run python modelos_SEM/escena_campo.py --fondo 7 --barras 0 \
-        --placas 0 --nombre escena_anemonas      # anemones only
+        --placas 0 --compacto 0.4 --nombre escena_anemonas  # anemones
 
 Laid out for a camera on -y looking along +y, low (`portada_blend.py
 --style revista --elev 10`), with the mirror floor under everything:
@@ -46,6 +46,10 @@ OPT: dict[str, float] = {
     "holgura": 5.0,      # A, closest any two pieces may come
     "semilla": 2,
     "nombre": "escena_campo",
+    # Scales the background's positions and the hero's step forward:
+    # below 1 the crowd gathers close behind the hero, which a long lens
+    # then compresses further.
+    "compacto": 1.0,
 }
 
 #: The background anemones, taken in turn: two different small builds,
@@ -89,7 +93,8 @@ def main() -> int:
     h_pos = hero.positions - hero.positions.mean(axis=0)
     h_pos = h_pos @ rotation_to(up, np.array([0.15, -0.2, 1.0]), 0.3).T
     ground = float(h_pos[:, 2].min()) - 2.0
-    add(hero.get_chemical_symbols(), h_pos + [30.0, -420.0, 0.0], 0)
+    k = float(OPT["compacto"])
+    add(hero.get_chemical_symbols(), h_pos + [30.0, -420.0 * k, 0.0], 0)
     print(f"protagonista: {len(hero)} átomos, suelo a z = {ground:.0f} Å")
 
     minis = [read(str(HERE / "xyz" / f"{name}.extxyz")) for name in MINIS
@@ -98,11 +103,14 @@ def main() -> int:
     for index, (x, y, lift) in enumerate(BACK[:int(OPT["fondo"])]):
         mini = minis[index % len(minis)]
         m_pos = mini.positions - mini.positions.mean(axis=0)
-        for _ in range(TRIES):
+        for attempt in range(TRIES):
             turn = construir._random_rotation(rng)
             local = m_pos @ turn.T
-            where = np.array([x, y, ground + lift - local[:, 2].min()])
-            trial = local + where + rng.normal(scale=12.0, size=3) * [1, 1, 0]
+            where = np.array([x * k, y * k, ground + lift - local[:, 2].min()])
+            # Wander further from the mark the longer it does not fit,
+            # so a crowded spot moves a piece aside rather than drop it.
+            wander = 12.0 + 0.6 * attempt
+            trial = local + where + rng.normal(scale=wander, size=3) * [1, 1, 0]
             if clear(trial):
                 add(mini.get_chemical_symbols(), trial, 1)
                 made += 1

@@ -5,9 +5,9 @@ the products each temperature makes.
     uv run python modelos_SEM/escena_sintesis.py --moleculas 90
 
 Atomistic, top to bottom, for a camera on -y (`portada_blend.py --style
-revista --elev 6 --bola 4 5 6 --ampliar 5`). The molecules, fragments
-and loose atoms are MAGNIFIED (`ampliar`, 5 by default) about their own
-centres, and a caption says so: at true scale a 5 A molecule beside a
+revista --calor --bola 4 5 6 --ampliar 5 --encuadrar 0 1 2 3`). The
+molecules, fragments and loose atoms are MAGNIFIED (`ampliar`, 5 by
+default) about their own centres: at true scale a 5 A molecule beside a
 70 A plate is a speck. `--ampliar` in `portada_blend.py` must be given
 the same factor, so their bonds are found at true length:
 
@@ -18,22 +18,26 @@ the same factor, so their bonds are found at true length:
   their fragments -- CH3 + CN, Fe + two C5H5 rings, Se + C(NH2)2 --
   drifting further apart the lower they are;
 * **atoms** of Fe and Se raining onto the products;
-* **products**, left to right: at **900 C** a coated FeSe plate with a
-  window cut in its doped, functionalised shell so the FeSe surface
-  shows, and two coated FeSe rods; at **1020 C** carbon nanotubes doped
-  with N and Se and carrying oxygen groups.
+* **products**, in mirror symmetry about the centre line: on the left
+  (**900 C**) a coated FeSe plate facing the camera, with a window cut
+  in its doped, functionalised shell so the FeSe surface shows, and two
+  coated rods crossed in an X behind it; on the right (**1020 C**) a
+  carbon nanotube doped with N and Se and carrying oxygen groups, with
+  two more crossed behind it. The molecules above are mirrored too.
+
+No captions: the two temperatures are carried by the light --
+`portada_blend.py --calor` washes the left half amber and the right
+half white-hot blue.
 
 The fragments are a drawing of the chemistry, not a simulation of it:
 which bonds break first, and in what order, is not computed. The
-products are this package's own checked models. Captions go into
-`xyz/escena_sintesis.rotulos.json`, which `portada_blend.py` turns into
-3D text. Every piece is checked against everything already placed and
-re-drawn if it comes closer than `holgura`.
+products are this package's own checked models. Every piece is
+checked against everything already placed and re-drawn if it comes
+closer than `holgura`.
 """
 
 from __future__ import annotations
 
-import json
 import sys
 from pathlib import Path
 
@@ -169,30 +173,35 @@ def main() -> int:
         return not len(placed) or float(
             cKDTree(placed).query(positions)[0].min()) >= gap
 
-    # --- 900 C, left: the plate, facing the camera and tipped up.
+    # --- the products, in mirror symmetry about x = 0: on the left
+    # (900 C) the plate facing the camera with two rods crossed in an X
+    # behind it; on the right (1020 C) a tube standing in front with
+    # two more crossed behind it.
     core, shell, centre = coated_plate(rng, bool(OPT["ventana"]))
-    normal = np.array([-0.15, -0.80, 0.58])
-    turn = rotation_to(up, normal / np.linalg.norm(normal), 0.5)
-    where = np.array([-95.0, 0.0, -70.0])
+    normal = np.array([0.14, -0.94, 0.30])
+    turn = rotation_to(up, normal / np.linalg.norm(normal), 0.52)
+    left, right = np.array([-88.0, 0.0, -60.0]), np.array([88.0, 0.0, -60.0])
     add(core.get_chemical_symbols(), (core.positions - centre) @ turn.T
-        + where, 0)
+        + left, 0)
     add(shell.get_chemical_symbols(), (shell.positions - centre) @ turn.T
-        + where, 1)
+        + left, 1)
     print(f"placa: núcleo {core.get_chemical_formula()}, coraza "
           f"{shell.get_chemical_formula()}"
           + (" con ventana" if OPT["ventana"] else ""))
 
+    def stand(piece: Atoms, axis, at, spin: float, label: int) -> None:
+        local = piece.positions - piece.positions.mean(axis=0)
+        long = np.linalg.svd(local, full_matrices=False)[2][0]
+        a = np.asarray(axis, dtype=float)
+        local = local @ rotation_to(long, a / np.linalg.norm(a), spin).T
+        add(piece.get_chemical_symbols(), local + at, label)
+
     rod = read(str(HERE / "xyz" / "barra_T_NSeO.xyz"))
-    for axis, at in (((0.85, 0.35, 0.25), (-120.0, 75.0, -150.0)),
-                     ((0.25, 0.45, 1.0), (-195.0, 40.0, -55.0))):
-        a = np.asarray(axis) / np.linalg.norm(axis)
-        r_pos = rod.positions - rod.positions.mean(axis=0)
-        long = np.linalg.svd(r_pos, full_matrices=False)[2][0]
-        r_pos = r_pos @ rotation_to(long, a, rng.uniform(0, 6.3)).T
-        add(rod.get_chemical_symbols(), r_pos + at, 2)
+    for sign in (1.0, -1.0):
+        stand(rod, (0.55 * sign, 0.0, 1.0), left + [0.0, 58.0 + 20 * sign, 0.0],
+              0.0, 2)
     print(f"barras: 2 × {rod.get_chemical_formula()}")
 
-    # --- 1020 C, right: doped tubes, with more oxygen groups grafted.
     tube = read(str(HERE / "xyz" / "nanotubo_NSeO.xyz"))
     for index, (name, coverage) in enumerate(GRAFTS):
         try:
@@ -202,28 +211,29 @@ def main() -> int:
         except ValueError as exc:
             print(f"  {name}: no se injertó ({exc})")
     print(f"tubo: {tube.get_chemical_formula()}")
-    t_pos = tube.positions - tube.positions.mean(axis=0)
-    long = np.linalg.svd(t_pos, full_matrices=False)[2][0]
-    for axis, at, spin in (((-0.30, -0.20, 1.0), (75.0, -10.0, -75.0), 0.0),
-                           ((0.35, 0.30, 1.0), (175.0, 70.0, -85.0), 2.0)):
-        a = np.asarray(axis) / np.linalg.norm(axis)
-        local = t_pos @ rotation_to(long, a, spin).T
-        add(tube.get_chemical_symbols(), local + at, 3)
+    stand(tube, (0.0, 0.0, 1.0), right + [0.0, -6.0, 0.0], 0.0, 3)
+    for sign in (1.0, -1.0):
+        stand(tube, (0.55 * sign, 0.0, 1.0),
+              right + [0.0, 70.0 + 25 * sign, 0.0], 1.0, 3)
     products_top = float(placed[:, 2].max())
+    tree = cKDTree(placed)
+    print(f"productos: par más cercano entre átomos a "
+          f"{float(tree.query(placed, k=2)[0][:, 1].min()):.2f} Å")
 
     # --- precursors, fragments and atoms, above the products.
     count = int(OPT["moleculas"])
     zoom = float(OPT["ampliar"])
     gap = OPT["holgura"] * zoom
-    floor_z, top_z = products_top + 30.0, products_top + 330.0
+    floor_z, top_z = products_top + 30.0, products_top + 260.0
     made = {4: 0, 5: 0, 6: 0}
-    for _ in range(count):
+    for _ in range(count // 2):
         builder = PRECURSORS[int(rng.integers(len(PRECURSORS)))]
         mol, fragments = builder()
         for _try in range(200):
             z = rng.uniform(floor_z, top_z)
             depth = (top_z - z) / (top_z - floor_z)      # 0 top, 1 bottom
-            where = np.array([rng.uniform(-210.0, 210.0),
+            # The left half only; its mirror image fills the right.
+            where = np.array([rng.uniform(-200.0, -14.0),
                               rng.uniform(-50.0, 60.0), z])
             turn = construir._random_rotation(rng)
             local = (mol.positions - mol.positions.mean(axis=0)) * zoom
@@ -247,21 +257,26 @@ def main() -> int:
                                         @ jitter.T + centre_piece
                                         + out * spread)
             positions = positions @ turn.T + where
-            if clear(positions, gap):
+            mirror = positions * [-1.0, 1.0, 1.0]
+            if clear(positions, gap) and clear(mirror, gap) and float(
+                    cKDTree(positions).query(mirror)[0].min()) >= gap:
                 add(mol.get_chemical_symbols(), positions, label)
-                made[label] += 1
+                add(mol.get_chemical_symbols(), mirror, label)
+                made[label] += 2
                 break
-    # Single atoms nearest the products: Fe over both, Se over the FeSe.
-    for _ in range(int(count * 0.7)):
+    # Single atoms nearest the products, mirrored like the molecules.
+    for _ in range(int(count * 0.35)):
         symbol = "Fe" if rng.random() < 0.55 else "Se"
-        x = rng.uniform(-210.0, 0.0 if symbol == "Se" else 210.0)
         for _try in range(100):
-            point = np.array([[x, rng.uniform(-50.0, 60.0),
+            point = np.array([[rng.uniform(-200.0, -14.0),
+                               rng.uniform(-50.0, 60.0),
                                rng.uniform(products_top - 10.0,
                                            floor_z + 25.0)]])
-            if clear(point, gap):
+            twin = point * [-1.0, 1.0, 1.0]
+            if clear(point, gap) and clear(twin, gap):
                 add([symbol], point, 6)
-                made[6] += 1
+                add([symbol], twin, 6)
+                made[6] += 2
                 break
     print(f"precursores enteros: {made[4]}, descompuestos: {made[5]}, "
           f"átomos sueltos: {made[6]}")
@@ -277,25 +292,11 @@ def main() -> int:
           comment=f"síntesis: precursores, descomposición y productos a "
                   f"900 y 1020 C: {scene.get_chemical_formula()}")
     write(str(HERE / "xyz" / f"{name}.extxyz"), scene, format="extxyz")
-    low = float(scene.positions[:, 2].min())
-    high = float(scene.positions[:, 2].max())
-    # The temperatures stand ON the floor, in front of the products: one
-    # placed below the lowest atom sank into the mirror, which cut the
-    # foot off every glyph -- "1020" read as "1030".
-    labels = [
-        {"texto": "900 °C", "pos": [-110.0 - shift[0], -150.0, low + 9.0],
-         "tam": 20.0, "color": [1.0, 0.62, 0.30], "brillo": 4.0},
-        {"texto": "1020 °C", "pos": [125.0 - shift[0], -150.0, low + 9.0],
-         "tam": 20.0, "color": [0.45, 0.80, 1.00], "brillo": 4.0},
-        {"texto": "CH3CN  ·  Fe(C5H5)2  ·  SeC(NH2)2",
-         "pos": [0.0, -60.0, high + 22.0], "tam": 13.0,
-         "color": [0.92, 0.94, 1.0], "brillo": 2.5},
-        {"texto": f"moléculas y átomos ×{zoom:g}",
-         "pos": [0.0, -60.0, high + 6.0], "tam": 7.0,
-         "color": [0.60, 0.66, 0.80], "brillo": 1.6},
-    ]
-    (HERE / "xyz" / f"{name}.rotulos.json").write_text(
-        json.dumps(labels, indent=1, ensure_ascii=False))
+    # No captions: the temperatures are told by the light
+    # (`portada_blend.py --calor`), warm on the left and white-hot on
+    # the right. A caption file from an older run would still be drawn,
+    # so it is removed.
+    (HERE / "xyz" / f"{name}.rotulos.json").unlink(missing_ok=True)
     picture(scene, HERE / "img" / f"{name}.png", 0.0, 0.0)
     print(f"\n{name}: {len(scene)} átomos, {scene.get_chemical_formula()}, "
           f"par más cercano a {closest:.2f} Å, caja "

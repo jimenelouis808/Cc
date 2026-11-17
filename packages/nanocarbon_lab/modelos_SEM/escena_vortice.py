@@ -45,6 +45,8 @@ OPT: dict[str, float] = {
     "radio_cima": 300.0, # A, helix radius at the top
     "holgura": 6.0,
     "campo": 7,          # small anemones on the ground round the base
+    "campo_cerca": 250.0,  # A, nearest and furthest they stand from the
+    "campo_lejos": 420.0,  # axis: close, so the base sits in a crowd
     "semilla": 0,
 }
 
@@ -118,14 +120,14 @@ def main() -> int:
         mini = minis[k % len(minis)]
         m_pos = mini.positions - mini.positions.mean(axis=0)
         # Spread over the back and the sides: -150 to +150 degrees from
-        # straight behind (+y), alternating, at 380 to 640 A.
+        # straight behind (+y), alternating.
         side = -1.0 if k % 2 else 1.0
         angle = np.radians(90.0 + side * (25.0 + 125.0 * (k / max(
             OPT["campo"] - 1, 1))))
         for _ in range(200):
             spin = rotation_to(up, rng.normal(size=3), rng.uniform(0, 6.3))
             local = m_pos @ spin.T
-            dist = rng.uniform(380.0, 640.0)
+            dist = rng.uniform(OPT["campo_cerca"], OPT["campo_lejos"])
             where = np.array([dist * np.cos(angle), dist * np.sin(angle),
                               ground - local[:, 2].min()])
             trial = local + where

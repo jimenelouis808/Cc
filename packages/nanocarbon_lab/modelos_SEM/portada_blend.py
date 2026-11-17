@@ -38,6 +38,7 @@ from types import SimpleNamespace
 
 import bpy
 import numpy as np
+from mathutils import Vector
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent / "nanocarbon_lab" / "blender"))
@@ -90,6 +91,69 @@ REVISTA_MATERIALS.update({
         rim=0.8, rim_color=(0.80, 0.90, 1.00), rim_power=3.5),
 })
 REVISTA_BOND = dataclasses.replace(REVISTA_MATERIALS["C"], rim=1.4)
+
+def _spec(rgb, metallic=0.9, roughness=0.18, **extra):
+    """A MaterialSpec from a colour and the few knobs a palette turns."""
+    return style_defs.MaterialSpec(base_color=(*rgb, 1.0), metallic=metallic,
+                                   roughness=roughness, **extra)
+
+
+#: Alternative palettes for `--style revista`, each a full set of
+#: element materials plus the bond's. All of them push the carbon
+#: NETWORK forward: the bond carries the colour or the light, so the
+#: hexagons read, rather than the atoms, which a close-up shows as a
+#: field of beads.
+PALETTES: dict[str, dict] = {
+    "revista": {**REVISTA_MATERIALS, "bond": REVISTA_BOND},
+    # Black glass atoms and glowing cyan bonds: the honeycomb as a
+    # lit wireframe. Gold iron, magenta selenium.
+    "neon": {
+        "C": _spec((0.015, 0.02, 0.03), 0.6, 0.25, clearcoat=0.8,
+                   coat_roughness=0.03),
+        # Emission 1.2: at 5 the whole tube burnt out to white and the
+        # glare pass spread it over the frame.
+        "bond": _spec((0.01, 0.10, 0.16), 0.0, 0.3,
+                      emission_color=(0.05, 0.75, 1.00),
+                      emission_strength=1.2),
+        "Fe": _spec((1.00, 0.70, 0.22), 1.0, 0.12,
+                    specular_tint=(1.0, 0.85, 0.5)),
+        "Se": _spec((0.95, 0.12, 0.70), 0.85, 0.18, clearcoat=0.5),
+        "N": _spec((0.25, 0.45, 1.00), 0.2, 0.2,
+                   emission_color=(0.3, 0.5, 1.0), emission_strength=1.5),
+        "O": _spec((1.00, 0.15, 0.25), 0.2, 0.2,
+                   emission_color=(1.0, 0.2, 0.3), emission_strength=1.0),
+        "H": _spec((0.90, 0.92, 1.00), 0.0, 0.25),
+    },
+    # Black lacquer and gold: the network as jewellery. Rose-gold iron,
+    # emerald selenium.
+    "oro": {
+        "C": _spec((0.012, 0.012, 0.015), 0.3, 0.08, clearcoat=1.0,
+                   coat_roughness=0.02),
+        "bond": _spec((1.00, 0.74, 0.30), 1.0, 0.14,
+                      specular_tint=(1.0, 0.85, 0.55)),
+        "Fe": _spec((0.98, 0.52, 0.40), 1.0, 0.14,
+                    specular_tint=(1.0, 0.75, 0.65)),
+        "Se": _spec((0.04, 0.62, 0.34), 0.9, 0.16, clearcoat=0.6),
+        "N": _spec((0.20, 0.35, 0.95), 0.5, 0.18, clearcoat=0.8),
+        "O": _spec((0.90, 0.10, 0.18), 0.5, 0.18, clearcoat=0.8),
+        "H": _spec((0.95, 0.95, 0.95), 0.2, 0.2),
+    },
+    # Silver under a thin film: the colour changes with the angle, so a
+    # curved wall shifts from violet to gold across the tube. Deep
+    # orange iron, violet selenium.
+    "iridiscente": {
+        "C": _spec((0.85, 0.87, 0.92), 1.0, 0.10, thin_film=420.0,
+                   thin_film_ior=1.45),
+        "bond": _spec((0.85, 0.87, 0.92), 1.0, 0.10, thin_film=520.0,
+                      thin_film_ior=1.45),
+        "Fe": _spec((1.00, 0.38, 0.06), 1.0, 0.14),
+        "Se": _spec((0.45, 0.20, 0.95), 0.9, 0.16, clearcoat=0.5),
+        "N": _spec((0.15, 0.40, 1.00), 0.4, 0.2),
+        "O": _spec((1.00, 0.12, 0.20), 0.4, 0.2),
+        "H": _spec((0.95, 0.95, 1.00), 0.0, 0.25),
+    },
+}
+
 
 #: Elements drawn, in the order their carriers are built.
 ELEMENT_ORDER = ("C", "N", "O", "H", "Fe", "Se")
@@ -229,6 +293,27 @@ def primitive(name: str, make, mat: bpy.types.Material) -> bpy.types.Object:
     return obj
 
 
+def calor_backdrop() -> None:
+    """The field graded across the frame: amber left, near-black middle,
+    cold blue right. With `--calor`; window coordinates, so it stays put
+    under the camera. (Multiplied into the style's vertical ramp it was
+    too dark to read; it replaces it.)
+    """
+    world = bpy.context.scene.world
+    nodes, links = world.node_tree.nodes, world.node_tree.links
+    background = next(n for n in nodes if n.type == "BACKGROUND")
+    coords = nodes.new("ShaderNodeTexCoord")
+    split = nodes.new("ShaderNodeSeparateXYZ")
+    ramp = nodes.new("ShaderNodeValToRGB")
+    ramp.color_ramp.elements[0].color = (0.07, 0.022, 0.004, 1.0)
+    ramp.color_ramp.elements[1].color = (0.006, 0.028, 0.085, 1.0)
+    middle = ramp.color_ramp.elements.new(0.5)
+    middle.color = (0.012, 0.012, 0.022, 1.0)
+    links.new(coords.outputs["Window"], split.inputs[0])
+    links.new(split.outputs["X"], ramp.inputs["Fac"])
+    links.new(ramp.outputs["Color"], background.inputs["Color"])
+
+
 def add_labels(path: Path, camera: bpy.types.Object) -> int:
     """3D captions from a scene's `.rotulos.json`, facing the camera.
 
@@ -304,6 +389,15 @@ def main() -> int:
                              "scale and their balls and sticks drawn this "
                              "much thicker, so a magnified molecule reads "
                              "as a molecule and not as a stretched one")
+    parser.add_argument("--paleta", default="revista", choices=list(PALETTES),
+                        help="materials for `--style revista`: revista, "
+                             "neon (glowing bonds), oro (black and gold), "
+                             "iridiscente (thin-film silver)")
+    parser.add_argument("--calor", action="store_true",
+                        help="two coloured side lights, warm amber from the "
+                             "left and white-hot blue from the right: "
+                             "a lower and a higher temperature, shown and "
+                             "not written")
     parser.add_argument("--dopantes", type=float, default=1.0,
                         help="ball radius factor for bonded N, O, H and Se "
                              "outside the `--bola` groups: the dopants and "
@@ -344,6 +438,7 @@ def main() -> int:
     # and fills its van der Waals sphere. That is what lets a selenium
     # dopant in a tube wall be a small ball while the selenium of the
     # FeSe core beside it is a solid surface.
+    palette = PALETTES[args.paleta]
     zoom = float(args.ampliar)
     magnified = (np.isin(groups, args.bola) if args.bola and zoom != 1.0
                  else np.zeros(len(positions), dtype=bool))
@@ -370,7 +465,7 @@ def main() -> int:
     radii = VDW_RADIUS if revista else SOLID_RADIUS
     carriers = []
     for key in present:
-        spec = (REVISTA_MATERIALS.get(key, REVISTA_MATERIALS["C"])
+        spec = (palette.get(key, palette["C"])
                 if revista else style_defs.materials_for(
                     style, "element", [key], "style")[0])
         mat = render_cnt.material_from_spec(f"mat_element_{key}", spec)
@@ -403,7 +498,7 @@ def main() -> int:
     bond_specs, _split = style_defs.bond_materials(
         style, "element", ["C"], "auto", "style")
     bond_mat = render_cnt.material_from_spec(
-        "mat_bond", REVISTA_BOND if revista else bond_specs[0])
+        "mat_bond", palette["bond"] if revista else bond_specs[0])
     for label in np.unique(classes):
         chosen = pairs[classes == label]
         start, end = positions[chosen[:, 0]], positions[chosen[:, 1]]
@@ -440,6 +535,8 @@ def main() -> int:
     bpy.context.view_layer.update()
     center, radius = render_cnt._bounding_sphere(carriers)
     render_cnt._setup_world(style.background)
+    if args.calor:
+        calor_backdrop()
     if args.elev is not None:
         elev, azim = np.radians(args.elev), np.radians(args.azim)
         render_cnt.camera.NAMED_VIEWS["portada"] = (
@@ -455,6 +552,30 @@ def main() -> int:
         render_cnt._add_floor(style.background, center, radius,
                               bottom=float(positions[:, 2].min()) - 1.5)
     render_cnt._setup_lights(style, center, radius)
+    if args.calor:
+        # One spot per half, each on the products of its own side (the
+        # lowest 40 % of the atoms, split at the middle): amber on the
+        # left, white-hot blue on the right. Two broad lamps from the
+        # sides were tried first and lit everything with both colours,
+        # which summed to white.
+        low = positions[:, 2] < np.quantile(positions[:, 2], 0.40)
+        middle_x = float(np.median(positions[low, 0]))
+        for name, side, rgb in (("calor_900", -1.0, (1.0, 0.50, 0.12)),
+                                ("calor_1020", 1.0, (0.55, 0.80, 1.0))):
+            half = low & ((positions[:, 0] - middle_x) * side > 0)
+            target = Vector(positions[half].mean(axis=0))
+            data = bpy.data.lights.new(name, "SPOT")
+            data.spot_size = np.radians(32.0)
+            data.spot_blend = 0.6
+            data.color = rgb
+            data.shadow_soft_size = 0.15 * radius
+            lamp = link(bpy.data.objects.new(name, data))
+            lamp.location = target + Vector((side * 0.9 * radius,
+                                             -1.6 * radius, 0.9 * radius))
+            reach = (target - lamp.location).length
+            data.energy = 60.0 * reach ** 2
+            aim = target - lamp.location
+            lamp.rotation_euler = aim.to_track_quat("-Z", "Y").to_euler()
     # The pipeline's floor is FLOOR_EXTENT radii across, so its far edge
     # shows as a horizon line through the middle of the frame. Stretched
     # far past the camera's reach, the edge goes to infinity and the

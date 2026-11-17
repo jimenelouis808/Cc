@@ -960,3 +960,41 @@ buscan a escala real y bolas y varillas se dibujan F veces más gruesas),
 | `revista_anemonas` | `--elev 12 --lente 50 --fill 1.1 --encuadrar 0` |
 | `revista_vortice` | `--elev 16 --azim 10 --fill 1.22` |
 | `revista_sintesis` | `--elev 6 --fill 0.92 --bola 4 5 6 --ampliar 5 --dopantes 2.2` |
+
+### Primeros planos, paletas y temperatura sin texto
+
+- **Anémonas juntas.** `escena_campo.py --compacto 0.4` acerca el fondo
+  y la protagonista; con 8 anémonas de fondo la escena cabe en 745 × 962
+  Å (antes 1558 × 1917). Si una no cabe en su sitio, se desplaza más
+  cuanto más intentos lleva, en vez de descartarse. Con teleobjetivo
+  (`--lente 105`) la profundidad se comprime: la red hexagonal de la
+  protagonista se ve de cerca y las demás quedan agrupadas y
+  desenfocadas detrás.
+- **Vórtice.** El campo se acerca al eje (`campo_cerca` 250 Å,
+  `campo_lejos` 420 Å, antes 380–640).
+- **Síntesis simétrica.** Productos en espejo respecto al centro: placa
+  de frente con ventana y dos barras en X detrás (izquierda), un tubo de
+  frente y dos en X detrás (derecha). Las moléculas se generan en la
+  mitad izquierda y se reflejan en la derecha. **Sin rótulos**: la
+  temperatura la dice la luz. `portada_blend.py --calor` pone un fondo
+  que pasa en horizontal de ámbar a casi negro y a azul frío, y un foco
+  sobre los productos de cada mitad (ámbar a la izquierda, blanco
+  azulado a la derecha). Dos luces anchas desde los lados se probaron
+  antes: iluminaban todo con los dos colores y sumaban blanco.
+- **Paletas** (`--paleta`, solo con `--style revista`). Todas ponen el
+  color o la luz en el ENLACE, para que se lean los hexágonos y no las
+  bolas:
+  - `revista`: carbono perla, Fe cobre, Se verde azulado.
+  - `neon`: átomos de vidrio negro y enlaces cian que emiten luz (a
+    emisión 5 el tubo se quemaba en blanco; va a 1.2), Fe oro, Se
+    magenta.
+  - `oro`: laca negra y enlaces de oro, Fe oro rosa, Se esmeralda.
+  - `iridiscente`: plata bajo una película delgada (420–520 nm), cuyo
+    color cambia con el ángulo; Fe naranja, Se violeta.
+
+| proyecto | cámara |
+|---|---|
+| `revista_anemonas_{revista,neon,oro,iridiscente}` | `--paleta … --elev 10 --lente 105 --fill 1.2 --encuadrar 0 --bond-scale 1.6` |
+| `revista_vortice` | `--elev 14 --azim 10 --lente 85 --fill 1.3 --bond-scale 1.4` |
+| `revista_sintesis` | `--calor --elev 10 --lente 85 --fill 0.98 --bola 4 5 6 --ampliar 5 --dopantes 2.0 --bond-scale 1.4` |
+| `revista_sintesis_cerca` | igual, con `--elev 14 --fill 0.86 --encuadrar 0 1 2 3` |
