@@ -69,11 +69,15 @@ OPT: dict[str, float] = {
     # seated 1077 beads and the tubes disappeared under them.
     "fe_cada": 420.0,
     "semilla": 0,
+    # Fraction of the arms that take the thinnest tube (3.9 A radius);
+    # the rest take 5.9 A, the narrowest that still holds a carbide.
+    "finos": 0.3,
+    "nombre": "escena_anemona_tubos",       # stem of the files written
 }
 
 #: Lattice frequency -> how often an arm takes it. The radius is
 #: 1.96 * freq A, so these are 3.9 and 5.9 A: thin tubes.
-ARM_FREQS = ((2, 0.3), (3, 0.7))
+ARM_FREQS = ((2, 0.3), (3, 0.7))      # the split is OPT["finos"]
 
 #: Branches are thinner than what they leave, so only the freq-3 arms
 #: carry them.
@@ -340,15 +344,18 @@ def main() -> int:
     directions = np.column_stack((radial * np.cos(angle),
                                   radial * np.sin(angle), height))
     freqs = np.array([f for f, _ in ARM_FREQS])
-    weights = np.array([w for _, w in ARM_FREQS])
+    weights = np.array([OPT["finos"], 1.0 - OPT["finos"]])
     tubes: list[dict] = []
     fused = heptagons = 0
     bond_low, bond_high = np.inf, 0.0
     for arm in range(arms):
         freq = int(rng.choice(freqs, p=weights / weights.sum()))
         rings = int(rng.integers(OPT["anillos_min"], OPT["anillos_max"] + 1))
+        # Body rings are counted in the lattice's own rows, so a thin
+        # tube needs more of them for the same length.
+        rings = int(round(rings * 3.0 / freq))
         wanted = (int(rng.integers(1, int(OPT["ramas_max"]) + 1))
-                  if freq > BRANCH_FREQ else 0)
+                  if freq > BRANCH_FREQ and OPT["ramas_max"] >= 1 else 0)
         piece = make_arm(freq, rings, wanted,
                          rng.uniform(0.15, OPT["curva_max"]),
                          int(rng.integers(1 << 30)))
@@ -456,19 +463,20 @@ def main() -> int:
 
     closest = float(cKDTree(scene.positions).query(scene.positions,
                                                    k=2)[0][:, 1].min())
+    name = str(OPT["nombre"])
     (HERE / "xyz").mkdir(exist_ok=True)
     (HERE / "img").mkdir(exist_ok=True)
-    write(str(HERE / "xyz" / "escena_anemona_tubos.xyz"),
+    write(str(HERE / "xyz" / f"{name}.xyz"),
           Atoms(scene.get_chemical_symbols(), scene.positions),
           comment=f"anemona de nanotubos: {scene.get_chemical_formula()}; "
                   "tubos relajados, metal COLOCADO (no relajado)")
-    write(str(HERE / "xyz" / "escena_anemona_tubos.extxyz"), scene,
+    write(str(HERE / "xyz" / f"{name}.extxyz"), scene,
           format="extxyz")
-    picture(scene, HERE / "img" / "escena_anemona_tubos.png", 22.0, 35.0)
-    picture(scene, HERE / "img" / "escena_anemona_tubos_b.png", -30.0, 120.0)
+    picture(scene, HERE / "img" / f"{name}.png", 22.0, 35.0)
+    picture(scene, HERE / "img" / f"{name}_b.png", -30.0, 120.0)
     print(f"\nescena: {len(scene)} átomos, {scene.get_chemical_formula()}, "
           f"par más cercano a {closest:.2f} Å, {time.time() - started:.0f} s")
-    print("  xyz/escena_anemona_tubos.xyz  (.extxyz lleva `grupo`: 0 tubos, "
+    print(f"  xyz/{name}.xyz  (.extxyz lleva `grupo`: 0 tubos, "
           "1 núcleo, 2 Fe3C en las puntas, 3 Fe)")
     return 0
 
