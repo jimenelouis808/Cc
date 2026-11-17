@@ -1,0 +1,35 @@
+warning: The `UV_NATIVE_TLS` environment variable is deprecated and will be removed in a future release. Use `UV_SYSTEM_CERTS` instead.
+200000 inserciones x 2 semillas, cada adsorbato a la temperatura que lo pone en el estado del H2 a 77 K
+
+### H2  —  T = 77 K (T/Tc = 2.33), σ con C = 3.180 Å, ε = 32.0 K
+  rendija óptima: H = 6.6 Å, K_H = 8.66e+03 ± 50.2, q_st = 7.76 kJ/mol
+  knee-diamond_k18_n5 K_H = 1.28e+04 ± 89.2, q_st =  9.77     1.48× la mejor rendija
+  knee-super-graphene_k22_n5 K_H = 9.43e+03 ± 259, q_st =  9.75     1.09× la mejor rendija
+  knee-super-square_k12_n7 K_H = 4.46e+03 ± 44.9, q_st =  7.87     0.52× la mejor rendija
+
+### Ne  —  T = 104 K (T/Tc = 2.33), σ con C = 3.096 Å, ε = 32.1 K
+  rendija óptima: H = 6.4 Å, K_H = 333 ± 1.43, q_st = 7.75 kJ/mol
+  knee-diamond_k18_n5 K_H = 175 ± 0.301, q_st =  8.41     0.53× la mejor rendija
+  knee-super-graphene_k22_n5 K_H = 117 ± 2.71, q_st =  8.17     0.35× la mejor rendija
+  knee-super-square_k12_n7 K_H = 117 ± 0.269, q_st =  7.22     0.35× la mejor rendija
+
+### Ar  —  T = 352 K (T/Tc = 2.33), σ con C = 3.404 Å, ε = 57.9 K
+  rendija óptima: H = 7.0 Å, K_H = 6.32 ± 0.0237, q_st = 17.56 kJ/mol
+  knee-diamond_k18_n5 K_H = 3.52 ± 0.00593, q_st = 17.95     0.56× la mejor rendija
+  knee-super-graphene_k22_n5 K_H = 2.87 ± 0.00805, q_st = 17.82     0.45× la mejor rendija
+  knee-super-square_k12_n7 K_H = 4.33 ± 0.0147, q_st = 18.03     0.68× la mejor rendija
+
+### CH4  —  T = 445 K (T/Tc = 2.33), σ con C = 3.566 Å, ε = 64.4 K
+  aviso (rendija 6.0): the Boltzmann-weighted mean energy is not negative, so this framework does not bind hydrogen at all at this temperature.
+  rendija óptima: H = 7.4 Å, K_H = 4.33 ± 0.0155, q_st = 21.26 kJ/mol
+  knee-diamond_k18_n5 K_H = 2.18 ± 0.00819, q_st = 21.24     0.50× la mejor rendija
+  knee-super-graphene_k22_n5 K_H = 1.98 ± 0.00501, q_st = 22.35     0.46× la mejor rendija
+  knee-super-square_k12_n7 K_H = 3.52 ± 0.0108, q_st = 23.82     0.81× la mejor rendija
+
+### N2  —  T = 295 K (T/Tc = 2.33), σ con C = 3.550 Å, ε = 51.6 K
+  aviso (rendija 6.0): the Boltzmann-weighted mean energy is not negative, so this framework does not bind hydrogen at all at this temperature.
+  rendija óptima: H = 7.4 Å, K_H = 16.9 ± 0.0624, q_st = 16.49 kJ/mol
+  knee-diamond_k18_n5 K_H = 9.1 ± 0.0494, q_st = 18.04     0.54× la mejor rendija
+  knee-super-graphene_k22_n5 K_H = 9.07 ± 0.0153, q_st = 20.33     0.54× la mejor rendija
+  knee-super-square_k12_n7 K_H = 15.7 ± 0.0717, q_st = 19.04     0.93× la mejor rendija
+

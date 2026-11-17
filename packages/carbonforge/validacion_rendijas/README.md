@@ -814,3 +814,63 @@ python barre_cristalinas.py <carpeta> --familia diamond
 uv run python validacion_rendijas/canales.py <carpeta>        # triaje
 uv run python validacion_rendijas/llenado_super.py <carpeta> 1000000
 ```
+
+## Por qué la superred sólo gana en frío, y no es el tamaño de la molécula
+
+Las tres cristalinas que pasaron el triaje, contra la mejor rendija
+**de cada molécula**, a temperatura reducida igualada
+(`adsorbatos_cristalinas.txt`):
+
+| adsorbato | T (K) | RT (kJ/mol) | schwarzita D | súper-grafeno | súper-cuadrado |
+|---|---|---|---|---|---|
+| **H₂** | 77 | **0.64** | **1.48×** | **1.09×** | 0.52× |
+| Ne | 104 | 0.86 | 0.53× | 0.35× | 0.35× |
+| N₂ | 295 | 2.45 | 0.54× | 0.54× | 0.93× |
+| Ar | 352 | 2.93 | 0.56× | 0.45× | 0.68× |
+| CH₄ | 445 | 3.70 | 0.50× | 0.46× | 0.81× |
+
+**H₂ a 77 K no es un caso entre cinco: es el único en el que una
+superred le gana a la rendija**, y ahí ganan dos de las tres.
+
+**Y no pierde por tener el pozo peor.** En **cuatro de los cinco**
+adsorbatos la mejor cristalina tiene el pozo **más profundo** que la
+rendija y aun así pierde:
+
+| adsorbato | q_st rendija | mejor cristalina | diferencia | razón K_H |
+|---|---|---|---|---|
+| H₂ | 7.76 | D 9.77 | **+2.01** | 1.48× |
+| Ne | 7.75 | D 8.41 | +0.66 | 0.53× |
+| N₂ | 16.49 | SG 20.33 | **+3.84** | 0.54× |
+| Ar | 17.56 | SS 18.03 | +0.47 | 0.68× |
+| CH₄ | 21.26 | SS 23.82 | **+2.56** | 0.81× |
+
+Con N₂ el súper-grafeno está **3.84 kJ/mol por debajo** de la rendija y
+saca 0.54×. Un pozo más profundo no basta.
+
+**Lo que cambia es `RT`, y la causa es el propio protocolo.** Igualar
+la temperatura reducida obliga a la molécula grande a estar caliente
+(104 → 445 K), y la captación en el límite lineal pesa cada sitio por
+`exp(-U/RT)`. Así que la **misma** ventaja de 2 kJ/mol vale
+`exp(2/0.64) = 23×` a 77 K y `exp(2/3.70) = 1.7×` a 445 K. Una superred
+ofrece sitios mejores y muchos menos por gramo; sólo gana cuando la
+amplificación exponencial de esa profundidad supera su déficit de
+sitios, y esa amplificación es un fenómeno **de frío**.
+
+**Y el argumento se cierra sobre sí mismo.** Para tener la
+amplificación hace falta frío; en frío, cualquier molécula mayor que el
+neón está por debajo de su temperatura crítica y **condensa** en vez de
+adsorberse, con lo que el límite de Henry deja de describirla
+(`henry_constant` avisa de eso). O sea que sólo una molécula
+supercrítica a temperatura criogénica —H₂, He, Ne— puede explotar un
+adsorbente de pozo profundo, y de ésas el neón ya pierde porque su
+ventaja de pozo es de 0.66 kJ/mol.
+
+Así que a «¿servirían mejor las superestructuras para otro adsorbato?»
+la respuesta medida es **no**, y la razón no es geométrica sino
+**termodinámica**: no es que la molécula no quepa, es que a la
+temperatura a la que esa molécula es gas, la profundidad del sitio ya
+no se paga.
+
+Una fila se midió aparte: el barrido agotó su límite de tiempo en
+N₂ × súper-cuadrado, y esa celda viene de una medida puntual con el
+mismo muestreo (200 000 × 2 semillas).
