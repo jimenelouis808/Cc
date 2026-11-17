@@ -1,0 +1,19 @@
+warning: The `UV_NATIVE_TLS` environment variable is deprecated and will be removed in a future release. Use `UV_SYSTEM_CERTS` instead.
+super-cube: 1748 -> 1748 átomos (x[1, 1, 1]), hueco 3.4 Å
+super-diamond: 3752 -> 3752 átomos (x[1, 1, 1]), hueco 0.0 Å
+super-hypercube: 6494 -> 6494 átomos (x[1, 1, 1]), hueco 3.4 Å
+super-tetrahedron: 812 -> 812 átomos (x[1, 1, 1]), hueco 3.4 Å
+
+H2 a 77 K, límite de cobertura cero, 1000000 inserciones x 2 semillas
+
+#### sanas
+| estructura | átomos | canal (Å) | área (m²/g) | K_H (mol/kg/MPa) | q_st (kJ/mol) | ángulo mín (°) |
+|---|---|---|---|---|---|---|
+| super-cube | 1748 | 13.07 | 2183 | 48673 ± 1579 | 12.29 | 331.2 |
+| super-tetrahedron | 812 | 9.06 | 2084 | 33291 ± 1721 | 11.40 | 332.3 |
+| super-hypercube | 6494 | 11.47 | 2192 | 16306 ± 325 | 11.94 | 329.3 |
+| super-diamond | 3752 | 25.95 | 2356 | 4639 ± 18 | 8.85 | 331.8 |
+
+  aviso (super-cube): the Widom average's own standard error is 7 % of it; raise `samples`. `exp(-beta U)` is dominated by the deepest points, so a cell that is mostly vacuum converges slowly.
+  aviso (super-hypercube): the Widom average's own standard error is 14 % of it; raise `samples`. `exp(-beta U)` is dominated by the deepest points, so a cell that is mostly vacuum converges slowly.
+  aviso (super-hypercube): the Widom average's own standard error is 16 % of it; raise `samples`. `exp(-beta U)` is dominated by the deepest points, so a cell that is mostly vacuum converges slowly.

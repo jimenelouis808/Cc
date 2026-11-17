@@ -874,3 +874,113 @@ no se paga.
 Una fila se midió aparte: el barrido agotó su límite de tiempo en
 N₂ × súper-cuadrado, y esa celda viene de una medida puntual con el
 mismo muestreo (200 000 × 2 semillas).
+
+## El catálogo entero, y la jaula que gana la pendiente y pierde la capacidad
+
+El estudio había medido **4 de las 25 entradas** del catálogo de
+superredes: `SUPERLATTICES` tiene cinco redes periódicas y `CAGES`
+veinte jaulas finitas, y sólo se había abierto la primera tabla.
+`nanocarbon_lab/construye_catalogo.py` construye las otras veintiuna
+con los parámetros de su propio preset. Las 21 se construyen, **19
+sanas y 2 colapsadas** (supertubo (8,0) y (10,0), ambas a 327.5° con el
+rescate agotado).
+
+### El triaje descarta 20 de 21, y por razones distintas
+
+| | canal (Å) | enlaces (Å) | triaje |
+|---|---|---|---|
+| **super-tetrahedron** | **9.06** | 1.318–1.531 | **pasa** |
+| super-hypercube | 11.47 | 1.316–**1.575** | enlace fuera |
+| super-cube | 13.07 | 1.329–1.516 | canal ancho |
+| super-diamond | 25.95 | 1.312–1.533 | canal ancho |
+| … 13 jaulas más | 16.8–53.7 | dentro | canal ancho |
+| supertubos (4,4) (5,5) (6,6) (8,8) | 37–89 | 1.56–**1.59** | enlace fuera |
+| supertubos (8,0) (10,0) | — | — | **pared colapsada** |
+
+* **Una jaula es casi todo vacío**: canales de 11 a 89 Å.
+* **Los siete supertubos fallan por enlace, no por canal** —
+  1.56–1.61 Å, fuera de la ventana sp². Es lo que
+  `nanocarbon_lab/CLAUDE.md` ya documenta del (6,6) («sale roto a
+  1.568 y ensanchar el puntal no lo cura, está en el nodo»),
+  reproducido ahora en los siete índices.
+* **El área por gramo no discrimina nada**: 1860–2368 m²/g para todas,
+  incluida una de canal de 88 Å. Cuarta vez en este estudio.
+* **Y super-diamond mallado sale con canal de 25.95 Å** frente a los
+  6.72 de Schwarz D cristalino, así que **no es la comparación
+  controlada que se había anunciado**: el preset mallado necesita celda
+  de 60 Å (por debajo de ~51 el constructor la rechaza) y no alcanza
+  los 30 Å de la cristalina. Es un límite de la ruta, no una elección.
+
+### Las medidas, y una predicción mía refutada
+
+Medí la que pasa, super-diamond por ser la red emparejada, y las dos de
+canal más cercano (`catalogo_1M.txt`):
+
+| estructura | canal (Å) | K_H | q_st | vs. mejor rendija |
+|---|---|---|---|---|
+| **super-cube** | 13.07 | **48673 ± 1579** | **12.29** | **5.6×** |
+| super-tetrahedron | 9.06 | 33291 ± 1721 | 11.40 | 3.8× |
+| super-hypercube | 11.47 | 16306 ± 325 | 11.94 | 1.9× |
+| super-diamond | 25.95 | 4639 ± 18 | 8.85 | 0.54× |
+
+**Yo había predicho que las jaulas saldrían mal por gramo. Salen 5.6×
+por encima de la mejor rendija**, y con los pozos más profundos de todo
+el estudio.
+
+### Dos controles antes de creérselo, y los dos pasan
+
+**¿Es la jaula o el hueco entre jaulas?** Una jaula es finita en las
+tres direcciones y el traspaso cierra cada eje con 3.4 Å, el contacto
+grafítico — que pone las paredes exteriores de jaulas vecinas a 3.4 Å,
+o sea **una rendija, y cerca de la óptima**. `empaquetado.py` abre el
+hueco:
+
+| | hueco 3.4 Å | 8 Å | 14 Å |
+|---|---|---|---|
+| super-cube | 51655 (q_st 12.29) | 41481 (12.40) | 44520 (12.20) |
+| super-tetrahedron | 33221 (11.40) | 27639 (11.29) | 31181 (11.35) |
+
+`K_H` se mueve un 15–20 % y `q_st` nada. **Los sitios están dentro.**
+
+**¿Es un bolsillo o un pinzamiento?** Los ángulos son de 331–332°, a
+3° del umbral, y es la firma que ya engañó una vez en la rejilla
+mallada. `bolsillos.py` mide dos cosas:
+
+| | media sobre el volumen | más profundo | razón |
+|---|---|---|---|
+| rendija H=6.6 | **−824 K** | −909 K | **1.1** |
+| super-cube | −208 K | −1440 K | 6.9 |
+| super-tetrahedron | −243 K | −1439 K | 5.9 |
+
+En la rendija **todo el volumen es el sitio**; en las jaulas el pozo es
+una región pequeña. Y **dónde** está esa región lo zanja: los puntos
+profundos del super-cube caen en **7 bolsillos de 1.6 ± 0.8 Å contra
+sus 8 vértices** — uno por vértice, salvo el que ninguna muestra tocó.
+Un vértice donde se cruzan tres tubos está encerrado por tres paredes,
+así que **es geometría**: −1440 K son 3.2 paredes planas, y un
+pinzamiento no aterriza uno por vértice.
+
+### El veredicto: es un captador, no un almacén
+
+Y lo decide la media sobre el volumen, no la pendiente. Ocho bolsillos
+por jaula de 1748 átomos son **0.38 mol/kg de saturación** contra los
+~28 mol/kg que una rendija de 10 Å ya midió. Con la pendiente medida,
+la media carga de Langmuir cae en **7.8 Pa**:
+
+| | K_H | saturación estimada | media carga |
+|---|---|---|---|
+| super-cube | 48673 | 0.38 mol/kg | **7.8 Pa** |
+| super-tetrahedron | 33291 | 0.41 mol/kg | 12.3 Pa |
+| rendija (ref.) | 8660 | ~28 mol/kg | — |
+
+(La saturación es una **estimación**: una molécula por bolsillo, y los
+bolsillos contados por `bolsillos.py`. No es una isoterma.)
+
+Así que la jaula se llena a presión ridículamente baja y **se para**.
+Para almacenamiento es mala; para un captador a baja presión, un
+sensor o una separación selectiva es excelente. Y es exactamente la
+distinción que `adsorption/henry.py` declara en su primera página: la
+pendiente dice quién llena antes, y **sólo una isoterma dice quién
+guarda más**. Aquí esa frase decide el veredicto, y es el primer caso
+del estudio donde el límite de cobertura cero no basta: **confirmarlo
+pide un GCMC de verdad sobre super-cube.**

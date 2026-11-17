@@ -1,0 +1,9 @@
+warning: The `UV_NATIVE_TLS` environment variable is deprecated and will be removed in a future release. Use `UV_SYSTEM_CERTS` instead.
+| estructura | hueco (Å) | átomos | canal (Å) | K_H | q_st |
+|---|---|---|---|---|---|
+| super-cube | 3.4 | 1748 | 13.07 | 51655 ± 1811 | 12.29 |
+| super-cube | 8.0 | 1748 | 13.09 | 41481 ± 7854 | 12.40 |
+| super-cube | 14.0 | 1748 | 21.39 | 44520 ± 3758 | 12.20 |
+| super-tetrahedron | 3.4 | 812 | 9.06 | 33221 ± 2811 | 11.40 |
+| super-tetrahedron | 8.0 | 812 | 14.25 | 27639 ± 76 | 11.29 |
+| super-tetrahedron | 14.0 | 812 | 21.64 | 31181 ± 101 | 11.35 |
