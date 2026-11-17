@@ -9,7 +9,7 @@ Laid out for a PORTRAIT camera looking along +y (the `front` view of
 * **The anemone** (`xyz/anemona_conjunta.extxyz`, a compact 18-arm one
   from `anemona_tubos.py`) sits upper right and a little back -- the
   subject, on the upper third.
-* **The plates** (`xyz/placa_H_C.xyz`, wrapped all the way round) rise
+* **The plates** (`xyz/placa_H_mixta.xyz`, evenly cut, wrapped all round) rise
   in an arc up the left, each turned a step further toward the viewer,
   so the column reads from edge to face as the eye climbs.
 * **The rods** fan across the foreground at the bottom, lying down and
@@ -88,7 +88,7 @@ def main() -> int:
 
     # --- the plates: an arc up the left, edge-on at the bottom and
     # turning to face the viewer as it climbs.
-    plate = read(str(HERE / "xyz" / "placa_H_C.xyz"))
+    plate = read(str(HERE / "xyz" / "placa_H_mixta.xyz"))
     p_pos = plate.positions - plate.positions.mean(axis=0)
     count = int(OPT["placas"])
     for k in range(count):

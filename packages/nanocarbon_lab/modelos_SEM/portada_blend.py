@@ -89,17 +89,21 @@ def revista_style(base: style_defs.Style) -> style_defs.Style:
     return dataclasses.replace(
         base,
         name="revista",
+        # A black mirror under the subject: dark enough to stay a
+        # floor, glossy enough to give back a soft copy of the scene.
         background=style_defs.Background(
             kind="gradient", top=(0.020, 0.024, 0.075),
-            bottom=(0.002, 0.003, 0.010), strength=1.0),
+            bottom=(0.002, 0.003, 0.010), strength=1.0,
+            floor=True, floor_color=(0.006, 0.007, 0.016),
+            floor_roughness=0.07, floor_metallic=0.85),
         lights=[
-            style_defs.LightSpec("AREA", 3400.0, (1.00, 0.88, 0.70),
-                                 (7.0, -7.0, 9.0), size=7.0),
-            style_defs.LightSpec("AREA", 4200.0, (0.40, 0.75, 1.00),
-                                 (-4.0, 9.0, 5.0), size=5.0),
-            style_defs.LightSpec("AREA", 1300.0, (0.85, 0.30, 0.95),
+            style_defs.LightSpec("AREA", 5800.0, (1.00, 0.88, 0.70),
+                                 (7.0, -7.0, 11.0), size=7.0),
+            style_defs.LightSpec("AREA", 7000.0, (0.40, 0.75, 1.00),
+                                 (-4.0, 9.0, 10.0), size=5.0),
+            style_defs.LightSpec("AREA", 2200.0, (0.85, 0.30, 0.95),
                                  (-9.0, -3.0, -4.0), size=10.0),
-            style_defs.LightSpec("AREA", 700.0, (0.55, 0.65, 1.00),
+            style_defs.LightSpec("AREA", 1200.0, (0.55, 0.65, 1.00),
                                  (0.0, -10.0, 1.0), size=16.0),
         ],
         effects=(fx.EffectSpec("glare", {"strength": 0.42, "size": 0.55,
@@ -185,6 +189,13 @@ def main() -> int:
                         help="an extra effect, as render_cnt takes it, "
                              "e.g. bokeh:color=cyan,count=40 (repeatable)")
     parser.add_argument("--view", default="auto")
+    parser.add_argument("--elev", type=float, default=None,
+                        help="camera elevation in degrees; with --azim, "
+                             "overrides --view. On a floor this sets "
+                             "where the horizon falls: higher puts it "
+                             "above the subject")
+    parser.add_argument("--azim", type=float, default=0.0,
+                        help="camera azimuth in degrees from the front")
     parser.add_argument("--fill", type=float, default=0.95,
                         help="fraction of the frame the scene takes")
     parser.add_argument("--resolution", type=int, nargs=2,
@@ -194,9 +205,11 @@ def main() -> int:
     parser.add_argument("--bond-scale", type=float, default=0.5)
     parser.add_argument("--no-dof", dest="dof", action="store_false")
     parser.add_argument("--floor", action="store_true",
-                        help="keep the style's glossy floor. Off here: "
-                             "seen from above it mirrors the light rig "
-                             "as bright rectangles behind the subject")
+                        help="keep the style's glossy floor. Off by "
+                             "default for the package styles, on for "
+                             "`revista`")
+    parser.add_argument("--sin-piso", dest="no_floor", action="store_true",
+                        help="no floor, even for `revista`")
     args = parser.parse_args(argv)
 
     symbols, positions, _groups = read_extxyz(args.extxyz)
@@ -261,10 +274,45 @@ def main() -> int:
     bpy.context.view_layer.update()
     center, radius = render_cnt._bounding_sphere(carriers)
     render_cnt._setup_world(style.background)
-    if args.floor and style.background.has_floor:
+    if args.elev is not None:
+        elev, azim = np.radians(args.elev), np.radians(args.azim)
+        render_cnt.camera.NAMED_VIEWS["portada"] = (
+            float(np.cos(elev) * np.sin(azim)),
+            float(-np.cos(elev) * np.cos(azim)), float(np.sin(elev)))
+        args.view = "portada"
+    use_floor = (args.floor or revista) and not args.no_floor
+    if use_floor and args.view == "auto":
+        # A floor wants the camera low. Seen from above, the auto view's
+        # usual pick, it fills the frame and mirrors the light rig.
+        args.view = "hero"
+    if use_floor and style.background.has_floor:
         render_cnt._add_floor(style.background, center, radius,
                               bottom=float(positions[:, 2].min()) - 1.5)
     render_cnt._setup_lights(style, center, radius)
+    # The pipeline's floor is FLOOR_EXTENT radii across, so its far edge
+    # shows as a horizon line through the middle of the frame. Stretched
+    # far past the camera's reach, the edge goes to infinity and the
+    # floor fades into the field. (Hiding the lamps from reflections, to
+    # keep them out of the mirror, was tried and undone: a metal's whole
+    # brightness IS its reflection of the lamps, and the scene went dull.)
+    floor_obj = bpy.data.objects.get("Floor")
+    if floor_obj is not None:
+        floor_obj.scale = (60.0, 60.0, 1.0)
+        # Light linking: every lamp lights the subject and NOT the
+        # floor, so the mirror gives back the scene and never a lamp.
+        # Without it each lamp came back as a white rectangle under the
+        # subject -- the back light even with the anemone's silhouette
+        # in it -- and moving or hiding lamps from reflections either
+        # only moved the rectangle or left the metal dull, since a
+        # metal's highlights ARE its reflection of the lamps. The
+        # collection holds the floor alone, marked EXCLUDE, so
+        # everything else stays lit.
+        excluded = bpy.data.collections.new("sin_luz_directa")
+        excluded.objects.link(floor_obj)
+        excluded.collection_objects[0].light_linking.link_state = "EXCLUDE"
+        for obj in bpy.context.scene.objects:
+            if obj.type == "LIGHT":
+                obj.light_linking.receiver_collection = excluded
     centre, framed = render_cnt._setup_camera(
         style, carriers, style.camera_lens_mm, args.resolution,
         view=args.view, fill=args.fill, points=positions)

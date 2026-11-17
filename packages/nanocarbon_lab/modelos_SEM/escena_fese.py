@@ -84,15 +84,14 @@ def graphene_hexagon(circumradius: float) -> np.ndarray:
 def wrapped_plate() -> Atoms:
     """The hexagonal FeSe plate in its CLOSED graphitic shell.
 
-    `construir.py` builds and checks it (`xyz/placa_H_C.xyz`): the shell
-    is the meshed one, because a lattice cannot close round a prism's
-    rim. Wrapped all the way round was the request, and this is the one
-    piece of the package that does it.
+    `placa_mixta.py` writes it: the shell `construir.py` built and
+    checked for `placa_H_C`, around a core cut so both broad faces carry
+    iron and selenium evenly rather than one element each.
     """
-    source = HERE / "xyz" / "placa_H_C.xyz"
+    source = HERE / "xyz" / "placa_H_mixta.xyz"
     if not source.exists():
-        raise SystemExit("falta xyz/placa_H_C.xyz: corre antes "
-                         "`construir.py --solo placa_H`.")
+        raise SystemExit("falta xyz/placa_H_mixta.xyz: corre antes "
+                         "`placa_mixta.py`.")
     plate = read(str(source))
     plate.positions -= plate.positions.mean(axis=0)
     return plate

@@ -73,7 +73,20 @@ OPT: dict[str, float] = {
     # the rest take 5.9 A, the narrowest that still holds a carbide.
     "finos": 0.3,
     "nombre": "escena_anemona_tubos",       # stem of the files written
+    # A, how far each arm's base sinks below the central particle's
+    # outer shell. 0 stands the arms off it at van der Waals contact;
+    # above 0 the base goes INTO the shell and the shell is opened where
+    # each tube enters, so the arms look grown out of the particle. An
+    # appearance, not a weld: the two networks are not bonded.
+    "hundir": 0.0,
 }
+
+#: A, shell carbons closer than this to an arm are removed when the
+#: arms are sunk, which is what opens a mouth round each tube.
+MOUTH = 2.6
+
+#: A, the closest a sunk arm may come to the particle's metal.
+METAL_CLEARANCE = 2.2
 
 #: Lattice frequency -> how often an arm takes it. The radius is
 #: 1.96 * freq A, so these are 3.9 and 5.9 A: thin tubes.
@@ -359,17 +372,29 @@ def main() -> int:
         piece = make_arm(freq, rings, wanted,
                          rng.uniform(0.15, OPT["curva_max"]),
                          int(rng.integers(1 << 30)))
-        tree = cKDTree(everything) if len(everything) else None
+        sink = float(OPT["hundir"])
+        if sink > 0.0 and len(pieces):
+            # Arms against arms only; the shell is opened afterwards.
+            others = everything[len(pieces[0][1]):]
+            tree = cKDTree(others) if len(others) else None
+            metal = cKDTree(pieces[0][1].positions[
+                np.asarray(pieces[0][1].get_chemical_symbols()) != "C"])
+            stand = start_radius - sink
+        else:
+            tree = cKDTree(everything) if len(everything) else None
+            metal, stand = None, start_radius + gap
         seated = None
         for attempt in range(TRIES):
             # Lean a little off the exact Fibonacci direction, and stand
             # further out with each failed try.
             lean = directions[arm] + rng.normal(scale=0.10, size=3)
             lean /= np.linalg.norm(lean)
-            origin = lean * (start_radius + gap + 0.6 * (attempt // 6))
+            origin = lean * (stand + 0.6 * (attempt // 6))
             trial = placed_arm(piece, origin, lean,
                                rng.uniform(0.0, 2.0 * np.pi))
-            if clear_of(trial["positions"], tree, gap - 0.2):
+            if clear_of(trial["positions"], tree, gap - 0.2) and (
+                    metal is None
+                    or clear_of(trial["positions"], metal, METAL_CLEARANCE)):
                 seated = trial
                 break
         if seated is None:
@@ -383,6 +408,17 @@ def main() -> int:
         print(f"  brazo {arm + 1}: radio {piece['radius']:.1f} Å, "
               f"{len(piece['positions'])} C, {piece['n_branches']} ramas "
               f"fundidas, {time.time() - started:.0f} s", flush=True)
+    if float(OPT["hundir"]) > 0.0 and len(pieces):
+        core = pieces[0][1]
+        arm_tree = cKDTree(np.vstack([t["positions"] for t in tubes]))
+        is_carbon = np.asarray(core.get_chemical_symbols()) == "C"
+        mouth = is_carbon & (arm_tree.query(core.positions)[0] < MOUTH)
+        core = core[~mouth]
+        pieces[0] = ("nucleo", core)
+        everything = np.vstack([core.positions]
+                               + [t["positions"] for t in tubes])
+        print(f"coraza abierta: {int(mouth.sum())} C quitados donde "
+              f"entran los brazos (hundidos {OPT['hundir']:.1f} Å)")
     print(f"brazos: {len(tubes)} de {arms}, "
           f"{sum(len(t['positions']) for t in tubes)} C; {fused} ramas "
           f"fundidas con {heptagons} heptágonos (6 por unión); enlaces "

@@ -847,3 +847,45 @@ del cuadro e imprime cuánto. La composición final no aparta ninguna.
 La anémona compacta sale de
 `anemona_tubos.py --brazos 18 --ramas_max 0 --finos 0.5 --anillos_min 12
 --anillos_max 22 --fe_cada 520 --semilla 3 --nombre anemona_conjunta`.
+
+### Placas con superficie pareja, brazos hundidos y suelo espejo
+
+- **`placa_mixta.py` → `xyz/placa_H_mixta.xyz`.** En el FeSe tipo NiAs
+  cada plano basal es todo Fe o todo Se, así que la placa original
+  mostraba un elemento en el centro de cada cara y el otro en el canto
+  (un disco verde azulado con anillo cobre). El núcleo nuevo se talla
+  con la normal de la placa a lo largo de a* (planos {10-10}): cada cara
+  es un plano completo con Fe y Se a la misma altura, 326 átomos al
+  49 % de Fe en los 0.4 Å externos. {11-20} también promedia ~48 %,
+  pero su cara sale en terrazas (77 átomos en la capa externa) y se ve
+  a franjas. La coraza es la de `placa_H_C`, ya validada; recubrir este
+  núcleo desde cero salió roto en 12 intentos (mejor enlace 1.60 Å). Se
+  quitan los átomos del núcleo a menos de 2.2 Å de la coraza (la
+  original tenía su par más cercano a 1.5 Å). En cualquier cara del
+  FeSe, Fe y Se se alternan por filas, así que de cerca se ve un rayado
+  fino: es el cristal, no el corte.
+- **`anemona_tubos.py --hundir 4`.** La base de cada brazo entra 4 Å
+  en la coraza de la partícula central, los brazos se comprueban solo
+  entre sí y contra el metal (≥ 2.2 Å), y se quitan los carbonos de la
+  coraza a menos de 2.6 Å de un brazo: queda una boca alrededor de
+  cada tubo y los brazos parecen nacer de la partícula. Es una
+  apariencia: las dos redes no están enlazadas.
+- **Suelo espejo en `revista`.** Negro, metálico y pulido, con
+  `--elev/--azim` para colocar la cámara. Tres cosas fueron necesarias:
+  estirarlo 60 veces para que su borde no corte el cuadro como un
+  horizonte; *light linking* (cada lámpara ilumina todo menos el
+  suelo), porque si no cada lámpara se reflejaba como un rectángulo
+  blanco bajo las piezas; y no ocultar las lámparas en los reflejos,
+  que apaga el metal (su brillo ES el reflejo de las lámparas). Sin
+  efectos de partículas.
+- **`escena_orbita.py`.** Segunda escena conjunta: la anémona en el
+  centro con un anillo inclinado de placas (mirando hacia fuera) y
+  barras (a lo largo del anillo) alternadas, reflejado en el suelo.
+
+| proyecto | cámara |
+|---|---|
+| `revista_orbita` | `--elev 30 --azim 15 --fill 1.0` |
+| `revista_conjunta` | `--elev 14 --fill 0.93` |
+| `revista_anemona_fina` | `--elev 20 --azim 25 --atom-scale 1.0 --bond-scale 1.3 --fill 1.1` |
+| `revista_placas` | `--elev 12 --azim 20 --fill 0.95` |
+| `revista_barras` | `--elev 32 --azim 10 --fill 1.05` |
