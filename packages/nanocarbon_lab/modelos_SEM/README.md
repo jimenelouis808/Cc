@@ -1016,3 +1016,30 @@ productos están en espejo.
 |---|---|
 | `revista_superficie` | `--calor --elev 26 --lente 85 --fill 0.92 --encuadrar 0 --bola 4 5 6 --bond-scale 1.3` |
 | `revista_superficie_v` | igual, con `--elev 30 --fill 0.97 --encuadrar 0 2` (placa y barras) |
+
+### Primer plano de una barra y de un nanotubo con partícula
+
+- **`escena_barra.py`** (3973 átomos): una barra de FeSe tetragonal
+  tallada nueva como cápsula (radio 11 Å, 110 Å de largo, Fe1250Se1250,
+  *clean*), más gruesa que `barra_T_nucleo_desnudo` para que su
+  superficie llene el cuadro, en diagonal ascendente; detrás, de frente
+  y a 72 Å, la placa de corte parejo. Sin precursores.
+- **`escena_tubo_particula.py`** (4873 átomos): nanotubo tapado de
+  frecuencia 5 (9.8 Å de radio, `{5: 12, 6: 1740}`), con grupos
+  hidroxilo, carboxilo y carbonilo por fuera (663 O) y dopado con N y Se
+  (220 N, 91 Se), y una partícula de cementita tallada por la cavidad
+  (C48Fe124, a 3.09 Å de la pared como mínimo). **Los grupos van antes
+  que el dopaje**: injertados después de `codope`, los tres pasos solo
+  encontraron sitio para 17 O, frente a 210 hidroxilos solos en el tubo
+  sin dopar.
+
+`portada_blend.py`: `--invertir-calor` pone el frío a la izquierda y el
+calor a la derecha; `--desenfoque F` multiplica la profundidad de campo;
+y con `--encuadrar` el foco va al centro de lo encuadrado (antes iba al
+centro de toda la escena, entre la barra y la placa, y dejaba la placa
+nítida).
+
+| proyecto | cámara |
+|---|---|
+| `revista_barra` | `--calor --invertir-calor --elev 10 --lente 85 --fill 0.88 --encuadrar 2 --desenfoque 20` |
+| `revista_tubo_particula_{revista,neon}` | `--paleta … --elev 14 --lente 85 --fill 0.3 --encuadrar 1 --dopantes 1.5 --bond-scale 1.4 --desenfoque 2` |

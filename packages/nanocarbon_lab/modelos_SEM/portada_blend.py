@@ -293,7 +293,7 @@ def primitive(name: str, make, mat: bpy.types.Material) -> bpy.types.Object:
     return obj
 
 
-def calor_backdrop() -> None:
+def calor_backdrop(invert: bool = False) -> None:
     """The field graded across the frame: amber left, near-black middle,
     cold blue right. With `--calor`; window coordinates, so it stays put
     under the camera. (Multiplied into the style's vertical ramp it was
@@ -305,8 +305,11 @@ def calor_backdrop() -> None:
     coords = nodes.new("ShaderNodeTexCoord")
     split = nodes.new("ShaderNodeSeparateXYZ")
     ramp = nodes.new("ShaderNodeValToRGB")
-    ramp.color_ramp.elements[0].color = (0.07, 0.022, 0.004, 1.0)
-    ramp.color_ramp.elements[1].color = (0.006, 0.028, 0.085, 1.0)
+    warm, cold = (0.07, 0.022, 0.004, 1.0), (0.006, 0.028, 0.085, 1.0)
+    if invert:
+        warm, cold = cold, warm
+    ramp.color_ramp.elements[0].color = warm
+    ramp.color_ramp.elements[1].color = cold
     middle = ramp.color_ramp.elements.new(0.5)
     middle.color = (0.012, 0.012, 0.022, 1.0)
     links.new(coords.outputs["Window"], split.inputs[0])
@@ -398,6 +401,10 @@ def main() -> int:
                              "left and white-hot blue from the right: "
                              "a lower and a higher temperature, shown and "
                              "not written")
+    parser.add_argument("--invertir-calor", dest="invertir_calor",
+                        action="store_true",
+                        help="with --calor: cold on the left and warm on "
+                             "the right")
     parser.add_argument("--dopantes", type=float, default=1.0,
                         help="ball radius factor for bonded N, O, H and Se "
                              "outside the `--bola` groups: the dopants and "
@@ -417,6 +424,10 @@ def main() -> int:
     parser.add_argument("--atom-scale", type=float, default=0.55)
     parser.add_argument("--bond-scale", type=float, default=0.5)
     parser.add_argument("--no-dof", dest="dof", action="store_false")
+    parser.add_argument("--desenfoque", type=float, default=1.0,
+                        help="depth-of-field strength: 1 blurs a point one "
+                             "scene radius behind the focus by 1/1500 of "
+                             "the frame; 4 makes a background soft")
     parser.add_argument("--floor", action="store_true",
                         help="keep the style's glossy floor. Off by "
                              "default for the package styles, on for "
@@ -536,7 +547,7 @@ def main() -> int:
     center, radius = render_cnt._bounding_sphere(carriers)
     render_cnt._setup_world(style.background)
     if args.calor:
-        calor_backdrop()
+        calor_backdrop(args.invertir_calor)
     if args.elev is not None:
         elev, azim = np.radians(args.elev), np.radians(args.azim)
         render_cnt.camera.NAMED_VIEWS["portada"] = (
@@ -560,8 +571,11 @@ def main() -> int:
         # which summed to white.
         low = positions[:, 2] < np.quantile(positions[:, 2], 0.40)
         middle_x = float(np.median(positions[low, 0]))
-        for name, side, rgb in (("calor_900", -1.0, (1.0, 0.50, 0.12)),
-                                ("calor_1020", 1.0, (0.55, 0.80, 1.0))):
+        hues = ((1.0, 0.50, 0.12), (0.55, 0.80, 1.0))
+        if args.invertir_calor:
+            hues = hues[::-1]
+        for name, side, rgb in (("calor_izq", -1.0, hues[0]),
+                                ("calor_der", 1.0, hues[1])):
             half = low & ((positions[:, 0] - middle_x) * side > 0)
             target = Vector(positions[half].mean(axis=0))
             data = bpy.data.lights.new(name, "SPOT")
@@ -637,10 +651,15 @@ def main() -> int:
         # f-number that blurs a point one scene radius behind the focus
         # by 1/1500 of the frame: the far arms soften, nothing smears.
         target = link(bpy.data.objects.new("foco", None))
-        target.location = center
+        # Focus on what is framed: the bounding centre of a scene with a
+        # hero in front and a backdrop behind falls between the two, and
+        # left the backdrop as sharp as the hero.
+        target.location = (Vector(positions[np.isin(groups, args.encuadrar)]
+                                  .mean(axis=0)) if args.encuadrar
+                           else center)
         distance = float((camera.location - center).length)
         focal = camera.data.lens / 1000.0
-        blur = (camera.data.sensor_width / 1000.0) / 1500.0
+        blur = (camera.data.sensor_width / 1000.0) / 1500.0 * args.desenfoque
         camera.data.dof.use_dof = True
         camera.data.dof.focus_object = target
         camera.data.dof.aperture_fstop = max(
