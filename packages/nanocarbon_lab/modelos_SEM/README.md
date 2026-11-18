@@ -1101,3 +1101,8 @@ nítida).
   la anémona más alta (`--alto_min`, `--alto_max`), en vez de en el
   suelo. `revista_campo_corta`: 8 anémonas de fondo, piezas entre 8 y
   70 Å por encima, `--compacto 0.6`.
+
+Brazos alargados: las anémonas cortas usan ahora `--anillos_min 11
+--anillos_max 17` (protagonista, 27 350 átomos) y `9`–`14` (las dos de
+fondo), con el resto de opciones igual (`--hundir 14 --tallar 1
+--fusion 14 --freq_fino 4 --freq_grueso 5`).
