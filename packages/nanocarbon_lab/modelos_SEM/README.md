@@ -1085,3 +1085,19 @@ nítida).
   bola, no a radio de van der Waals; se veía tan grande por el factor
   `--se-grande 1.6` sobre `--dopantes 1.4` (1.48 Å de radio). Se renderiza
   sin `--se-grande`, proporcional a N, O y H. Se quitó la versión neón.
+
+### Brazos fundidos entre sí, y piezas sobre el campo
+
+- **`anemona_tubos.py --fusion 14`** (con `--tallar 1`). Doce tubos de
+  9.8 Å no pueden tocar una partícula de 18.5 Å sin cruzarse: cada uno
+  ocupa un cono de 34° (1.07 sr) y doce piden 12.8 sr, más que los
+  12.6 de la esfera. Por eso, aun tallados, la comprobación los
+  alejaba. Ahora los brazos solo se comprueban entre sí más allá del
+  radio de la partícula + 14 Å; dentro de esa zona se cruzan, y cada uno
+  pierde lo que queda dentro de otro tubo o a menos de 2 Å de su pared.
+  Se ven como un solo cuerpo que sale de la partícula. Es apariencia:
+  las redes no están enlazadas.
+- **`escena_campo.py --arriba 1`** pone barras y placas flotando sobre
+  la anémona más alta (`--alto_min`, `--alto_max`), en vez de en el
+  suelo. `revista_campo_corta`: 8 anémonas de fondo, piezas entre 8 y
+  70 Å por encima, `--compacto 0.6`.

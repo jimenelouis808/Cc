@@ -54,6 +54,9 @@ OPT: dict[str, float] = {
     # Which builds to use: the hero, and a comma list of background ones.
     "heroe": "anemona_conjunta",
     "fondos": "anemona_mini,anemona_mini_b",
+    # 0: rods and plates lie on the ground; 1: they float ABOVE the
+    # anemones, between `alto_min` and `alto_max` A over the tallest one.
+    "arriba": 0, "alto_min": 20.0, "alto_max": 140.0,
 }
 
 
@@ -120,6 +123,7 @@ def main() -> int:
     print(f"fondo: {made} anémonas ({', '.join(names)})")
 
     # --- the ground: rods lying down, plates flat or leaning.
+    top = float(placed[:, 2].max())
     rods = [make_rod(*shape) for shape in RODS[:2]]
     plate = read(str(HERE / "xyz" / "placa_H_mixta.xyz"))
     p_pos = plate.positions - plate.positions.mean(axis=0)
@@ -144,8 +148,15 @@ def main() -> int:
                     up, heading / np.linalg.norm(heading),
                     rng.uniform(0, 6.3)).T
                 symbols = piece.get_chemical_symbols()
-            where = np.array([rng.uniform(*span_x), rng.uniform(*span_y),
-                              ground - local[:, 2].min()])
+            if OPT["arriba"]:
+                lift = top + rng.uniform(OPT["alto_min"], OPT["alto_max"])
+                where = np.array([rng.uniform(*span_x),
+                                  rng.uniform(*span_y),
+                                  lift - local[:, 2].min()])
+            else:
+                where = np.array([rng.uniform(*span_x),
+                                  rng.uniform(*span_y),
+                                  ground - local[:, 2].min()])
             trial = local + where
             if clear(trial):
                 add(symbols, trial, 3 if is_plate else 2)

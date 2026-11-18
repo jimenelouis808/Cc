@@ -91,6 +91,13 @@ OPT: dict[str, float] = {
     # are dropped, and the particle loses its shell carbon and its metal
     # where each tube enters. Still an appearance, not a weld.
     "tallar": 0,
+    # A, with `tallar`: arms are checked against each other only beyond
+    # the particle's radius plus this. Inside it they may cross, and each
+    # is cut where it enters another, so they read as one fused body.
+    # Measured: 12 tubes of 9.8 A cannot meet an 18.5 A particle without
+    # crossing (each needs a 34 deg cone, 1.07 sr; twelve need 12.8 sr
+    # against the sphere's 12.6), so at 0 they were pushed off it.
+    "fusion": 0.0,
 }
 
 #: A, shell carbons closer than this to an arm are removed when the
@@ -395,7 +402,7 @@ def main() -> int:
             stand = start_radius - sink
             if OPT["tallar"]:
                 outside = others[np.linalg.norm(others, axis=1)
-                                 > start_radius - 1.0]
+                                 > start_radius - 1.0 + OPT["fusion"]]
                 tree = cKDTree(outside) if len(outside) else None
                 metal = None
         else:
@@ -413,7 +420,7 @@ def main() -> int:
             checked = trial["positions"]
             if OPT["tallar"] and sink > 0.0 and len(pieces):
                 checked = checked[np.linalg.norm(checked, axis=1)
-                                  > start_radius - 1.0]
+                                  > start_radius - 1.0 + OPT["fusion"]]
             if clear_of(checked, tree, gap - 0.2) and (
                     metal is None
                     or clear_of(trial["positions"], metal, METAL_CLEARANCE)):
@@ -442,6 +449,34 @@ def main() -> int:
                     tube[key] = np.asarray(tube[key])[keep]
             print(f"tallado: {hidden_total} C de los brazos ocultos dentro "
                   "de la partícula, quitados")
+            if OPT["fusion"] > 0.0:
+                # Each arm loses what lies inside another arm, and what
+                # sits closer than a bond to it: the seam of two fused
+                # tubes. Judged against the arms as they were, so the
+                # order does not matter.
+                lines = [centreline(t["positions"][t["part"] == 0])
+                         for t in tubes]
+                dense = [np.concatenate(
+                    [np.linspace(a, b, 8, endpoint=False)
+                     for a, b in zip(line[:-1], line[1:], strict=True)])
+                    for line in lines]
+                before = [t["positions"].copy() for t in tubes]
+                cut = 0
+                for i, tube in enumerate(tubes):
+                    keep = np.ones(len(tube["positions"]), dtype=bool)
+                    for j, other in enumerate(tubes):
+                        if i == j:
+                            continue
+                        inside = cKDTree(dense[j]).query(
+                            tube["positions"])[0] < other["radius"] - 0.6
+                        seam = cKDTree(before[j]).query(
+                            tube["positions"])[0] < 2.0
+                        keep &= ~(inside | seam)
+                    cut += int((~keep).sum())
+                    for key in ("positions", "outward", "fraction", "part"):
+                        tube[key] = np.asarray(tube[key])[keep]
+                print(f"fusión: {cut} C quitados donde un brazo entra en "
+                      "otro")
         arm_tree = cKDTree(np.vstack([t["positions"] for t in tubes]))
         is_carbon = np.asarray(core.get_chemical_symbols()) == "C"
         near = arm_tree.query(core.positions)[0]
