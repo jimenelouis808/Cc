@@ -1069,3 +1069,19 @@ nítida).
 | `revista_anemonas_corta_{revista,neon,oro,iridiscente}` | `escena_campo.py --heroe anemona_corta --fondos anemona_mini_corta,anemona_mini_corta_b --fondo 8 --barras 0 --placas 0 --compacto 0.4` |
 | `revista_campo_corta` | igual con `--fondo 3` y barras y placas |
 | `revista_conjunta_corta`, `revista_orbita_corta` | `--anemona anemona_corta` |
+
+### Brazos tallados en la partícula y Se proporcional
+
+- **`anemona_tubos.py --tallar 1`.** Con brazos anchos (7.8 y 9.8 Å)
+  sobre una partícula de 18.5 Å, `--hundir` solo no bastaba: los brazos
+  chocaban entre sí junto a la superficie, la comprobación los alejaba y
+  quedaban separados de la partícula. Con `--tallar` los brazos se
+  comprueban entre sí solo fuera de la partícula (más allá de su radio
+  − 1 Å), entran 14 Å (`--hundir 14`), se quitan los átomos de los
+  brazos que quedan ocultos dentro, y la partícula pierde su coraza y su
+  metal donde entra cada tubo. Las anémonas `_corta` se reconstruyeron
+  así; ningún par baja del 1.26 Å que ya traía la coraza de la partícula.
+- **Se en el tubo.** Todo el Se está enlazado (1.42 Å) y se dibuja como
+  bola, no a radio de van der Waals; se veía tan grande por el factor
+  `--se-grande 1.6` sobre `--dopantes 1.4` (1.48 Å de radio). Se renderiza
+  sin `--se-grande`, proporcional a N, O y H. Se quitó la versión neón.

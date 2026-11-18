@@ -83,6 +83,14 @@ OPT: dict[str, float] = {
     # freq A). 2 and 3 are the thin anemone; 4 and 5 give short, wide
     # tubes when paired with few `anillos`.
     "freq_fino": 2, "freq_grueso": 3,
+    # 1: the arms go INTO the central particle and the particle is cut
+    # by them. Wide arms crowd each other at the particle's surface, so
+    # with `hundir` alone the clearance check pushed them out and they
+    # stood off it with gaps. Here arms are checked against each other
+    # only outside the particle; afterwards arm atoms hidden inside it
+    # are dropped, and the particle loses its shell carbon and its metal
+    # where each tube enters. Still an appearance, not a weld.
+    "tallar": 0,
 }
 
 #: A, shell carbons closer than this to an arm are removed when the
@@ -385,6 +393,11 @@ def main() -> int:
             metal = cKDTree(pieces[0][1].positions[
                 np.asarray(pieces[0][1].get_chemical_symbols()) != "C"])
             stand = start_radius - sink
+            if OPT["tallar"]:
+                outside = others[np.linalg.norm(others, axis=1)
+                                 > start_radius - 1.0]
+                tree = cKDTree(outside) if len(outside) else None
+                metal = None
         else:
             tree = cKDTree(everything) if len(everything) else None
             metal, stand = None, start_radius + gap
@@ -397,7 +410,11 @@ def main() -> int:
             origin = lean * (stand + 0.6 * (attempt // 6))
             trial = placed_arm(piece, origin, lean,
                                rng.uniform(0.0, 2.0 * np.pi))
-            if clear_of(trial["positions"], tree, gap - 0.2) and (
+            checked = trial["positions"]
+            if OPT["tallar"] and sink > 0.0 and len(pieces):
+                checked = checked[np.linalg.norm(checked, axis=1)
+                                  > start_radius - 1.0]
+            if clear_of(checked, tree, gap - 0.2) and (
                     metal is None
                     or clear_of(trial["positions"], metal, METAL_CLEARANCE)):
                 seated = trial
@@ -415,9 +432,22 @@ def main() -> int:
               f"fundidas, {time.time() - started:.0f} s", flush=True)
     if float(OPT["hundir"]) > 0.0 and len(pieces):
         core = pieces[0][1]
+        if OPT["tallar"]:
+            hidden_total = 0
+            for tube in tubes:
+                keep = (np.linalg.norm(tube["positions"], axis=1)
+                        > start_radius - 1.0)
+                hidden_total += int((~keep).sum())
+                for key in ("positions", "outward", "fraction", "part"):
+                    tube[key] = np.asarray(tube[key])[keep]
+            print(f"tallado: {hidden_total} C de los brazos ocultos dentro "
+                  "de la partícula, quitados")
         arm_tree = cKDTree(np.vstack([t["positions"] for t in tubes]))
         is_carbon = np.asarray(core.get_chemical_symbols()) == "C"
-        mouth = is_carbon & (arm_tree.query(core.positions)[0] < MOUTH)
+        near = arm_tree.query(core.positions)[0]
+        mouth = is_carbon & (near < MOUTH)
+        if OPT["tallar"]:
+            mouth |= ~is_carbon & (near < METAL_CLEARANCE)
         core = core[~mouth]
         pieces[0] = ("nucleo", core)
         everything = np.vstack([core.positions]
