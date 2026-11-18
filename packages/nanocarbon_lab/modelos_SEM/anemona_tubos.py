@@ -79,6 +79,10 @@ OPT: dict[str, float] = {
     # each tube enters, so the arms look grown out of the particle. An
     # appearance, not a weld: the two networks are not bonded.
     "hundir": 0.0,
+    # Lattice frequencies of the thin and the thick arms (radius 1.96 *
+    # freq A). 2 and 3 are the thin anemone; 4 and 5 give short, wide
+    # tubes when paired with few `anillos`.
+    "freq_fino": 2, "freq_grueso": 3,
 }
 
 #: A, shell carbons closer than this to an arm are removed when the
@@ -90,7 +94,8 @@ METAL_CLEARANCE = 2.2
 
 #: Lattice frequency -> how often an arm takes it. The radius is
 #: 1.96 * freq A, so these are 3.9 and 5.9 A: thin tubes.
-ARM_FREQS = ((2, 0.3), (3, 0.7))      # the split is OPT["finos"]
+ARM_FREQS = ((2, 0.3), (3, 0.7))      # default; OPT["freq_fino"],
+                                      # OPT["freq_grueso"] and OPT["finos"]
 
 #: Branches are thinner than what they leave, so only the freq-3 arms
 #: carry them.
@@ -356,7 +361,7 @@ def main() -> int:
     angle = index * np.pi * (3.0 - np.sqrt(5.0))
     directions = np.column_stack((radial * np.cos(angle),
                                   radial * np.sin(angle), height))
-    freqs = np.array([f for f, _ in ARM_FREQS])
+    freqs = np.array([int(OPT["freq_fino"]), int(OPT["freq_grueso"])])
     weights = np.array([OPT["finos"], 1.0 - OPT["finos"]])
     tubes: list[dict] = []
     fused = heptagons = 0

@@ -39,6 +39,8 @@ OPT: dict[str, float] = {
     "inclinacion": 16.0,  # degrees the ring is tipped toward the camera
     "holgura": 6.0,     # A, closest any two pieces may come
     "semilla": 0,
+    "anemona": "anemona_conjunta",   # which anemone build to use
+    "nombre": "escena_orbita",
 }
 
 
@@ -55,7 +57,7 @@ def main() -> int:
                      [0.0, np.sin(tip), np.cos(tip)]])
 
     scene, groups = Atoms(), []
-    anemone = read(str(HERE / "xyz" / "anemona_conjunta.extxyz"))
+    anemone = read(str(HERE / "xyz" / f"{OPT['anemona']}.extxyz"))
     a_pos = anemone.positions - anemone.positions.mean(axis=0)
     scene += Atoms(anemone.get_chemical_symbols(), a_pos)
     groups.extend([0] * len(anemone))
@@ -98,7 +100,7 @@ def main() -> int:
                               + scene.positions.min(axis=0))
     closest = float(cKDTree(scene.positions).query(scene.positions,
                                                    k=2)[0][:, 1].min())
-    name = "escena_orbita"
+    name = str(OPT["nombre"])
     write(str(HERE / "xyz" / f"{name}.xyz"),
           Atoms(scene.get_chemical_symbols(), scene.positions),
           comment=f"anémona con un anillo de placas y barras de FeSe: "

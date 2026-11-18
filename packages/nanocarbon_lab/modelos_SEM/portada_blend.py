@@ -405,6 +405,10 @@ def main() -> int:
                         action="store_true",
                         help="with --calor: cold on the left and warm on "
                              "the right")
+    parser.add_argument("--se-grande", dest="se_grande", type=float,
+                        default=1.0,
+                        help="extra ball factor for bonded Se (on top of "
+                             "--dopantes), to make the Se sites stand out")
     parser.add_argument("--dopantes", type=float, default=1.0,
                         help="ball radius factor for bonded N, O, H and Se "
                              "outside the `--bola` groups: the dopants and "
@@ -490,7 +494,8 @@ def main() -> int:
         for tag, size, mask in (("", solid_size,
                                  (symbols == key) & ~bonded),
                                 ("_bola", ball_size * (
-                                    args.dopantes if key != "C" else 1.0),
+                                    args.dopantes if key != "C" else 1.0)
+                                 * (args.se_grande if key == "Se" else 1.0),
                                  (symbols == key) & bonded & ~magnified),
                                 ("_amp", ball_size * zoom,
                                  (symbols == key) & magnified)):

@@ -11,8 +11,9 @@ Laid out for a camera on -y looking along +y, low (`portada_blend.py
 
 * **the hero** (`xyz/anemona_conjunta.extxyz`, 18 arms) stands well in
   front, so a short lens (`--lente 24`) makes it loom over the rest;
-* **the background** takes `xyz/anemona_mini.extxyz` and
-  `xyz/anemona_mini_b.extxyz` in turn (12 and 14 short arms, half the
+* **the background** takes the builds named in `fondos` in turn
+  (`xyz/anemona_mini.extxyz` and `xyz/anemona_mini_b.extxyz` by
+  default -- two, so a crowd does not read as one model copied) (12 and 14 short arms, half the
   hero's atoms or less), up to eight of them, behind and to the sides,
   each turned differently so the copies do not read as one;
 * **the ground** carries rods lying down at random headings and a few
@@ -50,11 +51,11 @@ OPT: dict[str, float] = {
     # below 1 the crowd gathers close behind the hero, which a long lens
     # then compresses further.
     "compacto": 1.0,
+    # Which builds to use: the hero, and a comma list of background ones.
+    "heroe": "anemona_conjunta",
+    "fondos": "anemona_mini,anemona_mini_b",
 }
 
-#: The background anemones, taken in turn: two different small builds,
-#: so a crowd of them does not read as one model copied.
-MINIS = ("anemona_mini", "anemona_mini_b")
 
 #: Where the background anemones stand: (x, y, lift), y into the page.
 #: Lift is above the ground, so they rest at different heights.
@@ -89,7 +90,7 @@ def main() -> int:
         return not len(placed) or float(
             cKDTree(placed).query(positions)[0].min()) >= gap
 
-    hero = read(str(HERE / "xyz" / "anemona_conjunta.extxyz"))
+    hero = read(str(HERE / "xyz" / f"{OPT['heroe']}.extxyz"))
     h_pos = hero.positions - hero.positions.mean(axis=0)
     h_pos = h_pos @ rotation_to(up, np.array([0.15, -0.2, 1.0]), 0.3).T
     ground = float(h_pos[:, 2].min()) - 2.0
@@ -97,8 +98,9 @@ def main() -> int:
     add(hero.get_chemical_symbols(), h_pos + [30.0, -420.0 * k, 0.0], 0)
     print(f"protagonista: {len(hero)} átomos, suelo a z = {ground:.0f} Å")
 
-    minis = [read(str(HERE / "xyz" / f"{name}.extxyz")) for name in MINIS
+    names = [name for name in str(OPT["fondos"]).split(",")
              if (HERE / "xyz" / f"{name}.extxyz").exists()]
+    minis = [read(str(HERE / "xyz" / f"{name}.extxyz")) for name in names]
     made = 0
     for index, (x, y, lift) in enumerate(BACK[:int(OPT["fondo"])]):
         mini = minis[index % len(minis)]
@@ -115,7 +117,7 @@ def main() -> int:
                 add(mini.get_chemical_symbols(), trial, 1)
                 made += 1
                 break
-    print(f"fondo: {made} anémonas ({', '.join(MINIS[:len(minis)])})")
+    print(f"fondo: {made} anémonas ({', '.join(names)})")
 
     # --- the ground: rods lying down, plates flat or leaning.
     rods = [make_rod(*shape) for shape in RODS[:2]]

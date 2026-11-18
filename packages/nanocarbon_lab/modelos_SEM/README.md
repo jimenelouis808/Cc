@@ -1043,3 +1043,29 @@ nítida).
 |---|---|
 | `revista_barra` | `--calor --invertir-calor --elev 10 --lente 85 --fill 0.88 --encuadrar 2 --desenfoque 20` |
 | `revista_tubo_particula_{revista,neon}` | `--paleta … --elev 14 --lente 85 --fill 0.3 --encuadrar 1 --dopantes 1.5 --bond-scale 1.4 --desenfoque 2` |
+
+### Punta del nanotubo y anémonas de tubos cortos y anchos
+
+- **`escena_tubo_particula.py`** ahora pone la partícula en la punta
+  (`punta 1`): una esfera de cementita de 12 Å centrada en la tapa y
+  tallada por la cavidad, que la llena y baja un poco por el tubo
+  (C43Fe123). El tubo va vertical con la punta arriba. Se al 3 % (el
+  máximo que el módulo de dopantes considera realista; al 4 % avisa) y
+  resaltado en el render con `--se-grande 1.6`, que agranda solo las
+  bolas de Se enlazadas.
+- **Anémonas cortas y anchas.** `anemona_tubos.py` acepta
+  `--freq_fino/--freq_grueso` (radio 1.96 × freq Å). Con 4 y 5 (7.8 y
+  9.8 Å) y pocos anillos: `anemona_corta` (12 brazos, 19 750 átomos,
+  Fe3C en las 12 puntas), `anemona_mini_corta` (8), `anemona_mini_corta_b`
+  (9) y `escena_anemona_corta` (16). `escena_campo.py` acepta `--heroe` y
+  `--fondos`, y `escena_conjunta.py`/`escena_orbita.py` aceptan
+  `--anemona` y `--nombre`, así que las escenas `_corta` salen de los
+  mismos guiones sin tocar las anteriores. El vórtice no cambia.
+
+| proyecto | escena |
+|---|---|
+| `revista_tubo_particula_{revista,neon}` | `--elev 8 --lente 85 --fill 0.42 --encuadrar 1 --dopantes 1.4 --se-grande 1.6 --bond-scale 1.4 --desenfoque 2` |
+| `revista_anemona_corta` | `escena_anemona_corta`, `--elev 20 --azim 25 --bond-scale 1.3 --fill 1.05` |
+| `revista_anemonas_corta_{revista,neon,oro,iridiscente}` | `escena_campo.py --heroe anemona_corta --fondos anemona_mini_corta,anemona_mini_corta_b --fondo 8 --barras 0 --placas 0 --compacto 0.4` |
+| `revista_campo_corta` | igual con `--fondo 3` y barras y placas |
+| `revista_conjunta_corta`, `revista_orbita_corta` | `--anemona anemona_corta` |

@@ -40,6 +40,8 @@ OPT: dict[str, float] = {
     "barras": 7,
     "holgura": 6.0,     # A, closest any two pieces may come
     "semilla": 0,
+    "anemona": "anemona_conjunta",   # which anemone build to use
+    "nombre": "escena_conjunta",
 }
 
 
@@ -79,7 +81,7 @@ def main() -> int:
         everything = np.vstack((everything, moved))
 
     # --- the anemone: upper right, a little back.
-    anemone = read(str(HERE / "xyz" / "anemona_conjunta.extxyz"))
+    anemone = read(str(HERE / "xyz" / f"{OPT['anemona']}.extxyz"))
     a_pos = anemone.positions - anemone.positions.mean(axis=0)
     a_pos = a_pos @ rotation_to(up, np.array([0.2, -0.3, 1.0]), 0.6).T
     add(anemone.get_chemical_symbols(), a_pos + [85.0, 40.0, 95.0],
@@ -127,7 +129,7 @@ def main() -> int:
                               + scene.positions.min(axis=0))
     closest = float(cKDTree(scene.positions).query(scene.positions,
                                                    k=2)[0][:, 1].min())
-    name = "escena_conjunta"
+    name = str(OPT["nombre"])
     write(str(HERE / "xyz" / f"{name}.xyz"),
           Atoms(scene.get_chemical_symbols(), scene.positions),
           comment=f"anémona, placas y barras de FeSe: "

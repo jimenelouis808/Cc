@@ -11,8 +11,11 @@
   `construir.py`'s NSeO version, at a higher coverage so it shows up
   close.
 * **The particle** is cementite, Fe3C, carved as a sphere and cut by
-  the tube's cavity: every atom no closer to the wall than `contacto`,
-  which is how a particle trapped in a tube sits.
+  the tube's cavity: every atom no closer to the wall than `contacto`.
+  With `punta` (the default) it is centred on the cap, so it fills the
+  tip and runs a little way down the barrel -- a particle encapsulated
+  in the tip, as tip growth leaves it. The tube stands up the frame,
+  tip at the top.
 
 Made for `portada_blend.py --style revista --dopantes 1.8`, drawn
 ball-and-stick so the wall is an open honeycomb and the particle shows
@@ -42,9 +45,13 @@ HERE = Path(__file__).resolve().parent
 OPT: dict[str, float] = {
     "freq": 5,           # lattice frequency: radius 1.96 * freq A
     "anillos": 14,       # body rings
-    "n": 0.06, "se": 0.025,
+    # Se at 3 %: the ceiling the dopant module treats as realistic (4 %
+    # warns). It is made to stand out in the render, not by doping more.
+    "n": 0.05, "se": 0.03,
     "contacto": 3.0,     # A, particle atom to wall carbon
-    "particula": 8.5,    # A, radius of the cementite sphere before the cut
+    "particula": 12.0,   # A, radius of the cementite sphere before the cut
+    # 1 puts the particle in the tip, filling the cap; 0 in the middle.
+    "punta": 1,
     "semilla": 1,
 }
 
@@ -80,14 +87,22 @@ def main() -> int:
                   affinity=construir.AFFINITY, seed=seed)
     print(f"pared: {wall.get_chemical_formula()}")
 
-    # The particle at the tube's middle, cut by the cavity.
+    # The particle, cut by the cavity: in the tip it fills the cap and
+    # runs a little way down the barrel, as a tip-growth catalyst does.
     w_pos = wall.positions - wall.positions[
         np.asarray(wall.get_chemical_symbols()) == "C"].mean(axis=0)
+    carbon_wall = w_pos[np.asarray(wall.get_chemical_symbols()) != "H"]
+    long = np.linalg.svd(carbon_wall, full_matrices=False)[2][0]
+    along = carbon_wall @ long
+    if along.max() < -along.min():
+        long = -long
+    radius = 1.96 * int(OPT["freq"])
+    centre = (long * (float((carbon_wall @ long).max()) - radius)
+              if OPT["punta"] else np.zeros(3))
     block, _, _, _ = construir.core_from(
         HERE / "cif" / "Fe3C_cementita.cif", "sphere",
         {"radius": OPT["particula"]})
-    local = block.positions - block.positions.mean(axis=0)
-    carbon_wall = w_pos[np.asarray(wall.get_chemical_symbols()) != "H"]
+    local = block.positions - block.positions.mean(axis=0) + centre
     keep = cKDTree(carbon_wall).query(local)[0] >= OPT["contacto"]
     particle = block[keep]
     particle.positions = local[keep]
@@ -97,9 +112,9 @@ def main() -> int:
     print(f"partícula: {particle.get_chemical_formula()}, a {gap:.2f} Å "
           "de la pared como mínimo")
 
-    # Lying across the frame on a rising diagonal.
-    long = np.linalg.svd(carbon_wall, full_matrices=False)[2][0]
-    axis = np.array([1.0, -0.3, 0.55])
+    # Standing up the frame, tip at the top, leaning a little toward
+    # the camera so the cap is seen from slightly above.
+    axis = np.array([0.0, -0.32, 1.0])
     turn = rotation_to(long, axis / np.linalg.norm(axis), 0.3)
     scene = Atoms(wall.get_chemical_symbols(), w_pos @ turn.T) + Atoms(
         particle.get_chemical_symbols(), particle.positions @ turn.T)
