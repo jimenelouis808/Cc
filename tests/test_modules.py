@@ -409,3 +409,15 @@ def test_plug_part_is_valid_and_fits_its_bore():
     pl = chamber_clamp.plug()
     assert pl is not None and pl.isValid()
     assert pl.intersect(chamber_clamp.build().val()).Volume() < 1e-3
+
+
+def test_tall_plug_flange_would_stick_out_below_the_cell():
+    """Una brida de 30 mm de alto (como la circular de Ø30) baja del apoyo de la cámara."""
+    p = variant(PLUG={"flange_h": 30.0})
+    bad = [r.name for r in walls.footing_checks(p) if not r.ok]
+    assert any(n.startswith("raman_pinza") for n in bad)
+
+
+def test_every_cell_sits_flat():
+    bad = [str(r) for r in walls.footing_checks() if not r.ok]
+    assert not bad, "\n".join(bad)

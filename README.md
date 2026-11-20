@@ -18,7 +18,7 @@ python modules/chladni.py                  # → out/chladni_{wall,bottom,lid,pl
 python sim/chladni_estimate.py             # modos de la placa y acoplamiento del piezo
 python modules/epd.py                      # → out/epd_{base,frame,gasket,cover} + out/epd_mask.dxf
 python sim/epd_dep.py                      # captura DEP por segmento (estimación)
-python checks/walls.py                     # paredes, holguras, sellos e interferencias (277 checks)
+python checks/walls.py                     # paredes, holguras, sellos e interferencias (282 checks)
 python checks/raman_clearance.py           # objetivo y cono de luz vs cada pieza, gap 0.1–0.5
 python checks/xrd_clearance.py             # huella y altura máxima permitida
 python sim/chladni_estimate.py             # modos de la placa-WE

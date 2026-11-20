@@ -31,6 +31,9 @@ Por eso el puerto WE es un **portaelectrodo desmontable**:
    interior (Ø6) y el exterior puestos.
 3. Meter la cabeza con la tira por el agujero de Ø16.6 de la cara −x hasta que la tira apoye en
    el pedestal; asentar el tapón y fijarlo con 2 × M3 a los insertos de la cara.
+   La brida del tapón es rectangular (30 × 20 mm, esquinas R3) y no circular: así no baja del
+   apoyo de la celda, que queda plana sobre la platina (`footing_checks` lo verifica en todas
+   las celdas).
 4. RE y CE como arriba; conectores; llenar; lainas y tapa Raman.
 
 ## XRD (`chamber_xrd` + `lid_xrd`)

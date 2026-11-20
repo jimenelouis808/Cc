@@ -349,7 +349,11 @@ LID_RAMAN = {
 PLUG = {
     "clearance": 0.4,        # holgura radial de la cabeza + muestra al pasar por el agujero
     "fit": 0.1,              # holgura radial tapón ↔ agujero
-    "flange_d": 30.0,
+    # brida rectangular: ancha para los dos tornillos laterales y baja para no pasar del apoyo
+    # de la cámara (una brida circular de Ø30 bajaba 3.7 mm de la cara de apoyo)
+    "flange_w": 30.0,        # a lo largo de la cara (horizontal)
+    "flange_h": 20.0,        # vertical
+    "flange_r": 3.0,         # radio de las esquinas
     "flange_t": 4.0,
     "screw_off": 11.5,       # tornillos del tapón a ±screw_off del eje, sobre la cara
     "oring_cs": 1.5,         # MEDIR: O-ring exterior del tapón

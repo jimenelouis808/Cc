@@ -554,6 +554,21 @@ def electrode_checks(p=P, configs=None) -> list[Result]:
     return res
 
 
+def footing_checks(p=P) -> list[Result]:
+    """Cada celda asienta plana: ninguna pieza ni electrodo baja del fondo del cuerpo
+    principal (la primera pieza de cada ensamble)."""
+    from modules import assemblies as A
+
+    res = []
+    for key in A.CONFIGS:
+        parts = A.CONFIGS[key][1](p)
+        support = parts[0][1].BoundingBox().zmin
+        lowest = min(((s.BoundingBox().zmin, n) for n, s, _, _ in parts))
+        res.append(Result(f"{key}: nada baja del apoyo (z = {support:.1f}); "
+                          f"lo más bajo: {lowest[1]}", lowest[0] - support, -1e-3))
+    return res
+
+
 def assembly_access_checks(p=P) -> list[Result]:
     """Montaje: cada electrodo puede LLEGAR a su posición, no sólo caber en ella.
 
@@ -626,7 +641,7 @@ def run(p=P) -> list[Result]:
     return (ring_checks(p) + base_checks(p) + seal_checks(p) + assembly_checks(p)
             + lid_raman_checks(p) + clamp_checks(p) + lid_raman_checks(p, "clamp")
             + xrd_checks(p) + chladni_checks(p) + epd_checks(p) + electrode_checks(p)
-            + assembly_access_checks(p))
+            + assembly_access_checks(p) + footing_checks(p))
 
 
 if __name__ == "__main__":

@@ -193,8 +193,9 @@ def plug_part(p, spec: dict, r_outer: float, r_inner: float) -> cq.Shape:
     od = plug_bore_d(p) - 2 * P_["fit"]
     x0, x1 = r_inner + 1.0, r_outer
     body = cq.Solid.makeCylinder(od / 2, x1 - x0, cq.Vector(x0, y, z), ax)
-    body = body.fuse(cq.Solid.makeCylinder(P_["flange_d"] / 2, P_["flange_t"],
-                                           cq.Vector(x1, y, z), ax))
+    flange = (cq.Workplane("YZ").rect(P_["flange_w"], P_["flange_h"]).extrude(P_["flange_t"])
+              .edges("|X").fillet(P_["flange_r"]).translate((x1, y, z)).val())
+    body = body.fuse(flange)
     rod = spec.get("rod_d", p.WE_CLAMP["rod_d"])
     body = body.cut(cq.Solid.makeCylinder(p.hole(rod) / 2, x1 + P_["flange_t"] - x0 + 2,
                                           cq.Vector(x0 - 1, y, z), ax))
