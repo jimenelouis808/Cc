@@ -1,0 +1,34 @@
+{
+  "esquema": "carbonforge-isoterma/1",
+  "nombre": "super-cube",
+  "origen": {
+    "programa": "carbonforge",
+    "fecha": "2026-11-21 04:58",
+    "maquina": "vm",
+    "motivo": "Confirmar la saturación estimada (~0.4 mol/kg, una molécula por bolsillo de vértice) que hace de la jaula un captador y no un almacén."
+  },
+  "estructura": "estructura.extxyz",
+  "atomos": 1748,
+  "temperatura_k": 77.0,
+  "presiones_mpa": [
+    1e-06,
+    1e-05,
+    0.0001,
+    0.001,
+    0.01,
+    0.1,
+    1.0,
+    10.0
+  ],
+  "muestreo": {
+    "equilibrado": 150000,
+    "produccion": 300000,
+    "semilla": 0,
+    "corte_a": 12.0
+  },
+  "porosidad": {
+    "radio_sonda_a": null,
+    "muestras": 200000
+  },
+  "instantaneas": 2
+}
