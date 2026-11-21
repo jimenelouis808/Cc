@@ -1087,3 +1087,46 @@ calor alto (35–42 kJ/mol) dice que esos bolsillos existen; cuánto
 pesan lo decide una isoterma (`isoterma_co2.py`, 1 kPa a 1 MPa, junto
 con la rendija de 6.6 Å como referencia), que los explora moviendo
 moléculas en vez de tirarlas al azar.
+
+### Isotermas de CO₂ a 298 K: con CO₂ la rendija gana y las jaulas no tienen bolsillos
+
+`isoterma_co2.py`, 1 kPa a 1 MPa, 100 000 + 200 000 movimientos por
+punto, exceso con la fracción de vacío de helio. La energía incremental
+coincide con la recalculada en todos los puntos (deriva < 2e-10 K).
+
+| P (MPa) | rendija 6.6 Å | super-tetrahedron | super-cube |
+|---|---|---|---|
+| 0.001 | 0.56 | 0.18* | 0.045* |
+| 0.003 | 1.72 | 0.36* | 0.11* |
+| 0.01 | 4.88 | 0.44 | 0.23* |
+| 0.03 | 7.41 | 0.83 | 0.52 |
+| **0.1** | **8.70** | **1.69** | **1.66** |
+| 0.3 | 9.59 | 3.72 | 4.24 |
+| **1** | **9.84** | **9.56** | **9.21** |
+
+(mol/kg absolutos; * aviso de muestreo corto, menos de 5 moléculas por
+celda. El exceso difiere del absoluto menos de un 5 % en toda la tabla.)
+
+* **La rendija de 6.6 Å es una isoterma de tipo I de manual**: a 0.1 MPa
+  ya está al 88 % de su meseta, ~9.8 mol/kg. Es una rendija ideal de
+  grafeno perfecto, sin bordes ni defectos, y su 8.7 mol/kg a 1 bar está
+  muy por encima de los 3–5 mmol/g de los carbones reales: el techo de
+  la geometría, no una predicción para un material.
+* **Las jaulas suben casi en línea recta** y a 0.1 MPa tienen 5 veces
+  menos que la rendija. A 1 MPa la alcanzan (9.2–9.6 frente a 9.8) y
+  siguen subiendo: más capacidad total, peor a baja presión.
+* **El CO₂ no ve los bolsillos que el H₂ sí veía.** La pendiente de la
+  isoterma a 1–3 kPa da K_H ≈ 45 mol/kg/MPa en super-cube y ≈ 120–180 en
+  super-tetrahedron, frente a 547 de la rendija: no hay un régimen de
+  llenado de bolsillos como el hombro del H₂. Un bolsillo que acoge una
+  esfera de H₂ no acoge una molécula lineal de 3.5 Å entera; sus sitios
+  profundos los toca un extremo, no la molécula.
+* **Widom sobrestimó super-tetrahedron** (482 ± 71 contra ~150 por la
+  isoterma) y acertó super-cube dentro de su error (55 ± 16 contra ~45).
+  Es lo que su dispersión entre semillas advertía: un promedio dominado
+  por unos pocos puntos raros.
+
+**Veredicto para CO₂**: la mejor estructura a presión de captura (0.1
+MPa) es la rendija de 6.6 Å, con 5 veces lo de las jaulas. Las jaulas
+solo empatan a 1 MPa. Es lo contrario del H₂ a 77 K, donde las jaulas
+ganaban la pendiente: el orden lo pone la forma de la molécula.

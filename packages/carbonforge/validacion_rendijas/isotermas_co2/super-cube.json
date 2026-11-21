@@ -40,6 +40,98 @@
     "block error 8 % of the mean: too short to quote."
    ],
    "segundos": 260.0510206222534
+  },
+  {
+   "temperature": 298.0,
+   "pressure_mpa": 0.01,
+   "mean_count": 4.82749,
+   "count_error": 0.358155237044249,
+   "mol_per_kg": 0.22993272566508924,
+   "excess_mol_per_kg": 0.22609658135668312,
+   "bulk_count": 0.08054072439588918,
+   "acceptance": {
+    "insert": 0.13758941105688882,
+    "delete": 0.13726039831277698,
+    "move": 0.28373656272506603,
+    "rotate": 0.316633692289307
+   },
+   "energy_drift_k": 9.094947017729282e-11,
+   "warnings": [
+    "block error 7 % of the mean: too short to quote."
+   ],
+   "segundos": 293.0407040119171
+  },
+  {
+   "temperature": 298.0,
+   "pressure_mpa": 0.03,
+   "mean_count": 10.809915,
+   "count_error": 0.5309049023470315,
+   "mol_per_kg": 0.5148748563244944,
+   "excess_mol_per_kg": 0.5033537942953109,
+   "bulk_count": 0.2418873241048497,
+   "acceptance": {
+    "insert": 0.14983565377729083,
+    "delete": 0.14877932152060144,
+    "move": 0.3590219539554511,
+    "rotate": 0.384034778897957
+   },
+   "energy_drift_k": 9.531504474580288e-10,
+   "warnings": [],
+   "segundos": 292.05077481269836
+  },
+  {
+   "temperature": 298.0,
+   "pressure_mpa": 0.1,
+   "mean_count": 34.88658,
+   "count_error": 0.891270158855701,
+   "mol_per_kg": 1.6616433029448407,
+   "excess_mol_per_kg": 1.6230913302452683,
+   "bulk_count": 0.8094074566773015,
+   "acceptance": {
+    "insert": 0.13675030476777367,
+    "delete": 0.13546384611285767,
+    "move": 0.3483627406356261,
+    "rotate": 0.3617817878735761
+   },
+   "energy_drift_k": 1.7462298274040222e-10,
+   "warnings": [],
+   "segundos": 304.9116487503052
+  },
+  {
+   "temperature": 298.0,
+   "pressure_mpa": 0.3,
+   "mean_count": 88.95425,
+   "count_error": 2.0410945429542897,
+   "mol_per_kg": 4.236879447081975,
+   "excess_mol_per_kg": 4.119922313157433,
+   "bulk_count": 2.455541692972292,
+   "acceptance": {
+    "insert": 0.10479900737795686,
+    "delete": 0.10358682738643493,
+    "move": 0.3003845643813818,
+    "rotate": 0.29180718376960546
+   },
+   "energy_drift_k": 2.939486876130104e-09,
+   "warnings": [],
+   "segundos": 330.44848918914795
+  },
+  {
+   "temperature": 298.0,
+   "pressure_mpa": 1.0,
+   "mean_count": 193.358295,
+   "count_error": 2.11157200252758,
+   "mol_per_kg": 9.209630636066445,
+   "excess_mol_per_kg": 8.803346338133593,
+   "bulk_count": 8.530031467920113,
+   "acceptance": {
+    "insert": 0.07134655950441911,
+    "delete": 0.06832653169739589,
+    "move": 0.24814720846074753,
+    "rotate": 0.22890216579536968
+   },
+   "energy_drift_k": 5.820766091346741e-10,
+   "warnings": [],
+   "segundos": 330.10446286201477
   }
  ]
 }

@@ -58,6 +58,78 @@
    "energy_drift_k": 1.2732925824820995e-10,
    "warnings": [],
    "segundos": 204.15451526641846
+  },
+  {
+   "temperature": 298.0,
+   "pressure_mpa": 0.03,
+   "mean_count": 8.098925,
+   "count_error": 0.28416447723985494,
+   "mol_per_kg": 0.8304092553910969,
+   "excess_mol_per_kg": 0.8200139947497257,
+   "bulk_count": 0.10138427015756914,
+   "acceptance": {
+    "insert": 0.11791570963089579,
+    "delete": 0.11777816332795046,
+    "move": 0.24562035037197025,
+    "rotate": 0.27005493409239034
+   },
+   "energy_drift_k": 4.001776687800884e-11,
+   "warnings": [],
+   "segundos": 221.56350326538086
+  },
+  {
+   "temperature": 298.0,
+   "pressure_mpa": 0.1,
+   "mean_count": 16.4874,
+   "count_error": 0.5195229806701955,
+   "mol_per_kg": 1.6905070188123945,
+   "excess_mol_per_kg": 1.6557222217653913,
+   "bulk_count": 0.33925376023322257,
+   "acceptance": {
+    "insert": 0.1451412542576638,
+    "delete": 0.14463212062230874,
+    "move": 0.2950251088048209,
+    "rotate": 0.3162798711712548
+   },
+   "energy_drift_k": 7.275957614183426e-12,
+   "warnings": [],
+   "segundos": 220.61910915374756
+  },
+  {
+   "temperature": 298.0,
+   "pressure_mpa": 0.3,
+   "mean_count": 36.233195,
+   "count_error": 0.9797755516627836,
+   "mol_per_kg": 3.715107928569584,
+   "excess_mol_per_kg": 3.609579472257686,
+   "bulk_count": 1.0292118584749195,
+   "acceptance": {
+    "insert": 0.1394429253123157,
+    "delete": 0.13793746089642045,
+    "move": 0.3067301806956383,
+    "rotate": 0.3084623474128406
+   },
+   "energy_drift_k": 1.2660166248679161e-09,
+   "warnings": [],
+   "segundos": 230.33447885513306
+  },
+  {
+   "temperature": 298.0,
+   "pressure_mpa": 1.0,
+   "mean_count": 93.255165,
+   "count_error": 2.379718548811673,
+   "mol_per_kg": 9.561756915766463,
+   "excess_mol_per_kg": 9.19517342191752,
+   "bulk_count": 3.5752638878311513,
+   "acceptance": {
+    "insert": 0.05198244956926534,
+    "delete": 0.05060599617265575,
+    "move": 0.2532394179015217,
+    "rotate": 0.23235809554387232
+   },
+   "energy_drift_k": 1.1932570487260818e-09,
+   "warnings": [],
+   "segundos": 251.46202397346497
   }
  ]
 }

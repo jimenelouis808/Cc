@@ -5,3 +5,7 @@ rendija-6.6 0.003 MPa: 1.721 mol/kg (224 s)
 warning: The `UV_NATIVE_TLS` environment variable is deprecated and will be removed in a future release. Use `UV_SYSTEM_CERTS` instead.
 rendija-6.6 0.01 MPa: 4.875 mol/kg (251 s)
 warning: The `UV_NATIVE_TLS` environment variable is deprecated and will be removed in a future release. Use `UV_SYSTEM_CERTS` instead.
+rendija-6.6 0.03 MPa: 7.409 mol/kg (264 s)
+rendija-6.6 0.1 MPa: 8.697 mol/kg (255 s)
+rendija-6.6 0.3 MPa: 9.586 mol/kg (269 s)
+rendija-6.6 1.0 MPa: 9.844 mol/kg (272 s)

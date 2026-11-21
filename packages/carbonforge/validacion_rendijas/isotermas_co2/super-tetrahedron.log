@@ -5,3 +5,7 @@ super-tetrahedron 0.003 MPa: 0.356 mol/kg (182 s)
 warning: The `UV_NATIVE_TLS` environment variable is deprecated and will be removed in a future release. Use `UV_SYSTEM_CERTS` instead.
 super-tetrahedron 0.01 MPa: 0.438 mol/kg (204 s)
 warning: The `UV_NATIVE_TLS` environment variable is deprecated and will be removed in a future release. Use `UV_SYSTEM_CERTS` instead.
+super-tetrahedron 0.03 MPa: 0.830 mol/kg (222 s)
+super-tetrahedron 0.1 MPa: 1.691 mol/kg (221 s)
+super-tetrahedron 0.3 MPa: 3.715 mol/kg (230 s)
+super-tetrahedron 1.0 MPa: 9.562 mol/kg (251 s)
