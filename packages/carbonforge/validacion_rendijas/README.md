@@ -1029,3 +1029,61 @@ Los dos puntos más bajos de cada jaula llevan aviso de muestreo corto
 (error de bloque 9–19 %): con menos de 4 moléculas en la celda la
 estadística es pobre. No cambian la forma de la isoterma, pero no se
 citan con más de una cifra.
+
+## CO₂: tres sitios, cargas y Ewald
+
+El H₂ cabe en una esfera de Lennard-Jones; el CO₂ no: es lineal, mide
+3.5 Å y su cuadrupolo es buena parte de cómo se atrae y se empaqueta.
+`carbonforge/adsorption/co2.py` es un GCMC aparte, sin tocar el del H₂:
+
+* **CO₂ TraPPE** (Potoff y Siepmann 2001): rígido y lineal, C=O 1.16 Å,
+  C σ 2.80 Å, ε 27.0 K, +0.70 e; O σ 3.05 Å, ε 79.0 K, −0.35 e.
+* **Pared de grafito de Steele** (σ 3.40 Å, ε 28.0 K), Lorentz-Berthelot.
+  El carbono puro es **neutro**: Ewald actúa solo entre moléculas de
+  CO₂. Una pared dopada o funcionalizada necesita cargas que este
+  módulo todavía no pone (paso 3).
+* **Ewald** con el factor de estructura actualizado en cada movimiento.
+  Movimientos: inserción, borrado, traslación y rotación, ¼ cada uno.
+* **Reservorio Peng-Robinson**; se rechaza a partir de la saturación.
+* Clásico (sin Feynman-Hibbs) y sin correcciones de cola del LJ.
+
+**Validación interna** (`tests/test_adsorption_co2.py`, 8 pruebas):
+
+| prueba | resultado |
+|---|---|
+| energía con precisión de Ewald 1e-5 frente a 1e-7 | difiere 0.04 % |
+| energía incremental frente a recalculada | 1e-12 K de deriva |
+| cuadrupolo solo: en T atrae, en paralelo repele | sí |
+| caja vacía frente al reservorio, 300 K: 0.5 / 2 / 4 MPa | 0.984 ± 0.009 / 0.966 ± 0.015 / **0.917 ± 0.013** |
+
+A 4 MPa la caja vacía queda un 8 % baja: es casi crítico (la
+saturación de Peng-Robinson a 300 K es ~6.7 MPa), donde fallan a la vez
+el reservorio y la falta de cola del LJ. Por eso las isotermas llegan
+solo a 1 MPa. **No hay todavía comparación con una isoterma publicada**
+de CO₂ en carbono: todo lo anterior es consistencia interna y el
+modelo de fuerzas es el estándar, no uno validado aquí contra un
+experimento.
+
+### Pendiente inicial a 298 K (`henry_co2.py`, `henry_co2.txt`)
+
+| estructura | K_H (mol/kg/MPa) | q_st (kJ/mol) |
+|---|---|---|
+| rendija 6.0 Å | 48 | 26.7 |
+| **rendija 6.6 Å** | **547 ± 2** | **29.7** |
+| rendija 7.0 Å | 417 | 27.3 |
+| rendija 7.5 Å | 199 | 23.7 |
+| rendija 8.0 Å | 97 | 20.7 |
+| rendija 9.0 Å | 35 | 16.8 |
+| rendija 10 Å | 18 | 14.8 |
+| rendija 12 Å | 11 | 13.5 |
+| super-cube | 55 ± 16 (4 semillas: 29–100) | 28–38 |
+| super-tetrahedron | 482 ± 71 (4 semillas: 309–618) | 39–42 |
+
+La rendija óptima para CO₂ es de 6.6 Å y converge a ±0.4 % entre
+semillas. **En las jaulas Widom no converge**: la pendiente la deciden
+bolsillos profundos que la inserción aleatoria casi nunca encuentra, y
+cuatro semillas de 150 000 inserciones difieren hasta un factor 2. El
+calor alto (35–42 kJ/mol) dice que esos bolsillos existen; cuánto
+pesan lo decide una isoterma (`isoterma_co2.py`, 1 kPa a 1 MPa, junto
+con la rendija de 6.6 Å como referencia), que los explora moviendo
+moléculas en vez de tirarlas al azar.
