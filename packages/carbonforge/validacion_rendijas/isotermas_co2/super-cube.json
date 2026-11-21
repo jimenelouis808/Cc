@@ -20,6 +20,26 @@
     "block error 20 % of the mean: too short to quote."
    ],
    "segundos": 211.4784598350525
+  },
+  {
+   "temperature": 298.0,
+   "pressure_mpa": 0.003,
+   "mean_count": 2.32889,
+   "count_error": 0.19523497449654523,
+   "mol_per_kg": 0.11092473013391424,
+   "excess_mol_per_kg": 0.10977432788567414,
+   "bulk_count": 0.0241529574935136,
+   "acceptance": {
+    "insert": 0.0986927319098933,
+    "delete": 0.09881777088292722,
+    "move": 0.1596601728431229,
+    "rotate": 0.18455608718766614
+   },
+   "energy_drift_k": 1.9099388737231493e-10,
+   "warnings": [
+    "block error 8 % of the mean: too short to quote."
+   ],
+   "segundos": 260.0510206222534
   }
  ]
 }
