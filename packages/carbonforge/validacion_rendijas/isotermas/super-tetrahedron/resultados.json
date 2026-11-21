@@ -181,6 +181,27 @@
         "instantaneas/P1MPa_02.extxyz"
       ],
       "avisos": []
+    },
+    {
+      "presion_mpa": 10.0,
+      "n_medio": 239.61779666666666,
+      "n_error": 1.172834050015307,
+      "densidad_absoluta_g_cm3": 0.0421467538137281,
+      "densidad_exceso_g_cm3": 0.015469689799801626,
+      "densidad_gas_g_cm3": 0.036573958837768004,
+      "wt_pct_total": 4.719050518906247,
+      "wt_pct_por_carbono": 4.952774447154969,
+      "aceptacion": {
+        "insert": 0.0225415703849714,
+        "delete": 0.021044171327149124,
+        "move": 0.21464445153061223
+      },
+      "segundos": 101.259510132,
+      "instantaneas": [
+        "instantaneas/P10MPa_01.extxyz",
+        "instantaneas/P10MPa_02.extxyz"
+      ],
+      "avisos": []
     }
   ]
 }

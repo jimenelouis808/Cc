@@ -984,3 +984,48 @@ pendiente dice quién llena antes, y **sólo una isoterma dice quién
 guarda más**. Aquí esa frase decide el veredicto, y es el primer caso
 del estudio donde el límite de cobertura cero no basta: **confirmarlo
 pide un GCMC de verdad sobre super-cube.**
+
+## La isoterma refuta el veredicto: la jaula también almacena
+
+`isoterma_jaulas.py` corre el GCMC de verdad que la sección anterior
+pedía: H₂ a 77 K, 1 Pa a 10 MPa, sobre las mismas celdas que la
+constante de Henry (`llenado_super.embed`). Carpetas en `isotermas/`,
+reanudables (`lanza_isotermas.sh`); sobrevivieron a dos reinicios del
+contenedor sin perder un punto terminado.
+
+| P (MPa) | super-cube N / celda | abs. (mol/kg) | super-tetrahedron abs. (mol/kg) |
+|---|---|---|---|
+| 1e-6 | 0.82 ± 0.19 | 0.04 | 0.03 |
+| 1e-5 | 3.3 ± 0.3 | 0.16 | 0.17 |
+| 1e-4 | 6.5 ± 0.3 | 0.31 | 0.45 |
+| 1e-3 | 11.0 ± 0.2 | 0.52 | 0.79 |
+| 1e-2 | 37.5 ± 0.7 | 1.79 | 2.12 |
+| 1e-1 | 150.6 ± 1.9 | 7.17 | 6.48 |
+| 1 | 355 ± 3 | 16.9 | 16.6 |
+| 10 | 538 ± 2 | **25.6** | **24.6** |
+
+En exceso, a 10 MPa: **8.4 mol/kg** (super-cube) y **9.0** (super-
+tetrahedron); el exceso es el 33–37 % del absoluto ahí, y > 90 % hasta
+1 MPa.
+
+**Lo que la estimación acertó.** Los ocho bolsillos existen y se llenan
+primero y a presión bajísima: entre 10 Pa y 1 kPa el super-cube pasa de
+3.3 a 11 moléculas, con un hombro claro — de 0.1 a 1 kPa la presión se
+multiplica por 10 y la carga solo por 1.7. Eso es la meseta de los
+bolsillos (8 moléculas, 0.38 mol/kg), en el orden de presión que la
+pendiente predijo (media carga estimada 7.8 Pa; medida entre 10 y 100 Pa).
+
+**Lo que la estimación erró.** Tras el hombro la carga **no se para**:
+los canales entre tubos se llenan como los de cualquier poro y a 10 MPa
+el super-cube guarda 25.6 mol/kg absolutos, 67 veces la saturación
+estimada y del mismo orden que los ~28 mol/kg citados para la rendija de
+10 Å (sin comprobar aquí si esa cifra es absoluta o en exceso, que a
+10 MPa no es lo mismo). Así que **la jaula no es solo un captador: es un
+captador a baja presión y un almacén comparable a la rendija a alta**.
+El error estaba en suponer una molécula por bolsillo y nada más: los
+bolsillos son el sitio más profundo, no el único.
+
+Los dos puntos más bajos de cada jaula llevan aviso de muestreo corto
+(error de bloque 9–19 %): con menos de 4 moléculas en la celda la
+estadística es pobre. No cambian la forma de la isoterma, pero no se
+citan con más de una cifra.
