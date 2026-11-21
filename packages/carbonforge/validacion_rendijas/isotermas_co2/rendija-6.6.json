@@ -36,6 +36,24 @@
    "energy_drift_k": 5.820766091346741e-11,
    "warnings": [],
    "segundos": 223.79436922073364
+  },
+  {
+   "temperature": 298.0,
+   "pressure_mpa": 0.01,
+   "mean_count": 56.208845,
+   "count_error": 1.3856949550766933,
+   "mol_per_kg": 4.874771476840674,
+   "excess_mol_per_kg": 4.872018606132279,
+   "bulk_count": 0.03174214087538442,
+   "acceptance": {
+    "insert": 0.01485326892023541,
+    "delete": 0.01414735154632289,
+    "move": 0.16394621222207428,
+    "rotate": 0.1320337674096562
+   },
+   "energy_drift_k": 7.566995918750763e-10,
+   "warnings": [],
+   "segundos": 251.19477200508118
   }
  ]
 }
