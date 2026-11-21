@@ -114,6 +114,48 @@
         "instantaneas/P0.001MPa_02.extxyz"
       ],
       "avisos": []
+    },
+    {
+      "presion_mpa": 0.01,
+      "n_medio": 37.52240666666667,
+      "n_error": 0.717135074244114,
+      "densidad_absoluta_g_cm3": 0.0028467423219842225,
+      "densidad_exceso_g_cm3": 0.0028230983933424762,
+      "densidad_gas_g_cm3": 3.14991357327921e-05,
+      "wt_pct_total": 0.3589822059018465,
+      "wt_pct_por_carbono": 0.360275530950176,
+      "aceptacion": {
+        "insert": 0.14357348818315607,
+        "delete": 0.1440943036067111,
+        "move": 0.31657897534013607
+      },
+      "segundos": 83.927999391,
+      "instantaneas": [
+        "instantaneas/P0.01MPa_01.extxyz",
+        "instantaneas/P0.01MPa_02.extxyz"
+      ],
+      "avisos": []
+    },
+    {
+      "presion_mpa": 0.1,
+      "n_medio": 150.54614666666666,
+      "n_error": 1.942049533692068,
+      "densidad_absoluta_g_cm3": 0.011421604454502222,
+      "densidad_exceso_g_cm3": 0.011184385717816003,
+      "densidad_gas_g_cm3": 0.00031602976385437456,
+      "wt_pct_total": 1.4248888894019605,
+      "wt_pct_por_carbono": 1.4454854509910537,
+      "aceptacion": {
+        "insert": 0.1257799649723308,
+        "delete": 0.12538762934931852,
+        "move": 0.32950015943877553
+      },
+      "segundos": 93.50951684900002,
+      "instantaneas": [
+        "instantaneas/P0.1MPa_01.extxyz",
+        "instantaneas/P0.1MPa_02.extxyz"
+      ],
+      "avisos": []
     }
   ]
 }

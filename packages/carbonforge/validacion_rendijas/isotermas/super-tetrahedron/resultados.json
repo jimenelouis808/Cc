@@ -118,6 +118,69 @@
       "avisos": [
         "the loading drifted by -0.7 molecules from the first production block to the last, so equilibration had not finished when averaging began."
       ]
+    },
+    {
+      "presion_mpa": 0.01,
+      "n_medio": 20.713616666666667,
+      "n_error": 0.3328484734125821,
+      "densidad_absoluta_g_cm3": 0.003643350846166011,
+      "densidad_exceso_g_cm3": 0.003620375360683173,
+      "densidad_gas_g_cm3": 3.14991357327921e-05,
+      "wt_pct_total": 0.42631439470219273,
+      "wt_pct_por_carbono": 0.42813961551254537,
+      "aceptacion": {
+        "insert": 0.11709353897790387,
+        "delete": 0.11764351303019953,
+        "move": 0.24304628282546453
+      },
+      "segundos": 79.529277298,
+      "instantaneas": [
+        "instantaneas/P0.01MPa_01.extxyz",
+        "instantaneas/P0.01MPa_02.extxyz"
+      ],
+      "avisos": []
+    },
+    {
+      "presion_mpa": 0.1,
+      "n_medio": 63.14679,
+      "n_error": 0.852103200642061,
+      "densidad_absoluta_g_cm3": 0.011106988918521427,
+      "densidad_exceso_g_cm3": 0.010876476649449171,
+      "densidad_gas_g_cm3": 0.00031602976385437456,
+      "wt_pct_total": 1.288394827554683,
+      "wt_pct_por_carbono": 1.30521109985387,
+      "aceptacion": {
+        "insert": 0.14779840707493141,
+        "delete": 0.14821165438713998,
+        "move": 0.30057262050273686
+      },
+      "segundos": 81.902103648,
+      "instantaneas": [
+        "instantaneas/P0.1MPa_01.extxyz",
+        "instantaneas/P0.1MPa_02.extxyz"
+      ],
+      "avisos": []
+    },
+    {
+      "presion_mpa": 1.0,
+      "n_medio": 161.85396666666668,
+      "n_error": 1.556252230318199,
+      "densidad_absoluta_g_cm3": 0.028468750576005578,
+      "densidad_exceso_g_cm3": 0.02608712031693258,
+      "densidad_gas_g_cm3": 0.0032651886660633287,
+      "wt_pct_total": 3.237140298504422,
+      "wt_pct_por_carbono": 3.345436780693232,
+      "aceptacion": {
+        "insert": 0.09175784293486584,
+        "delete": 0.09117578111918556,
+        "move": 0.2825720131802721
+      },
+      "segundos": 92.788262817,
+      "instantaneas": [
+        "instantaneas/P1MPa_01.extxyz",
+        "instantaneas/P1MPa_02.extxyz"
+      ],
+      "avisos": []
     }
   ]
 }
