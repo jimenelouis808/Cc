@@ -1,0 +1,6 @@
+warning: The `UV_NATIVE_TLS` environment variable is deprecated and will be removed in a future release. Use `UV_SYSTEM_CERTS` instead.
+NH2 0.001 MPa: 0.682 mol/kg
+NH2 0.01 MPa: 5.571 mol/kg
+NH2 0.03 MPa: 6.985 mol/kg
+NH2 0.1 MPa: 8.476 mol/kg
+NH2 1.0 MPa: 9.232 mol/kg

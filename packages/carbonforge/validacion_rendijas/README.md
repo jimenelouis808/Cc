@@ -1130,3 +1130,26 @@ celda. El exceso difiere del absoluto menos de un 5 % en toda la tabla.)
 MPa) es la rendija de 6.6 Å, con 5 veces lo de las jaulas. Las jaulas
 solo empatan a 1 MPa. Es lo contrario del H₂ a 77 K, donde las jaulas
 ganaban la pendiente: el orden lo pone la forma de la molécula.
+
+## CO₂ en rendijas funcionalizadas (paso 3)
+
+Rendija de 6.6 Å, 298 K. Las cargas de la pared son **representativas, no
+establecidas** (`forcefields.charges` para derivarlas de DFT propio), y la carga
+neta de cada celda se neutralizó repartiéndola sobre los C sp2. "Sin cargas" deja
+solo el LJ de los grupos: separa química de estrechamiento del poro.
+
+| variante | K_H con cargas | K_H sin cargas | q_st (kJ/mol) | 1 kPa | 0.1 MPa | 1 MPa (mol/kg abs) |
+|---|---|---|---|---|---|---|
+| prístina | 552 | 552 | 29.7 | 0.62 | 9.10 | 9.96 |
+| N 5 % | 1305 | 820 | 35.0 | 1.36 | 9.26 | 9.76 |
+| OH | 577 | 578 | 31.3 | 0.87 | 8.49 | 9.40 |
+| COOH | 2108 ± 300 | 580 | 40.8 | 1.68 | 7.92 | 9.07 |
+| NH₂ | 570 | 565 | 31.4 | 0.68 | 8.48 | 9.23 |
+
+**Veredicto**: la funcionalización solo ayuda a baja presión. COOH cuadruplica
+K_H y N 5 % lo duplica, y casi todo es electrostática (sin cargas quedan cerca de
+la prístina). A 1 kPa cargan 2–3 veces más. Pero a 0.1 MPa la rendija ya está
+casi llena y los grupos ocupan volumen: COOH, OH y NH₂ quedan por debajo de la
+prístina, y solo N (sustitucional, sin volumen) la iguala. Para captura a
+presión atmosférica, el dopaje N es la única modificación que no cuesta;
+para CO₂ diluido (aire, ~40 Pa), COOH es la mejor.

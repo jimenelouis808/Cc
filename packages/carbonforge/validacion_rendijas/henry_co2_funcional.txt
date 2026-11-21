@@ -1,2 +1,5 @@
 pristina              C960  carga neta +0.00 e/celda -> 0  |  con cargas: K_H    552.4 (548-557)  q_st 29.74  |  sin cargas: K_H    552.4 (548-557)  q_st 29.74  (178 s)
 N5                 C912N48  carga neta -0.60 e/celda -> 0  |  con cargas: K_H   1305.1 (1299-1311)  q_st 34.97  |  sin cargas: K_H    820.1 (807-834)  q_st 30.89  (276 s)
+OH              C960H16O16  carga neta -0.48 e/celda -> 0  |  con cargas: K_H    576.8 (576-578)  q_st 31.33  |  sin cargas: K_H    578.4 (571-585)  q_st 30.34  (292 s)
+COOH            C972H12O24  carga neta -6.36 e/celda -> 0  |  con cargas: K_H   2107.6 (1810-2405)  q_st 40.81  |  sin cargas: K_H    580.4 (579-582)  q_st 30.73  (305 s)
+NH2             C960H32N16  carga neta -0.48 e/celda -> 0  |  con cargas: K_H    569.5 (564-575)  q_st 31.39  |  sin cargas: K_H    565.0 (559-571)  q_st 30.33  (302 s)

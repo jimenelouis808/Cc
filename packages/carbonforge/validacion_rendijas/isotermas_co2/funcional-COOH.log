@@ -1,0 +1,6 @@
+warning: The `UV_NATIVE_TLS` environment variable is deprecated and will be removed in a future release. Use `UV_SYSTEM_CERTS` instead.
+COOH 0.001 MPa: 1.676 mol/kg
+COOH 0.01 MPa: 4.983 mol/kg
+COOH 0.03 MPa: 6.806 mol/kg
+COOH 0.1 MPa: 7.918 mol/kg
+COOH 1.0 MPa: 9.066 mol/kg
