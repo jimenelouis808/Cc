@@ -1,4 +1,25 @@
 {
  "vacio_helio": 0.7506215041046879,
- "puntos": []
+ "puntos": [
+  {
+   "temperature": 298.0,
+   "pressure_mpa": 0.001,
+   "mean_count": 0.954455,
+   "count_error": 0.19599946987598374,
+   "mol_per_kg": 0.045460568468225264,
+   "excess_mol_per_kg": 0.04507714302551876,
+   "bulk_count": 0.00805010459062396,
+   "acceptance": {
+    "insert": 0.07293586558752037,
+    "delete": 0.07265782013229873,
+    "move": 0.10653891768719267,
+    "rotate": 0.11103402268178786
+   },
+   "energy_drift_k": 7.912603905424476e-11,
+   "warnings": [
+    "block error 20 % of the mean: too short to quote."
+   ],
+   "segundos": 211.4784598350525
+  }
+ ]
 }
