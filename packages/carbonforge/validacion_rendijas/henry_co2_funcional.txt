@@ -1,0 +1,2 @@
+pristina              C960  carga neta +0.00 e/celda -> 0  |  con cargas: K_H    552.4 (548-557)  q_st 29.74  |  sin cargas: K_H    552.4 (548-557)  q_st 29.74  (178 s)
+N5                 C912N48  carga neta -0.60 e/celda -> 0  |  con cargas: K_H   1305.1 (1299-1311)  q_st 34.97  |  sin cargas: K_H    820.1 (807-834)  q_st 30.89  (276 s)

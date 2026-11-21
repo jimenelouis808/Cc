@@ -14,11 +14,15 @@ The model
   was fitted to the vapour-liquid coexistence curve, which is why the
   empty-box test below can hold it to the real gas.
 * **The wall is Steele's graphite carbon**, sigma 3.40 A, epsilon/k
-  28.0 K, combined with Lorentz-Berthelot. An undoped carbon framework
-  is NEUTRAL here, so the electrostatics act between CO2 molecules only.
-  A functionalised or doped wall carries charges and needs them added
-  to this framework term; that is not done here and the docstring of
-  :func:`run_co2_gcmc` says so.
+  28.0 K, combined with Lorentz-Berthelot, unless it is TYPED: then
+  :func:`wall_parameters` gives every atom its own sigma, epsilon and
+  charge from :mod:`carbonforge.forcefields` (``assign_types`` and
+  ``ELECTRODE_PARAMS``), and the wall's charges enter the Ewald sum:
+  a real-space term against the charged atoms, and the wall's share of
+  the structure factor from the start. Those charges on doped and
+  functionalised carbon are REPRESENTATIVE, not established -- the
+  parameter table says so of each one -- and every result built on them
+  inherits that.
 * **Electrostatics by Ewald summation**, with the structure factor kept
   and updated incrementally, so a move costs one evaluation over the
   k-vectors rather than a full sum. Intramolecular pairs are excluded,
@@ -263,11 +267,64 @@ class Ewald:
 # The system
 # --------------------------------------------------------------------------
 
+#: kcal/mol to K.
+KCAL_TO_K: float = 503.2195
+
+
+def wall_parameters(framework: Atoms,
+                    neutralise: bool = True) -> dict[str, object]:
+    """Per-atom LJ sigma (A), epsilon (K) and charge (e) of a typed wall.
+
+    Types from :func:`carbonforge.forcefields.typing.assign_types`,
+    values from ``ELECTRODE_PARAMS``. An atom whose environment matched
+    no type is refused rather than given a default: a wrong type is a
+    wrong charge.
+
+    The table's charges are per type and do NOT sum to zero over a
+    group: a hydroxyl leaves -0.03 e, a carboxyl -0.53 e. A charged
+    framework in an Ewald sum is a different system (it sits in a
+    neutralising background), so with ``neutralise`` the net charge is
+    spread evenly over the ``C_sp2`` atoms -- the delocalised sheet,
+    which is where a real compensating charge would go -- and the shift
+    per atom is returned as ``shift``. Returns ``sigma``, ``epsilon``,
+    ``charge``, the ``types``, the ``net_charge`` before neutralising
+    and ``shift``.
+    """
+    from carbonforge.forcefields.parameters import ELECTRODE_PARAMS
+    from carbonforge.forcefields.typing import assign_types
+
+    typed = assign_types(framework)
+    if typed.unresolved:
+        raise ValueError(f"untyped atoms: {typed.unresolved[:5]}")
+    missing = sorted(set(typed.types) - set(ELECTRODE_PARAMS))
+    if missing:
+        raise ValueError(f"no parameters for types {missing}")
+    rows = [ELECTRODE_PARAMS[t] for t in typed.types]
+    charge = np.array([r.charge for r in rows])
+    net = float(charge.sum())
+    shift = 0.0
+    if neutralise and abs(net) > 1e-12:
+        sheet = np.array([t == "C_sp2" for t in typed.types])
+        if not sheet.any():
+            raise ValueError("no C_sp2 atoms to neutralise over")
+        shift = -net / int(sheet.sum())
+        charge = charge + shift * sheet
+    return {"sigma": np.array([r.sigma for r in rows]),
+            "epsilon": np.array([r.epsilon for r in rows]) * KCAL_TO_K,
+            "charge": charge, "types": typed.types,
+            "net_charge": net, "shift": shift}
+
+
 class CO2System:
-    """Molecules in a rigid neutral carbon framework, with Ewald."""
+    """Molecules in a rigid carbon framework, with Ewald.
+
+    ``wall`` is the output of :func:`wall_parameters` for a typed,
+    possibly charged wall; ``None`` makes every framework atom Steele
+    carbon without charge, which is the neutral case.
+    """
 
     def __init__(self, framework: Atoms | None, edges: np.ndarray,
-                 cutoff: float = CUTOFF):
+                 cutoff: float = CUTOFF, wall: dict | None = None):
         edges = np.asarray(edges, dtype=float)
         if edges.min() < 2.0 * cutoff:
             raise ValueError(
@@ -278,17 +335,42 @@ class CO2System:
         self.cutoff = cutoff
         self.ewald = Ewald(edges, cutoff)
         self.constant = self.ewald.molecule_constant()
+        self.wall_charge = None
+        self.wall_frame_structure = None
         if framework is not None and len(framework):
             positions = np.asarray(framework.get_positions(), float) % edges
             self.wall = positions
             self.wall_tree = cKDTree(positions, boxsize=edges)
-            self.carbon_mass_g = len(framework) * MASS_C / AVOGADRO
+            # Mass of the whole framework, whatever its elements: the
+            # loading is per kg of adsorbent.
+            self.carbon_mass_g = float(np.sum(framework.get_masses())
+                                       ) / AVOGADRO
+            n = len(positions)
+            if wall is None:
+                sigma = np.full(n, WALL_SIGMA)
+                epsilon = np.full(n, WALL_EPSILON)
+            else:
+                sigma = np.asarray(wall["sigma"], float)
+                epsilon = np.asarray(wall["epsilon"], float)
+                charge = np.asarray(wall["charge"], float)
+                if np.any(charge != 0.0):
+                    self.wall_charge = charge
+                    charged = np.flatnonzero(charge != 0.0)
+                    self.charged = positions[charged]
+                    self.charged_q = charge[charged]
+                    self.charged_tree = cKDTree(self.charged, boxsize=edges)
+                    self.wall_frame_structure = self.ewald.terms(
+                        self.charged, self.charged_q)
+                    self.ewald.structure = self.wall_frame_structure.copy()
+            # Lorentz-Berthelot per (wall atom, CO2 site); an atom with no
+            # LJ (sigma 0, e.g. a hydroxyl H) contributes none.
+            self.wall_sig = 0.5 * (sigma[:, None] + SITE_SIGMA[None, :])
+            self.wall_eps = np.sqrt(epsilon[:, None] * SITE_EPSILON[None, :])
+            self.wall_eps[sigma == 0.0] = 0.0
         else:
             self.wall = None
             self.wall_tree = None
             self.carbon_mass_g = 0.0
-        self.wall_sigma = 0.5 * (SITE_SIGMA + WALL_SIGMA)
-        self.wall_epsilon = np.sqrt(SITE_EPSILON * WALL_EPSILON)
         sig = 0.5 * (SITE_SIGMA[:, None] + SITE_SIGMA[None, :])
         eps = np.sqrt(SITE_EPSILON[:, None] * SITE_EPSILON[None, :])
         self.pair_sigma, self.pair_epsilon = sig, eps
@@ -304,12 +386,22 @@ class CO2System:
         for s in range(3):
             near = self.wall_tree.query_ball_point(sites[s] % self.edges,
                                                    self.cutoff)
-            if not near:
-                continue
-            r = np.linalg.norm(_wrap(self.wall[near] - sites[s], self.edges),
-                               axis=1)
-            total += float(np.sum(_lj(np.maximum(r, 0.5), self.wall_sigma[s],
-                                      self.wall_epsilon[s])))
+            if near:
+                r = np.linalg.norm(_wrap(self.wall[near] - sites[s],
+                                         self.edges), axis=1)
+                total += float(np.sum(_lj(np.maximum(r, 0.5),
+                                          self.wall_sig[near, s],
+                                          self.wall_eps[near, s])))
+            if self.wall_charge is not None:
+                near = self.charged_tree.query_ball_point(
+                    sites[s] % self.edges, self.cutoff)
+                if near:
+                    r = np.maximum(np.linalg.norm(_wrap(
+                        self.charged[near] - sites[s], self.edges), axis=1),
+                        0.5)
+                    total += float(COULOMB_K_A * SITE_CHARGE[s]
+                                   * np.sum(self.charged_q[near]
+                                            * erfc(self.ewald.alpha * r) / r))
         return total
 
     def fluid_energy(self, sites: np.ndarray, skip: int | None = None) -> float:
@@ -345,10 +437,15 @@ class CO2System:
             self.molecules = saved[:i]
             total += self.fluid_energy(sites)
         self.molecules = saved
-        structure = np.zeros_like(self.ewald.structure)
+        frame = (self.wall_frame_structure if self.wall_frame_structure
+                 is not None else np.zeros_like(self.ewald.structure))
+        structure = frame.copy()
         for sites in saved:
             structure += self.ewald.terms(sites, SITE_CHARGE)
-        total += float(np.sum(self.ewald.weights * np.abs(structure) ** 2))
+        # The wall-wall reciprocal energy is a constant of the rigid
+        # framework and is not part of any move: subtract it.
+        total += float(np.sum(self.ewald.weights * (np.abs(structure) ** 2
+                                                    - np.abs(frame) ** 2)))
         total += len(saved) * self.constant
         return total
 
@@ -408,8 +505,9 @@ def run_co2_gcmc(
     void_fraction: float | None = None,
     blocks: int = 10,
     cutoff: float = CUTOFF,
+    wall: dict | None = None,
 ) -> CO2Result:
-    """Grand-canonical CO2 in a rigid NEUTRAL carbon framework.
+    """Grand-canonical CO2 in a rigid carbon framework.
 
     Moves, each a quarter: insertion (random centre and orientation),
     deletion, translation (up to 1 A), rotation (a fresh random axis
@@ -421,8 +519,11 @@ def run_co2_gcmc(
     ----------
     framework
         Orthorhombic periodic carbon, or ``None`` for the empty box
-        (with ``edges``). Its atoms are uncharged: a doped or
-        functionalised wall needs framework charges this does not add.
+        (with ``edges``).
+    wall
+        :func:`wall_parameters` of the framework, for a typed and
+        charged wall. ``None`` treats every atom as neutral Steele
+        carbon.
     temperature, pressure_mpa
         State point. The reservoir is Peng-Robinson CO2 and is refused
         at or above saturation.
@@ -450,7 +551,7 @@ def run_co2_gcmc(
         if edges is None:
             raise ValueError("an empty box needs `edges`.")
         box = np.asarray(edges, dtype=float)
-    system = CO2System(framework, box, cutoff)
+    system = CO2System(framework, box, cutoff, wall)
     beta = 1.0 / temperature
     zeta = activity(temperature, pressure_mpa)
     volume = system.volume
@@ -534,21 +635,26 @@ def run_co2_gcmc(
 
 
 def henry_co2(framework: Atoms, temperature: float, samples: int = 200_000,
-              seed: int = 0, cutoff: float = CUTOFF) -> tuple[float, float]:
+              seed: int = 0, cutoff: float = CUTOFF,
+              wall: dict | None = None) -> tuple[float, float]:
     """Widom estimate of CO2's Henry constant and zero-coverage q_st.
 
-    Random centre and orientation; only the wall term (one molecule
-    alone has no fluid or Ewald energy beyond its constant, which
-    cancels). Returns ``(K_H in mol/kg/MPa, q_st in kJ/mol)`` on the
+    Random centre and orientation. With a charged ``wall`` the
+    energy includes the Ewald interaction with the wall's charges (and
+    the molecule's own periodic images, which are negligible in a cell
+    of 24 A or more). Returns ``(K_H in mol/kg/MPa, q_st in kJ/mol)`` on the
     same basis as :mod:`carbonforge.adsorption.henry`.
     """
     rng = np.random.default_rng(seed)
     cell = np.diag(np.asarray(framework.cell, dtype=float))
-    system = CO2System(framework, cell, cutoff)
+    system = CO2System(framework, cell, cutoff, wall)
     energies = np.empty(samples)
     for i in range(samples):
-        energies[i] = system.wall_energy(
-            molecule(rng.random(3) * cell, random_axis(rng)))
+        sites = molecule(rng.random(3) * cell, random_axis(rng))
+        if system.wall_charge is None:
+            energies[i] = system.wall_energy(sites)
+        else:
+            energies[i] = system.insertion(sites)[0] - system.constant
     energies = np.minimum(energies, 5e4)
     weight = np.exp(-energies / temperature)
     mean_weight = float(weight.mean())
