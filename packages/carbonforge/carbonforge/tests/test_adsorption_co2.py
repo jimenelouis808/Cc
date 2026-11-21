@@ -113,3 +113,54 @@ class TestTheReservoir:
     def test_saturation_is_near_the_real_one(self):
         """PR's vapour pressure at 280 K; the real one is 4.16 MPa."""
         assert 3.9 < co2._pr_saturation_pressure(280.0) < 4.4
+
+
+def _hydroxylated_slit():
+    from carbonforge.builders import build_graphene_supercell
+    from carbonforge.functionalization.attach import functionalize_random
+
+    sheet = functionalize_random(
+        build_graphene_supercell(nx=10, ny=6, vacuum=10.0), "OH",
+        n_groups=3, site_kind="basal", seed=0)
+    sheet.set_cell(np.diag([sheet.cell[0, 0], sheet.cell[1, 1], 6.6]))
+    sheet.center(axis=2)
+    stack = sheet * (1, 1, 4)
+    stack.set_pbc(True)
+    stack.wrap()
+    return stack
+
+
+class TestTheChargedWall:
+    def test_it_is_neutralised_over_the_sheet(self):
+        wall = co2.wall_parameters(_hydroxylated_slit())
+        assert abs(wall["net_charge"]) > 0.01      # the table is not neutral
+        assert abs(float(np.sum(wall["charge"]))) < 1e-9
+        assert wall["shift"] != 0.0
+
+    def test_incremental_energy_holds_with_wall_charges(self):
+        atoms = _hydroxylated_slit()
+        result = co2.run_co2_gcmc(atoms, 298.0, 0.1, equilibration=600,
+                                  production=600, seed=1,
+                                  wall=co2.wall_parameters(atoms))
+        assert result.energy_drift_k < 1e-6
+
+    def test_a_neutral_typed_wall_is_the_plain_wall(self):
+        """Typed pristine graphene is the default wall, to its rounding.
+
+        The parameter table stores Steele's epsilon as 0.0559 kcal/mol,
+        28.13 K against the default's 28.0, and K_H is exponential in it:
+        2.5 % apart, measured. Equal to 1e-6 would mean the typed path
+        was silently not used; 5 % apart would mean it was used wrongly.
+        """
+        from carbonforge.builders import build_graphene_supercell
+
+        sheet = build_graphene_supercell(nx=10, ny=6, vacuum=10.0)
+        sheet.set_cell(np.diag([sheet.cell[0, 0], sheet.cell[1, 1], 6.6]))
+        sheet.center(axis=2)
+        stack = sheet * (1, 1, 4)
+        stack.set_pbc(True)
+        typed = co2.henry_co2(stack, 298.0, samples=3000, seed=0,
+                              wall=co2.wall_parameters(stack))
+        plain = co2.henry_co2(stack, 298.0, samples=3000, seed=0)
+        assert typed[0] == pytest.approx(plain[0], rel=0.05)
+        assert typed[0] != pytest.approx(plain[0], rel=1e-6)
