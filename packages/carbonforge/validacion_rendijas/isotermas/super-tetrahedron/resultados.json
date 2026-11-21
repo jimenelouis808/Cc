@@ -1,0 +1,123 @@
+{
+  "esquema": "carbonforge-isoterma/1",
+  "nombre": "super-tetrahedron",
+  "temperatura_k": 77.0,
+  "muestreo": {
+    "equilibrado": 150000,
+    "produccion": 300000,
+    "semilla": 0,
+    "corte_a": 12.0
+  },
+  "porosidad": {
+    "probe_radius": 1.445,
+    "void_fraction": 0.38401,
+    "void_fraction_error": 0.001087534642896492,
+    "pore_volume_cm3_g": 0.451260119310173,
+    "helium_void_fraction": 0.7294005041198459,
+    "accessible_area_m2_g": 2076.866974682257,
+    "largest_included_sphere": 12.019474470881352,
+    "largest_free_sphere": 9.058370304693213,
+    "cell_volume_a3": 19031.311324488055,
+    "framework_mass_g": 1.619512460549027e-20,
+    "mean_wall_distance": 2.762785760671948,
+    "mean_energy": -246.9294669925316,
+    "deepest_energy": -1489.7427786096598,
+    "samples": 200000,
+    "warnings": []
+  },
+  "puntos": [
+    {
+      "presion_mpa": 1e-06,
+      "n_medio": 0.3268,
+      "n_error": 0.02606958163108401,
+      "densidad_absoluta_g_cm3": 5.748136965588911e-05,
+      "densidad_exceso_g_cm3": 5.747907294758354e-05,
+      "densidad_gas_g_cm3": 3.148761609839683e-09,
+      "wt_pct_total": 0.006754328720695673,
+      "wt_pct_por_carbono": 0.00675478496107632,
+      "aceptacion": {
+        "insert": 0.003557127602776295,
+        "delete": 0.0035635250148758784,
+        "move": 0.06105359621220673
+      },
+      "segundos": 24.98128979500001,
+      "instantaneas": [
+        "instantaneas/P1e-06MPa_01.extxyz",
+        "instantaneas/P1e-06MPa_02.extxyz"
+      ],
+      "avisos": [
+        "the loading drifted by +0.1 molecules from the first production block to the last, so equilibration had not finished when averaging began."
+      ]
+    },
+    {
+      "presion_mpa": 1e-05,
+      "n_medio": 1.6424633333333334,
+      "n_error": 0.12807673369825923,
+      "densidad_absoluta_g_cm3": 0.00028889547738548705,
+      "densidad_exceso_g_cm3": 0.00028887251029486953,
+      "densidad_gas_g_cm3": 3.1487626465529364e-08,
+      "wt_pct_total": 0.0339373361380086,
+      "wt_pct_por_carbono": 0.033948857475885205,
+      "aceptacion": {
+        "insert": 0.007898019491564994,
+        "delete": 0.00791493122982764,
+        "move": 0.19006839092277994
+      },
+      "segundos": 54.565722746000006,
+      "instantaneas": [
+        "instantaneas/P1e-05MPa_01.extxyz",
+        "instantaneas/P1e-05MPa_02.extxyz"
+      ],
+      "avisos": [
+        "the block standard error is 8 % of the mean: this run is too short to quote.",
+        "the loading drifted by -0.8 molecules from the first production block to the last, so equilibration had not finished when averaging began."
+      ]
+    },
+    {
+      "presion_mpa": 0.0001,
+      "n_medio": 4.33871,
+      "n_error": 0.24402619035972647,
+      "densidad_absoluta_g_cm3": 0.0007631425744788945,
+      "densidad_exceso_g_cm3": 0.0007629129028165393,
+      "densidad_gas_g_cm3": 3.1487730137011224e-07,
+      "wt_pct_total": 0.08959851399765777,
+      "wt_pct_por_carbono": 0.08967886492800323,
+      "aceptacion": {
+        "insert": 0.022163616505500947,
+        "delete": 0.02225600771559461,
+        "move": 0.18227533613222086
+      },
+      "segundos": 69.466278563,
+      "instantaneas": [
+        "instantaneas/P0.0001MPa_01.extxyz",
+        "instantaneas/P0.0001MPa_02.extxyz"
+      ],
+      "avisos": [
+        "the block standard error is 6 % of the mean: this run is too short to quote."
+      ]
+    },
+    {
+      "presion_mpa": 0.001,
+      "n_medio": 7.666943333333333,
+      "n_error": 0.20375260113767962,
+      "densidad_absoluta_g_cm3": 0.00134855080744825,
+      "densidad_exceso_g_cm3": 0.001346254015205525,
+      "densidad_gas_g_cm3": 3.1488766867476497e-06,
+      "wt_pct_total": 0.15822097054285902,
+      "wt_pct_por_carbono": 0.15847170601415042,
+      "aceptacion": {
+        "insert": 0.06357461543583938,
+        "delete": 0.06389776357827476,
+        "move": 0.16380232380471538
+      },
+      "segundos": 74.992921303,
+      "instantaneas": [
+        "instantaneas/P0.001MPa_01.extxyz",
+        "instantaneas/P0.001MPa_02.extxyz"
+      ],
+      "avisos": [
+        "the loading drifted by -0.7 molecules from the first production block to the last, so equilibration had not finished when averaging began."
+      ]
+    }
+  ]
+}
