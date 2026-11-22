@@ -1445,3 +1445,9 @@ CO₂ puro a 0.1 MPa. Estimación de un solo componente; mol/kg.
   entonces en el ruido (2.1–2.5).
 - **Sigue siendo gas seco.** Con humedad, el agua ocupa los sitios del N
   (sección anterior), y esa ventaja se pierde también aquí.
+
+**Corrección a la capacidad de trabajo.** La primera tabla usaba para N 5 % la
+isoterma con cargas representativas. Con el campo de adsorción (cargas DFT,
+`funcional-N5-ads.json`) da 2.12 mol/kg en el ciclo de vacío 100→10 kPa y 5.79
+en el de 15→1 kPa (`capacidad_trabajo.txt`). El N retiene más al regenerar por
+vacío, pero gana a 15→1 kPa y en el ciclo por temperatura.

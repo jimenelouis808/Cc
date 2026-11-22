@@ -24,7 +24,7 @@ STRUCTURES = {
     "super-cube": "super-cube.json",
     "super-tetrahedron": "super-tetrahedron.json",
     "prístina": "funcional-pristina.json",
-    "N 5 %": "funcional-N5.json",
+    "N 5 %": "funcional-N5-ads.json",
     "OH": "funcional-OH-ads.json",
     "COOH": "funcional-COOH-ads.json",
     "NH₂": "funcional-NH2-ads.json",

@@ -635,6 +635,9 @@ class CO2Result:
     acceptance: dict[str, float]
     energy_drift_k: float        # incremental vs recomputed, at the end
     warnings: list[str] = field(default_factory=list)
+    #: Final configuration, only with ``keep_configuration``: one entry
+    #: per molecule, ``{"species": name, "sites": (3, 3) list}``.
+    configuration: list[dict] | None = None
 
 
 def run_co2_gcmc(
@@ -649,6 +652,7 @@ def run_co2_gcmc(
     blocks: int = 10,
     cutoff: float = CUTOFF,
     wall: dict | None = None,
+    keep_configuration: bool = False,
 ) -> CO2Result:
     """Grand-canonical CO2 in a rigid carbon framework.
 
@@ -772,7 +776,11 @@ def run_co2_gcmc(
         bulk_count=bulk,
         acceptance={k: accepted[k] / tried[k] if tried[k] else 0.0
                     for k in tried},
-        energy_drift_k=drift, warnings=warnings)
+        energy_drift_k=drift, warnings=warnings,
+        configuration=([{"species": system.species[k].name,
+                        "sites": np.asarray(m).tolist()}
+                       for m, k in zip(system.molecules, system._all_kinds())]
+                      if keep_configuration else None))
 
 
 def henry_co2(framework: Atoms, temperature: float, samples: int = 200_000,

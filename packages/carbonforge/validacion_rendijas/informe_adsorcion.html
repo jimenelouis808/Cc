@@ -1,0 +1,574 @@
+<title>Adsorción de H₂ y CO₂ en carbono nanoestructurado</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&family=Source+Serif+4:opsz,wght@8..60,500;8..60,600;8..60,700&display=swap">
+<style>
+/* Layout: a single manuscript column (~72ch) with figures allowed wider; numbered sections because a paper's order is information. */
+:root {
+  --bg: #f7f7f5;
+  --panel: #ffffff;
+  --fg: #1c2126;
+  --muted: #5d6771;
+  --rule: #dcdfe2;
+  --accent: #0f6b74;
+  --s-pri: #1c2126;
+  --s-n: #0f6b74;
+  --s-oh: #c07a12;
+  --s-cooh: #b2412f;
+  --s-nh2: #6c4bb5;
+  --s-cage: #8a949e;
+  --good: #1f7a4a;
+  --bad: #b2412f;
+  --font-display: "Source Serif 4", Georgia, "Times New Roman", serif;
+  --font-body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #13181c; --panel: #1a2127; --fg: #e3e7ea; --muted: #9ba6b0; --rule: #2d363e;
+    --accent: #4fb8c1; --s-pri: #e3e7ea; --s-n: #4fb8c1; --s-oh: #e0a53e; --s-cooh: #e2735f;
+    --s-nh2: #a58ce6; --s-cage: #6f7a84; --good: #5cc28b; --bad: #e2735f; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #13181c; --panel: #1a2127; --fg: #e3e7ea; --muted: #9ba6b0; --rule: #2d363e;
+  --accent: #4fb8c1; --s-pri: #e3e7ea; --s-n: #4fb8c1; --s-oh: #e0a53e; --s-cooh: #e2735f;
+  --s-nh2: #a58ce6; --s-cage: #6f7a84; --good: #5cc28b; --bad: #e2735f; color-scheme: dark;
+}
+body { background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 16px; line-height: 1.62; }
+.wrap {
+  max-width: 1000px; margin: 0 auto;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 40px 80px;
+  display: grid; gap: 52px;
+}
+.col { max-width: 74ch; display: grid; gap: 14px; }
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; line-height: 1.18; margin: 0; font-weight: 600; }
+h1 { font-size: clamp(1.9rem, 4.2vw, 2.7rem); }
+h2 { font-size: 1.5rem; }
+h3 { font-size: 1.12rem; }
+h2 .n, h3 .n { color: var(--accent); font-family: var(--font-mono); font-size: 0.8em; margin-right: 0.5em; font-weight: 500; }
+p, ul, ol { margin: 0; }
+ul, ol { padding-left: 1.25em; display: grid; gap: 6px; }
+section { display: grid; gap: 20px; }
+.eyebrow { font-family: var(--font-mono); font-size: 0.78rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.abstract { background: var(--panel); border: 1px solid var(--rule); border-radius: 6px; padding: 18px 20px; display: grid; gap: 10px; max-width: 80ch; }
+.abstract .eyebrow { color: var(--accent); }
+.kw { font-size: 0.9rem; color: var(--muted); }
+nav.toc { font-size: 0.93rem; }
+nav.toc ol { gap: 2px; }
+nav.toc a { color: var(--fg); text-decoration: none; border-bottom: 1px solid var(--rule); }
+nav.toc a:hover, nav.toc a:focus-visible { border-color: var(--accent); color: var(--accent); }
+a { color: var(--accent); }
+a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+figure { margin: 0; display: grid; gap: 10px; min-width: 0; }
+figcaption { color: var(--muted); font-size: 0.9rem; max-width: 80ch; }
+figcaption b { color: var(--fg); }
+.chart { background: var(--panel); border: 1px solid var(--rule); border-radius: 6px; padding: 12px; overflow-x: auto; }
+.chart svg { display: block; width: 100%; height: auto; min-width: 520px; }
+.img { background: #ffffff; border: 1px solid var(--rule); border-radius: 6px; padding: 10px; display: grid; place-items: center; }
+.img img { max-width: 100%; height: auto; display: block; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+.grid3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; }
+.grid2 > *, .grid3 > * { min-width: 0; }
+.sub { font-family: var(--font-mono); font-size: 0.78rem; color: var(--muted); }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 0.85rem; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend i { width: 14px; height: 3px; border-radius: 2px; display: inline-block; }
+.tablewrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 0.9rem; }
+caption { text-align: left; color: var(--muted); font-size: 0.88rem; padding-bottom: 6px; caption-side: top; }
+th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--rule); white-space: nowrap; vertical-align: top; }
+th { font-weight: 600; color: var(--muted); font-size: 0.78rem; letter-spacing: 0.04em; text-transform: uppercase; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; font-family: var(--font-mono); font-size: 0.86rem; }
+td.wrap { white-space: normal; min-width: 16ch; }
+tr.hl td { color: var(--accent); font-weight: 600; }
+.mono, code { font-family: var(--font-mono); font-size: 0.88em; }
+.eq { font-family: var(--font-mono); font-size: 0.9rem; background: var(--panel); border: 1px solid var(--rule); border-radius: 4px; padding: 8px 12px; overflow-x: auto; white-space: nowrap; }
+.note { border-left: 3px solid var(--accent); padding: 2px 0 2px 14px; color: var(--fg); }
+.refs { font-size: 0.9rem; }
+.refs li { padding-left: 2px; }
+footer { color: var(--muted); font-size: 0.88rem; border-top: 1px solid var(--rule); padding-top: 18px; }
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+
+<div class="wrap">
+  <header style="display:grid;gap:14px">
+    <div class="eyebrow">Informe técnico · carbonforge / validacion_rendijas</div>
+    <h1>Adsorción de H₂ y CO₂ en carbono nanoestructurado: geometría de poro, química de pared y superestructuras</h1>
+    <p class="kw">Monte Carlo gran canónico · Feynman-Hibbs · Ewald · TraPPE · SPC/E · DFT (PBE) · schwarzitas · superredes de nanotubos</p>
+  </header>
+
+  <div class="abstract">
+    <div class="eyebrow">Resumen</div>
+    <p>Se estudia por simulación molecular el almacenamiento de H₂ a 77 K y la captura de CO₂ a 298 K en adsorbentes de carbono: rendijas de grafeno de anchura variable, haces de nanotubos, schwarzitas, superredes y jaulas de nanotubos, y rendijas dopadas con N o decoradas con OH, COOH y NH₂. El código de H₂ reproduce las isotermas publicadas de Levesque et al. (2002) con una diferencia media del 3 %. El de CO₂ reproduce el calor de adsorción a cobertura cero sobre negro de carbono grafitizado (15.3 frente a 14.4 kJ/mol) y la subida de calor que el dopaje con N produce en un carbón nitrurado (+3.3 kJ/mol en ambos casos). En los dos gases la variable dominante es la anchura de poro: una rendija plana del ancho correcto supera a todas las estructuras curvas en carga por gramo. Las jaulas de nanotubos tienen bolsillos de adsorción muy profundos (q<sub>st</sub> ≈ 12 kJ/mol para H₂) y almacenan tanto H₂ como la mejor rendija a 10 MPa, pero no sirven para CO₂, cuya selectividad frente a N₂ cae de 130 a entre 5 y 29. El dopaje con N grafítico, con cargas obtenidas por DFT, duplica la constante de Henry del CO₂ y eleva la selectividad CO₂/N₂ a 221. Con un 80 % de humedad, el agua ocupa los sitios del N y la ventaja desaparece.</p>
+  </div>
+
+  <nav class="toc" aria-label="Contenido">
+    <ol>
+      <li><a href="#intro">Introducción</a></li>
+      <li><a href="#metodos">Métodos</a></li>
+      <li><a href="#validacion">Validación</a></li>
+      <li><a href="#h2">Resultados: hidrógeno a 77 K</a></li>
+      <li><a href="#co2">Resultados: dióxido de carbono a 298 K</a></li>
+      <li><a href="#discusion">Discusión y limitaciones</a></li>
+      <li><a href="#conclusiones">Conclusiones</a></li>
+      <li><a href="#refs">Referencias</a></li>
+    </ol>
+  </nav>
+
+  <!-- 1 -->
+  <section id="intro">
+    <h2><span class="n">1</span>Introducción</h2>
+    <div class="col">
+      <p>Los carbonos con curvatura controlada (schwarzitas, superredes de nanotubos, jaulas) se proponen a menudo como adsorbentes de gases porque combinan áreas superficiales de más de 2000 m²/g con pozos de potencial más profundos que una lámina plana. Comparar estas estructuras entre sí, sin embargo, no permite saber qué variable explica una diferencia: el área, la anchura de poro y la curvatura cambian a la vez.</p>
+      <p>Este estudio separa esas variables. Primero fija la química y la curvatura con una serie de rendijas de grafeno y varía solo la anchura. Después mide las estructuras curvas contra esa referencia. Por último cambia la química de la pared con dopaje y grupos funcionales, con cargas tomadas de la literatura o calculadas por DFT. Se usan dos adsorbatos con física distinta: H₂ a 77 K, pequeño y casi esférico, cuya adsorción es puramente dispersiva y requiere corrección cuántica; y CO₂ a 298 K, lineal y con un cuadrupolo grande, para el que importan la electrostática, la competencia con N₂ y con el agua, y la regeneración del adsorbente.</p>
+    </div>
+  </section>
+
+  <!-- 2 -->
+  <section id="metodos">
+    <h2><span class="n">2</span>Métodos</h2>
+
+    <div class="col">
+      <h3><span class="n">2.1</span>Monte Carlo gran canónico</h3>
+      <p>Todas las cargas se obtienen por Monte Carlo en el colectivo gran canónico (μVT) con el adsorbente rígido. Las moléculas se insertan, se borran, se trasladan (desplazamiento uniforme de hasta 1 Å) y, si no son esféricas, se rotan (orientación uniforme sobre SO(3) a partir de un cuaternión aleatorio). Los criterios de aceptación son los estándar:</p>
+      <div class="eq">P<sub>ins</sub> = min[1, βf<sub>i</sub>V/(N<sub>i</sub>+1) · e<sup>−βΔU</sup>] &nbsp;·&nbsp; P<sub>del</sub> = min[1, N<sub>i</sub>/(βf<sub>i</sub>V) · e<sup>−βΔU</sup>]</div>
+      <p>Aquí f<sub>i</sub> es la fugacidad de la especie i en el reservorio. En mezclas se añade un intercambio de identidad: una molécula cambia de especie en el mismo centro, con orientación nueva, y se acepta con probabilidad min[1, f<sub>nueva</sub>N<sub>vieja</sub>/(f<sub>vieja</sub>(N<sub>nueva</sub>+1)) · e<sup>−βΔU</sup>]. Así la composición se equilibra sin necesitar un hueco libre.</p>
+      <p>El equilibrado y la producción están separados: solo se promedia la producción. El error se estima con 10 bloques. Al final de cada corrida, la energía acumulada de forma incremental se compara con un recálculo completo, con una deriva admitida de 10<sup>−6</sup> K; ninguna corrida de CO₂ se aceptó por encima de 10<sup>−10</sup> K. Cada isoterma se guarda como una carpeta con un punto por presión, que se reanuda si el proceso se interrumpe.</p>
+
+      <h3><span class="n">2.2</span>Modelos de adsorbato</h3>
+    </div>
+    <div class="tablewrap"><table>
+      <caption>Tabla 1. Modelos moleculares. ε en K, σ en Å, q en e.</caption>
+      <thead><tr><th>molécula</th><th>modelo</th><th>sitios</th><th class="num">σ</th><th class="num">ε/k</th><th class="num">q</th><th>geometría</th></tr></thead>
+      <tbody>
+        <tr><td>H₂</td><td>un centro LJ + Feynman-Hibbs (Levesque 2002)</td><td>H₂</td><td class="num">2.958</td><td class="num">36.7</td><td class="num">0</td><td>esférica</td></tr>
+        <tr><td rowspan="2">CO₂</td><td rowspan="2">TraPPE (Potoff y Siepmann 2001)</td><td>C</td><td class="num">2.80</td><td class="num">27.0</td><td class="num">+0.70</td><td rowspan="2">lineal, C=O 1.16 Å</td></tr>
+        <tr><td>O</td><td class="num">3.05</td><td class="num">79.0</td><td class="num">−0.35</td></tr>
+        <tr><td rowspan="2">N₂</td><td rowspan="2">TraPPE</td><td>N</td><td class="num">3.31</td><td class="num">36.0</td><td class="num">−0.482</td><td rowspan="2">lineal, N–N 1.10 Å</td></tr>
+        <tr><td>centro (sin LJ)</td><td class="num">—</td><td class="num">—</td><td class="num">+0.964</td></tr>
+        <tr><td rowspan="2">H₂O</td><td rowspan="2">SPC/E (Berendsen 1987)</td><td>O</td><td class="num">3.166</td><td class="num">78.2</td><td class="num">−0.8476</td><td rowspan="2">O–H 1.0 Å, 109.47°</td></tr>
+        <tr><td>H (sin LJ)</td><td class="num">—</td><td class="num">—</td><td class="num">+0.4238</td></tr>
+      </tbody>
+    </table></div>
+    <div class="col">
+      <p>El H₂ a 77 K se trata con el potencial efectivo de Feynman-Hibbs de segundo orden, U<sub>FH</sub> = U + (ħ²/24μk<sub>B</sub>T)(U″ + 2U′/r), con ħ²/k<sub>B</sub> = 48.5089 amu Å² K deducido en el código y no tomado de una tabla. Esta corrección reduce la carga a 77 K en torno a un 20 %, y su magnitud se comprueba contra la fracción cuántica que publica Levesque (0.07 a 70 K). Para CO₂, N₂ y H₂O a 298 K no se aplica corrección cuántica.</p>
+
+      <h3><span class="n">2.3</span>La pared</h3>
+      <p>El carbono es un conjunto de sitios Lennard-Jones atomísticos (σ = 3.40 Å, ε/k = 28.0 K, los de Steele para el grafito), combinados con cada sitio del adsorbato por las reglas de Lorentz-Berthelot. Para H₂ el par es σ = 3.18 Å, ε/k = 32.05 K, como en Levesque. La interacción se corta a 12 Å sin correcciones de cola, y se rechaza cualquier celda con una arista menor que dos radios de corte o no ortorrómbica: en los dos casos la imagen mínima deja de ser exacta y el error no se ve en el resultado.</p>
+      <p>Las paredes funcionalizadas se tipan por entorno químico. Para adsorción se usa un campo de fuerza propio (<code>forcefields/adsorption.py</code>), separado del de las celdas de supercondensador, con estas cargas:</p>
+    </div>
+    <div class="tablewrap"><table>
+      <caption>Tabla 2. Cargas parciales de la pared (e) en el campo de adsorción.</caption>
+      <thead><tr><th>grupo</th><th>átomos (carga)</th><th class="num">neto por grupo</th><th>fuente</th></tr></thead>
+      <tbody>
+        <tr><td>COOH</td><td class="wrap">C carboxílico +0.75 · O= −0.50 · O(H) −0.55 · H +0.36 · C del anillo −0.06</td><td class="num">0.00</td><td class="wrap">Tenney y Lastoskie (2006)</td></tr>
+        <tr><td>OH fenólico</td><td class="wrap">C +0.30 · O −0.60 · H +0.30</td><td class="num">0.00</td><td class="wrap">Tenney y Lastoskie (2006)</td></tr>
+        <tr><td>NH₂</td><td class="wrap">C −0.172 · N −0.539 · H +0.301</td><td class="num">−0.109</td><td class="wrap">Chen et al. (2026), DFT</td></tr>
+        <tr><td>N grafítico</td><td class="wrap">N −0.017 · 3 C vecinos +0.089</td><td class="num">+0.25</td><td class="wrap">este trabajo, DFT (§2.6)</td></tr>
+      </tbody>
+    </table></div>
+    <div class="col">
+      <p>Si queda una carga neta en la celda, se reparte por igual sobre los carbonos sp² de la lámina. En el N grafítico ese reparto representa el electrón que el N dona al sistema π.</p>
+
+      <h3><span class="n">2.4</span>Electrostática</h3>
+      <p>Las interacciones de Coulomb (adsorbato–adsorbato y adsorbato–pared) se suman por Ewald en una caja ortorrómbica. El parámetro de separación es α = √(−ln 10<sup>−5</sup>)/r<sub>c</sub>, y en el espacio recíproco se usan los vectores de un semiespacio con peso doble. El factor de estructura S(k) se guarda y se actualiza de forma incremental: un movimiento cuesta una evaluación sobre los vectores k, no una suma completa. Las parejas intramoleculares se excluyen, así que la autoenergía de cada molécula es una constante por especie que se suma al insertar y se resta al borrar. La parte de la pared consigo misma es constante para un armazón rígido y se resta. Un test comprueba que la energía total no depende de α al cambiar la precisión de 10<sup>−5</sup> a 10<sup>−7</sup>.</p>
+
+      <h3><span class="n">2.5</span>Reservorio</h3>
+      <p>Para H₂, la fugacidad sale de un virial de dos términos ajustado a las densidades del gas que publica Levesque, con cada punto ponderado según su redondeo. Para CO₂, N₂ y H₂O se usa Peng-Robinson con mezcla de van der Waals de un fluido (k<sub>CO₂–N₂</sub> = −0.017); el código se niega a calcular en la región líquida o por encima de la saturación. A 0.1 MPa y 298 K todos los coeficientes de fugacidad quedan dentro de un 0.5 % de 1. La humedad relativa se refiere a la presión de saturación real del agua a 298 K (3.17 kPa).</p>
+
+      <h3><span class="n">2.6</span>Cargas del N grafítico por DFT</h3>
+      <p>Se cortó un copo de grafeno terminado en H con un N en el centro (C₁₂NH₉ y C₃₆NH₁₅) y se calculó con UKS PBE/def2-SVP en PySCF. Las cargas se obtuvieron con dos esquemas. Las de orbitales atómicos intrínsecos (IAO) convergen: cambian menos de 0.04 e entre los dos copos. Las ajustadas al potencial electrostático sobre capas de 1.4 a 2.0 radios de van der Waals no convergen, porque el signo de los carbonos vecinos se invierte entre copos, y se descartaron. El copo de radio 7.5 Å no terminó en 2 h.</p>
+
+      <h3><span class="n">2.7</span>Constantes de Henry, porosidad y área</h3>
+      <p>La constante de Henry y el calor isostérico a cobertura cero se calculan por inserción de Widom con orientación aleatoria: K<sub>H</sub> = V⟨e<sup>−βU</sup>⟩/(k<sub>B</sub>T·m) y q<sub>st</sub> = RT − ⟨Ue<sup>−βU</sup>⟩/⟨e<sup>−βU</sup>⟩. Con pared cargada se incluye el término de Ewald. Se usan dos semillas de 1.2×10<sup>5</sup> a 10<sup>6</sup> muestras y se cita su separación, no el error interno, que subestima el de celdas casi vacías.</p>
+      <p>La porosidad se analiza antes de cualquier GCMC. El canal es el diámetro de la mayor esfera que atraviesa la celda: se obtiene sobre una rejilla, con un campo de radio libre y percolación entre caras opuestas, y es una cota inferior. La fracción de vacío de helio es ⟨e<sup>−βU</sup>⟩ de Widom y es la que convierte carga absoluta en exceso. El área geométrica se calcula con una cuadratura de espiral áurea y no es un área BET.</p>
+
+      <h3><span class="n">2.8</span>Estructuras</h3>
+      <p>Las rendijas son láminas de grafeno AA (10×6 celdas, 960 C por lámina) apiladas a la distancia H entre centros, con al menos 24 Å de celda. Las funcionalizadas se decoran con una semilla fija: N 5 % sustitucional (48 N), 16 OH, 12 COOH o 16 NH₂ por celda.</p>
+      <p>Las superestructuras se generan con el paquete independiente <code>nanocarbon_lab</code> y se pasan por fichero extxyz. Hay dos rutas:</p>
+      <ul>
+        <li>la mallada (campo implícito, marching cubes y dual), para jaulas y superredes;</li>
+        <li>la cristalina por rodillas, para schwarzitas P, D y giroide, súper-grafeno y súper-cuadrado, con un censo de anillos exacto.</li>
+      </ul>
+      <p>Antes de simular, cada estructura pasa un control de calidad: enlaces entre 1.30 y 1.55 Å, ningún contacto por debajo de 2 Å y ninguna pared colapsada (suma de ángulos por átomo de al menos 328.4°).</p>
+
+      <h3><span class="n">2.9</span>Software y reproducibilidad</h3>
+      <p>Todo está en <code>packages/carbonforge</code>: los módulos <code>adsorption/gcmc.py</code>, <code>co2.py</code>, <code>mixture.py</code>, <code>henry.py</code> y <code>porosity.py</code>, y el campo <code>forcefields/adsorption.py</code>. Cada número de este informe sale de un script de <code>validacion_rendijas/</code> con su salida guardada (txt o json) y una semilla fija. Cada módulo tiene tests en <code>carbonforge/tests</code>. Los cálculos de DFT se ejecutan fuera del entorno del paquete, en <code>dft_cargas/</code>.</p>
+    </div>
+  </section>
+
+  <!-- 3 -->
+  <section id="validacion">
+    <h2><span class="n">3</span>Validación</h2>
+    <div class="col">
+      <p>Cada código se contrastó primero con un caso externo con números publicados, y solo después se aplicó a estructuras nuevas.</p>
+    </div>
+    <div class="tablewrap"><table>
+      <caption>Tabla 3. Contrastes externos e internos.</caption>
+      <thead><tr><th>comprobación</th><th class="num">modelo</th><th class="num">referencia</th><th>fuente</th></tr></thead>
+      <tbody>
+        <tr><td>H₂ en haz de nanotubos (17,0), 77 K, 0.1–20 MPa</td><td class="num">media 3.0 %, peor 4.5 %</td><td class="num">ρ<sub>o</sub> publicada</td><td>Levesque et al. (2002)</td></tr>
+        <tr><td>ídem a 293 K</td><td class="num">peor 5.8 %</td><td class="num">ρ<sub>o</sub> publicada</td><td>ídem</td></tr>
+        <tr><td>fracción cuántica (Feynman-Hibbs) a 70 K</td><td class="num">0.07</td><td class="num">0.07</td><td>ídem</td></tr>
+        <tr><td>área de una lámina de grafeno con dos caras</td><td class="num">2670 m²/g</td><td class="num">2630 m²/g</td><td>valor teórico</td></tr>
+        <tr><td>q<sub>st</sub>(0) del CO₂ sobre grafito, 203 K</td><td class="num">15.3 kJ/mol</td><td class="num">14.4 kJ/mol</td><td>Bottani et al. (1994)</td></tr>
+        <tr><td>pendiente de ln B<sub>AS</sub> frente a 1/T</td><td class="num">1663 K</td><td class="num">1546 ± 95 K</td><td>ídem</td></tr>
+        <tr><td>B<sub>AS</sub>/A del CO₂ a 298 K</td><td class="num">136 Å</td><td class="num">159–270 Å</td><td>ídem</td></tr>
+        <tr><td>subida de q<sub>st</sub> con N grafítico</td><td class="num">+3.3 kJ/mol</td><td class="num">+3.3 kJ/mol</td><td>carbón nitrurado con NH₃ (2019)</td></tr>
+        <tr><td>CO₂ en caja vacía frente a gas real (0.5 / 2 / 4 MPa)</td><td class="num">0.984 / 0.966 / 0.917</td><td class="num">Peng-Robinson</td><td>interno</td></tr>
+        <tr><td>CO₂ en mezcla frente a isoterma pura a su presión parcial</td><td class="num">5.76 mol/kg</td><td class="num">5.81 mol/kg</td><td>interno</td></tr>
+        <tr><td>mezcla diluida en caja vacía</td><td class="num">composición y N del gas ideal</td><td class="num">—</td><td>test</td></tr>
+      </tbody>
+    </table></div>
+    <div class="grid2">
+      <figure>
+        <div class="img"><img src="fig/isoterma_validacion.png" alt="Isotermas de H2 del haz de Levesque: simulación frente a datos publicados"></div>
+        <figcaption><b>Figura 1.</b> Validación del GCMC de H₂ contra Levesque et al. (2002): haz hexagonal de nanotubos (17,0) a 77 y 293 K. Nada está ajustado.</figcaption>
+      </figure>
+      <div class="col" style="align-content:start">
+        <p>Las validaciones tienen límites que conviene decir. La de H₂ comprueba que potencial, corrección cuántica, reservorio y movimientos están bien implementados, no que un modelo de un sitio sin cuadrupolo sea exacto para el hidrógeno. La de CO₂ cubre una pared prístina: el calor queda un 6 % alto y la constante de Henry por área queda dentro de la incertidumbre del área BET, que los propios autores estiman en un factor ~3. Para paredes funcionalizadas el único contraste es la subida de calor con N. Por eso las cargas representativas de una primera tabla se sustituyeron por cargas publicadas o calculadas: con aquella tabla el COOH era un carboxilato y su constante de Henry salía 3.8 veces la de la pared limpia, frente a 1.2 veces con cargas publicadas.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4 -->
+  <section id="h2">
+    <h2><span class="n">4</span>Resultados: hidrógeno a 77 K</h2>
+
+    <div class="col">
+      <h3><span class="n">4.1</span>La rendija: el ancho de poro aislado</h3>
+      <p>Diez rendijas de 6 a 20 Å, con área constante (2670 m²/g a partir de 7 Å). El exceso adsorbido no describe una campana sino escalones: la carga salta cada vez que el canal libre (H − 3.04 Å) cruza un múltiplo entero del diámetro del H₂, σ = 2.958 Å. Hay saltos en H = 6 (1σ), 9 (2σ) y 12 Å (3σ), y valles justo antes, cuando el hueco no da para la capa siguiente. El óptimo depende de la presión: H = 10 Å a 1 MPa (5.10 % en peso de exceso), 14 Å a 3.8 MPa (5.22 %) y 12 Å a 10 MPa (2.97 %).</p>
+    </div>
+    <div class="grid2">
+      <figure>
+        <div class="img"><img src="fig/ancho_vs_exceso.png" alt="Exceso de H2 frente a ancho de rendija"></div>
+        <figcaption><b>Figura 2.</b> Exceso de H₂ (% en peso) frente al ancho de rendija a 77 K, con las estructuras curvas medidas antes superpuestas: caen sobre la curva de la rendija o por debajo.</figcaption>
+      </figure>
+      <figure>
+        <div class="img"><img src="fig/h2-rendija_lado.png" alt="Rendija de 10 Å llena de H2 a 77 K y 10 MPa"></div>
+        <figcaption><b>Figura 3.</b> Configuración de equilibrio de H₂ (rosa, un centro por molécula) en la rendija de 10 Å a 77 K y 10 MPa. Se ven dos capas por poro.</figcaption>
+      </figure>
+    </div>
+
+    <div class="col">
+      <h3><span class="n">4.2</span>Pendiente inicial: sitios por gramo, no pozos</h3>
+      <p>A cobertura cero, la rendija óptima (H = 6.6 Å, K<sub>H</sub> = 8660 mol kg<sup>−1</sup> MPa<sup>−1</sup>) supera en 1.75× a la mejor superred mallada y en 2× al mejor haz de tubos, aunque su pozo (7.81 kJ/mol) es el más somero salvo el del súper-fcc. K<sub>H</sub> es aproximadamente la densidad de sitios por e<sup>q/RT</sup>: la rendija tiene sitios mediocres en todas partes, y las superredes tienen sitios excelentes en pocos lugares.</p>
+      <p>Las jaulas de nanotubos son la excepción. El super-cube (K<sub>H</sub> = 48 673, q<sub>st</sub> = 12.3 kJ/mol) y el super-tetrahedron (33 291, 11.4) superan a la rendija 5.6 y 3.8 veces. Sus pozos profundos son geometría y no daño en la pared:</p>
+      <ul>
+        <li>están en bolsillos de 1.6 ± 0.8 Å, uno por vértice, donde se cruzan tres tubos (−1440 K, unas 3.2 paredes planas);</li>
+        <li>no dependen del hueco entre jaulas vecinas.</li>
+      </ul>
+    </div>
+    <div class="tablewrap"><table>
+      <caption>Tabla 4. H₂ a 77 K, cobertura cero (10<sup>6</sup> inserciones × 2 semillas).</caption>
+      <thead><tr><th>estructura</th><th>ruta</th><th class="num">canal (Å)</th><th class="num">K<sub>H</sub> (mol/kg/MPa)</th><th class="num">q<sub>st</sub> (kJ/mol)</th></tr></thead>
+      <tbody>
+        <tr class="hl"><td>super-cube</td><td>jaula mallada</td><td class="num">13.07</td><td class="num">48 673 ± 1579</td><td class="num">12.29</td></tr>
+        <tr><td>super-tetrahedron</td><td>jaula mallada</td><td class="num">9.06</td><td class="num">33 291 ± 1721</td><td class="num">11.40</td></tr>
+        <tr><td>super-hypercube</td><td>jaula mallada</td><td class="num">11.47</td><td class="num">16 306 ± 325</td><td class="num">11.94</td></tr>
+        <tr><td>schwarzita D</td><td>cristalina</td><td class="num">6.72</td><td class="num">12 861 ± 139</td><td class="num">9.75</td></tr>
+        <tr><td>súper-grafeno k22</td><td>cristalina</td><td class="num">10.03</td><td class="num">9 425 ± 187</td><td class="num">9.78</td></tr>
+        <tr><td>rendija H = 6.6 Å</td><td>plana</td><td class="num">3.55</td><td class="num">8 660 ± 50</td><td class="num">7.81</td></tr>
+        <tr><td>súper-cúbico</td><td>superred mallada</td><td class="num">20.00</td><td class="num">4 956 ± 101</td><td class="num">8.90</td></tr>
+        <tr><td>haz de tubos, hueco 4 Å</td><td>idealizada</td><td class="num">10.21</td><td class="num">4 252 ± 107</td><td class="num">8.96</td></tr>
+        <tr><td>súper-cuadrado</td><td>superred mallada</td><td class="num">20.22</td><td class="num">4 225 ± 5</td><td class="num">8.47</td></tr>
+        <tr><td>schwarzita P</td><td>cristalina</td><td class="num">14.61</td><td class="num">352 ± 1</td><td class="num">5.90</td></tr>
+        <tr><td>giroide</td><td>cristalina</td><td class="num">15.80</td><td class="num">153</td><td class="num">4.64</td></tr>
+      </tbody>
+    </table></div>
+
+    <div class="col">
+      <h3><span class="n">4.3</span>Isotermas de las jaulas</h3>
+      <p>La estimación de Langmuir (una molécula por bolsillo, saturación de 0.38 mol/kg) predecía un captador que se llena a unos 8 Pa y luego se detiene. La isoterma completa, de 1 Pa a 10 MPa, la refuta en parte:</p>
+      <ul>
+        <li><b>Se confirma el hombro de los bolsillos:</b> entre 10 Pa y 1 kPa la carga pasa de 3.3 a 11 moléculas por celda.</li>
+        <li><b>Después la carga sigue subiendo:</b> los canales entre tubos se llenan y a 10 MPa el super-cube guarda 25.6 mol/kg absolutos (8.4 en exceso) y el super-tetrahedron 24.6 (9.0).</li>
+        <li><b>Conclusión:</b> la jaula capta a baja presión y almacena tanto como la rendija a alta presión.</li>
+      </ul>
+    </div>
+    <div class="grid3">
+      <figure>
+        <div class="img"><img src="fig/h2-super-cube_perspectiva.png" alt="Jaula super-cube con H2 a 10 MPa"></div>
+        <figcaption><b>Figura 4a.</b> super-cube con H₂ a 77 K y 10 MPa (538 moléculas por celda).</figcaption>
+      </figure>
+      <figure>
+        <div class="img"><img src="fig/h2-super-tetrahedron_perspectiva.png" alt="Jaula super-tetrahedron con H2 a 10 MPa"></div>
+        <figcaption><b>Figura 4b.</b> super-tetrahedron en las mismas condiciones.</figcaption>
+      </figure>
+      <figure>
+        <div class="img"><img src="fig/capacidad_vs_area.png" alt="Capacidad de H2 frente a área en schwarzitas"></div>
+        <figcaption><b>Figura 4c.</b> Schwarzitas P, D y giroide frente a la regla de Chahine. El diamond reproduce el ~3 % en peso de Kowalczyk et al. (2007) con el área que ese valor implica.</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <!-- 5 -->
+  <section id="co2">
+    <h2><span class="n">5</span>Resultados: dióxido de carbono a 298 K</h2>
+
+    <div class="col">
+      <h3><span class="n">5.1</span>Geometría: la rendija de 6.6 Å</h3>
+      <p>Un barrido de la constante de Henry en rendijas sitúa el óptimo en H = 6.6 Å (K<sub>H</sub> = 547 ± 2 mol kg<sup>−1</sup> MPa<sup>−1</sup>, q<sub>st</sub> = 29.7 kJ/mol), con un canal libre de unos 3.2 Å: una sola capa de CO₂ tumbada. En las jaulas la media de Widom no converge (bolsillos raros y profundos), así que se juzgan por la isoterma. A 0.1 MPa la rendija adsorbe 8.70 mol/kg y las jaulas unas 1.7; solo a 1 MPa se igualan. Para el CO₂, a diferencia del H₂, los bolsillos de las jaulas no compensan.</p>
+    </div>
+    <figure>
+      <div class="chart"><svg id="iso" viewBox="0 0 760 380" role="img" aria-label="Isotermas de CO2 a 298 K"></svg></div>
+      <div class="legend" id="iso-legend"></div>
+      <figcaption><b>Figura 5.</b> Isotermas de CO₂ puro a 298 K (carga absoluta, presión en escala logarítmica). Rendijas de 6.6 Å con el campo de adsorción (N con cargas DFT) y jaulas de H₂ en trazo discontinuo.</figcaption>
+    </figure>
+    <div class="grid2">
+      <figure>
+        <div class="img"><img src="fig/co2-rendija_lado.png" alt="Rendija de 6.6 Å llena de CO2 a 1 MPa"></div>
+        <figcaption><b>Figura 6a.</b> CO₂ (C gris oscuro, O rojo) en la rendija prístina de 6.6 Å a 1 MPa: una monocapa tumbada en cada poro.</figcaption>
+      </figure>
+      <figure>
+        <div class="img"><img src="fig/co2-schwarzita-d_lado.png" alt="Schwarzita D con CO2 a 1 MPa"></div>
+        <figcaption><b>Figura 6b.</b> Schwarzita D cristalina con CO₂ a 1 MPa. Con un canal de 6.7 Å, el doble del óptimo, la pared queda en gran parte sin cubrir.</figcaption>
+      </figure>
+    </div>
+
+    <div class="col">
+      <h3><span class="n">5.2</span>Química de pared</h3>
+      <p>Con cargas publicadas, los grupos oxigenados y amino casi no cambian la pendiente inicial (K<sub>H</sub> 503 a 667 frente a 552 en la prístina) y quitan entre un 4 % y un 14 % de capacidad a 0.1 MPa porque ocupan volumen del poro. El N grafítico es la excepción: K<sub>H</sub> 1189, q<sub>st</sub> 33.0 kJ/mol. La ventaja no depende del signo de la carga del N:</p>
+      <ul>
+        <li>con la tabla representativa (N⁻, −0.45 e), K<sub>H</sub> = 1305;</li>
+        <li>con las cargas de DFT (N casi neutro), K<sub>H</sub> = 1189;</li>
+        <li>con el pozo LJ del N igual al del C, sigue 1.76 veces por encima de la prístina.</li>
+      </ul>
+    </div>
+    <div class="tablewrap"><table>
+      <caption>Tabla 5. CO₂ en rendijas de 6.6 Å a 298 K: Henry, isoterma pura y mezcla seca 15/85 a 0.1 MPa.</caption>
+      <thead><tr><th>rendija</th><th class="num">K<sub>H</sub></th><th class="num">q<sub>st</sub> (kJ/mol)</th><th class="num">CO₂ puro 0.1 MPa (mol/kg)</th><th class="num">CO₂ en mezcla (mol/kg)</th><th class="num">S CO₂/N₂</th></tr></thead>
+      <tbody>
+        <tr><td>prístina</td><td class="num">552</td><td class="num">29.7</td><td class="num">9.10</td><td class="num">5.92</td><td class="num">133 ± 4</td></tr>
+        <tr class="hl"><td>N 5 % (DFT)</td><td class="num">1189</td><td class="num">33.0</td><td class="num">8.92</td><td class="num">7.14</td><td class="num">221 ± 8</td></tr>
+        <tr><td>OH</td><td class="num">503</td><td class="num">30.6</td><td class="num">8.42</td><td class="num">5.92</td><td class="num">151 ± 5</td></tr>
+        <tr><td>COOH</td><td class="num">667</td><td class="num">33.4</td><td class="num">7.82</td><td class="num">5.64</td><td class="num">169 ± 7</td></tr>
+        <tr><td>NH₂</td><td class="num">532</td><td class="num">31.0</td><td class="num">8.72</td><td class="num">5.65</td><td class="num">147 ± 6</td></tr>
+      </tbody>
+    </table></div>
+
+    <div class="col">
+      <h3><span class="n">5.3</span>Selectividad frente a N₂</h3>
+      <p>En gas de combustión seco (15 % CO₂ en N₂, 0.1 MPa), el CO₂ de la mezcla coincide con la isoterma pura a su presión parcial: a esta presión el N₂ apenas compite. Por eso la selectividad depende más de la química que la carga. Las cargas de la pared atraen al CO₂, con un cuadrupolo tres veces mayor que el del N₂, y los grupos quitan sitio a un N₂ que ya era minoritario. Las superestructuras, todas con poros más anchos que el óptimo, dan selectividades de 5 a 29.</p>
+    </div>
+    <figure>
+      <div class="chart"><svg id="sel" viewBox="0 0 760 430" role="img" aria-label="Selectividad CO2/N2 por estructura"></svg></div>
+      <figcaption><b>Figura 7.</b> Selectividad CO₂/N₂, (x<sub>CO₂</sub>/x<sub>N₂</sub>)/(y<sub>CO₂</sub>/y<sub>N₂</sub>), a 298 K y 0.1 MPa. Las barras de error salen de 10 bloques con 2 o 3 moléculas de N₂ por celda y probablemente están subestimadas. Los valores absolutos son los de un poro ideal; los carbones reales miden entre 10 y 30.</figcaption>
+    </figure>
+    <div class="grid2">
+      <figure>
+        <div class="img"><img src="fig/mezcla-n5_lado.png" alt="Rendija dopada con N con mezcla CO2/N2"></div>
+        <figcaption><b>Figura 8a.</b> Rendija N 5 % (N de la red en azul claro) con gas de combustión seco: casi todo es CO₂, con N₂ (azul) ocasional.</figcaption>
+      </figure>
+      <figure>
+        <div class="img"><img src="fig/mezcla-super-cube_lado.png" alt="Jaula super-cube con mezcla CO2/N2"></div>
+        <figcaption><b>Figura 8b.</b> super-cube con la misma mezcla: poco CO₂, y casi tanto N₂ como CO₂.</figcaption>
+      </figure>
+    </div>
+
+    <div class="col">
+      <h3><span class="n">5.4</span>Humedad</h3>
+      <p>Con CO₂/N₂/H₂O a 0.1 MPa, la rendija prístina, hidrófoba, conserva el 95 % de su CO₂ con un 80 % de humedad (0.02 mol/kg de agua). La N 5 % adsorbe 5 mol/kg de agua al 30 % y 6.5 al 80 %, algo más de una molécula por N. Su CO₂ cae un 17 % y un 26 %, y al 80 % queda por debajo de la prístina. El COOH aguanta mejor por celda solo porque tiene menos sitios (3 grupos por lámina frente a 48 N).</p>
+    </div>
+    <div class="grid2">
+      <figure>
+        <div class="chart"><svg id="hum" viewBox="0 0 420 260" role="img" aria-label="CO2 adsorbido frente a humedad"></svg></div>
+        <figcaption><b>Figura 9a.</b> CO₂ adsorbido frente a humedad relativa en rendijas de 6.6 Å.</figcaption>
+      </figure>
+      <figure>
+        <div class="img"><img src="fig/humeda-n5_lado.png" alt="Rendija dopada con N con CO2, N2 y agua"></div>
+        <figcaption><b>Figura 9b.</b> Rendija N 5 % con un 80 % de humedad: el agua (O rojo, H blanco) se agrupa en torno a los N de la red y desplaza al CO₂.</figcaption>
+      </figure>
+    </div>
+
+    <div class="col">
+      <h3><span class="n">5.5</span>Regeneración</h3>
+    </div>
+    <div class="tablewrap"><table>
+      <caption>Tabla 6. Capacidad de trabajo (mol/kg, componente único).</caption>
+      <thead><tr><th>rendija</th><th class="num">vacío 100→10 kPa</th><th class="num">vacío 15→1 kPa</th><th class="num">temperatura 298→373 K, purga 15 kPa</th><th class="num">ídem bajo CO₂ puro</th></tr></thead>
+      <tbody>
+        <tr><td>prístina</td><td class="num">4.49</td><td class="num">5.09</td><td class="num">4.98</td><td class="num">2.13</td></tr>
+        <tr class="hl"><td>N 5 % (DFT)</td><td class="num">2.12</td><td class="num">5.79</td><td class="num">5.95</td><td class="num">2.43</td></tr>
+        <tr><td>OH</td><td class="num">3.17</td><td class="num">5.28</td><td class="num">5.23</td><td class="num">2.38</td></tr>
+        <tr><td>COOH</td><td class="num">2.76</td><td class="num">4.93</td><td class="num">4.92</td><td class="num">2.21</td></tr>
+        <tr><td>NH₂</td><td class="num">3.68</td><td class="num">5.21</td><td class="num">5.16</td><td class="num">2.52</td></tr>
+        <tr><td>jaulas</td><td class="num">1.25–1.43</td><td class="num">0.29–0.40</td><td class="num">—</td><td class="num">—</td></tr>
+      </tbody>
+    </table></div>
+    <div class="col">
+      <p>Los sitios fuertes perjudican en el ciclo de vacío de 100 a 10 kPa, porque retienen CO₂ al regenerar: la N 5 % rinde la mitad que la prístina (2.12 frente a 4.49). En el ciclo de gas de combustión de 15 a 1 kPa, y sobre todo en el de temperatura con purga, ocurre lo contrario: el N rinde un 14 % y un 20 % más que la prístina.</p>
+    </div>
+  </section>
+
+  <!-- 6 -->
+  <section id="discusion">
+    <h2><span class="n">6</span>Discusión y limitaciones</h2>
+    <div class="col">
+      <p><b>Por qué gana la rendija.</b> En los dos gases la constante de Henry es aproximadamente la densidad de sitios por gramo por e<sup>q/RT</sup>. Una rendija del ancho de una o dos capas moleculares convierte cada carbono en superficie útil a la vez para las dos paredes. Una superestructura curva concentra los pozos en pocos lugares (nodos, vértices, surcos) y gasta carbono en paredes que miran a canales demasiado anchos. Para H₂ a 77 K, con RT = 0.64 kJ/mol, unos pocos pozos de 12 kJ/mol bastan para dominar la pendiente inicial, y las jaulas ganan. Para CO₂ a 298 K, con RT = 2.5 kJ/mol, no bastan, y la rendija gana en todo. Ninguna superestructura de carbono tiene canales por debajo de unos 6.7 Å sin colapsar su pared, mientras que el óptimo para CO₂ es un canal de 3.2 Å.</p>
+      <p><b>Lo que la química puede y no puede hacer.</b> Las cargas de pared mejoran la selectividad más que la carga de CO₂. Solo el N sustitucional, que no ocupa volumen, mejora las dos. La humedad elimina esa ventaja, así que capturar con carbono dopado exige secar el gas. Coincide con Liu y Wilcox (2012), que señalan que el agua compite primero por los sitios polares.</p>
+      <p><b>Limitaciones.</b></p>
+      <ul>
+        <li>El adsorbente es rígido y de poro único; un carbón real tiene una distribución de tamaños de poro y por eso mide selectividades menores.</li>
+        <li>El pozo LJ del N (85 K) y las cargas del N piridínico y pirrólico siguen siendo representativos.</li>
+        <li>SPC/E no reproduce la presión de vapor real del agua, y partir de la celda vacía puede subestimar su condensación en poros hidrófobos.</li>
+        <li>Las cargas DFT del N vienen de un copo finito (radio 6 Å) y un solo funcional.</li>
+        <li>Las barras de error de la selectividad dependen de 2 o 3 moléculas de N₂ por celda.</li>
+        <li>Las superredes malladas pasan el control de calidad por poco o no lo pasan por unos pocos enlaces en los nodos (2 de 5910 en el supertubo (4,4)). Relajarlas con Tersoff (1988) empeora los enlaces, de 1.587 a 1.696 Å.</li>
+        <li>Las configuraciones de las figuras son ilustrativas: vienen de corridas cortas, no de las de producción.</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- 7 -->
+  <section id="conclusiones">
+    <h2><span class="n">7</span>Conclusiones</h2>
+    <div class="col">
+      <ol>
+        <li>Los códigos de GCMC reproducen las referencias externas: H₂ en el haz de Levesque dentro del 3 % de media, y el calor de adsorción del CO₂ sobre grafito dentro del 6 %.</li>
+        <li>La anchura de poro domina la adsorción física en los dos gases. La carga de H₂ sube a saltos con cada capa que cabe (múltiplos de σ), y el óptimo para CO₂ es una rendija de 6.6 Å.</li>
+        <li>Las jaulas de nanotubos son el mejor captador de H₂ a baja presión (K<sub>H</sub> 5.6 veces el de la rendija, bolsillos en los vértices) y almacenan tanto como la rendija a 10 MPa. Para CO₂ no sirven.</li>
+        <li>Las schwarzitas y superredes cristalinas no superan a la rendija en ningún caso estudiado: sus canales son de 6.7 Å o más.</li>
+        <li>El dopaje con N grafítico es la única modificación química que mejora a la vez la pendiente, la selectividad CO₂/N₂ y la capacidad en ciclo térmico. Con cargas DFT reproduce la subida de calor medida. Con humedad pierde la ventaja.</li>
+        <li>Con cargas publicadas, los grupos OH, COOH y NH₂ mejoran algo la selectividad y quitan capacidad. Un campo de fuerza con COOH tipado como carboxilato sobrestima su efecto casi cuatro veces.</li>
+      </ol>
+    </div>
+  </section>
+
+  <!-- 8 -->
+  <section id="refs">
+    <h2><span class="n">8</span>Referencias</h2>
+    <ol class="refs">
+      <li>D. Levesque, A. Gicquel, F. Lamari Darkrim, S. Beyaz Kayiran, <i>J. Phys.: Condens. Matter</i> <b>14</b> (2002) 9285.</li>
+      <li>E. J. Bottani, M. J. Bojan, W. A. Steele, I. M. K. Ismail, <i>Langmuir</i> <b>10</b> (1994) 3805.</li>
+      <li>J. J. Potoff, J. I. Siepmann, <i>AIChE J.</i> <b>47</b> (2001) 1676.</li>
+      <li>H. J. C. Berendsen, J. R. Grigera, T. P. Straatsma, <i>J. Phys. Chem.</i> <b>91</b> (1987) 6269.</li>
+      <li>C. M. Tenney, C. M. Lastoskie, <i>Environ. Prog.</i> <b>25</b> (2006) 343.</li>
+      <li>Y. Liu, J. Wilcox, <i>Environ. Sci. Technol.</i> <b>46</b> (2012) 1940.</li>
+      <li>H. Chen et al., <i>Phys. Chem. Chem. Phys.</i> (2026), DOI 10.1039/D5CP01772F, información suplementaria.</li>
+      <li>Carbón nanoestructurado nitrurado con NH₃ y adsorción de CO₂, <i>Nanomaterials</i> <b>9</b> (2019) 1776.</li>
+      <li>P. Kowalczyk, R. Hołyst, M. Terrones, H. Terrones, <i>Phys. Chem. Chem. Phys.</i> <b>9</b> (2007) 1786.</li>
+      <li>W. A. Steele, <i>Surf. Sci.</i> <b>36</b> (1973) 317.</li>
+      <li>G. Knizia, <i>J. Chem. Theory Comput.</i> <b>9</b> (2013) 4834 (orbitales atómicos intrínsecos).</li>
+      <li>J. Tersoff, <i>Phys. Rev. Lett.</i> <b>61</b> (1988) 2879.</li>
+    </ol>
+  </section>
+
+  <footer>Código, datos y salidas en <span class="mono">packages/carbonforge/validacion_rendijas</span> y <span class="mono">validacion_GCMC</span>, <span class="mono">validacion_schwarzitas</span>. Las configuraciones de las figuras están en <span class="mono">validacion_rendijas/instantaneas/</span> como extxyz (etiqueta 0 armazón, 1 adsorbato).</footer>
+</div>
+
+<script>
+(function () {
+  const NS = "http://www.w3.org/2000/svg";
+  const css = (v) => `var(${v})`;
+  function el(tag, attrs, parent, text) {
+    const e = document.createElementNS(NS, tag);
+    for (const k in attrs) e.setAttribute(k, attrs[k]);
+    if (text !== undefined) e.textContent = text;
+    if (parent) parent.appendChild(e);
+    return e;
+  }
+  const mono = "IBM Plex Mono, monospace";
+
+  // CO2 isotherms at 298 K, mol/kg absolute (isotermas_co2/*.json).
+  const iso = [
+    ["prístina", "--s-pri", [[0.001,0.624],[0.01,4.614],[0.03,7.604],[0.1,9.102],[1.0,9.955]]],
+    ["N 5 % (cargas DFT)", "--s-n", [[0.001,1.59],[0.01,6.791],[0.03,8.384],[0.1,8.915],[1.0,9.795]]],
+    ["OH", "--s-oh", [[0.001,0.716],[0.01,5.245],[0.03,7.271],[0.1,8.415],[1.0,9.381]]],
+    ["COOH", "--s-cooh", [[0.001,0.818],[0.01,5.057],[0.03,6.923],[0.1,7.821],[1.0,8.634]]],
+    ["NH₂", "--s-nh2", [[0.001,0.726],[0.01,5.038],[0.03,7.467],[0.1,8.722],[1.0,9.026]]],
+    ["super-cube", "--s-cage", [[0.001,0.045],[0.003,0.111],[0.01,0.23],[0.03,0.515],[0.1,1.662],[0.3,4.237],[1.0,9.21]], true],
+    ["super-tetrahedron", "--s-cage", [[0.001,0.183],[0.003,0.356],[0.01,0.438],[0.03,0.83],[0.1,1.691],[0.3,3.715],[1.0,9.562]], true],
+  ];
+  (function () {
+    const svg = document.getElementById("iso");
+    const L = 64, R = 20, T = 16, B = 52, W = 760, H = 380;
+    const x = (p) => L + (Math.log10(p) + 3) / 3 * (W - L - R);
+    const y = (n) => H - B - n / 10 * (H - T - B);
+    for (let n = 0; n <= 10; n += 2) {
+      el("line", {x1: L, x2: W - R, y1: y(n), y2: y(n), stroke: css("--rule"), "stroke-width": 1}, svg);
+      el("text", {x: L - 10, y: y(n) + 4, "text-anchor": "end", fill: css("--muted"), "font-size": 12, "font-family": mono}, svg, n);
+    }
+    [[0.001,"1 kPa"],[0.01,"10 kPa"],[0.1,"100 kPa"],[1,"1 MPa"]].forEach(([p, lab]) => {
+      el("line", {x1: x(p), x2: x(p), y1: T, y2: H - B, stroke: css("--rule"), "stroke-width": 1}, svg);
+      el("text", {x: x(p), y: H - B + 20, "text-anchor": p === 0.001 ? "start" : (p === 1 ? "end" : "middle"), fill: css("--muted"), "font-size": 12, "font-family": mono}, svg, lab);
+    });
+    el("line", {x1: x(0.015), x2: x(0.015), y1: T, y2: H - B, stroke: css("--accent"), "stroke-width": 1, "stroke-dasharray": "4 4"}, svg);
+    el("text", {x: x(0.015) + 6, y: T + 12, fill: css("--accent"), "font-size": 12}, svg, "15 kPa: CO₂ en gas de combustión");
+    el("text", {x: 16, y: (H - B + T) / 2, transform: `rotate(-90 16 ${(H - B + T) / 2})`, "text-anchor": "middle", fill: css("--muted"), "font-size": 12}, svg, "CO₂ adsorbido (mol/kg)");
+    el("text", {x: (L + W - R) / 2, y: H - 10, "text-anchor": "middle", fill: css("--muted"), "font-size": 12}, svg, "presión de CO₂");
+    const legend = document.getElementById("iso-legend");
+    iso.forEach(([name, color, pts, dashed]) => {
+      const d = pts.map(([p, n], i) => (i ? "L" : "M") + x(p).toFixed(1) + " " + y(n).toFixed(1)).join(" ");
+      el("path", {d, fill: "none", stroke: css(color), "stroke-width": name.startsWith("N 5") ? 3 : 2, "stroke-dasharray": dashed ? "6 4" : "none"}, svg);
+      pts.forEach(([p, n]) => el("circle", {cx: x(p), cy: y(n), r: 3, fill: css(color)}, svg));
+      const s = document.createElement("span");
+      s.innerHTML = `<i style="background:${css(color)}"></i>${name}`;
+      legend.appendChild(s);
+    });
+  })();
+
+  // CO2/N2 selectivity (selectividad/*.json, n_dft.json).
+  const sel = [
+    ["rendija N 5 % (cargas DFT)", 220.7, 8.1, "--s-n"],
+    ["rendija COOH", 169.4, 6.7, "--s-cooh"],
+    ["rendija OH", 151.0, 5.4, "--s-oh"],
+    ["rendija NH₂", 146.6, 5.6, "--s-nh2"],
+    ["rendija prístina", 132.7, 4.3, "--s-pri"],
+    ["súper-cuadrado (cristalina)", 28.9, 0.5, "--s-cage"],
+    ["schwarzita D (cristalina)", 27.0, 0.5, "--s-cage"],
+    ["súper-grafeno (cristalina)", 16.6, 0.2, "--s-cage"],
+    ["super-tetrahedron (jaula)", 15.7, 0.5, "--s-cage"],
+    ["super-cube (jaula)", 10.0, 0.2, "--s-cage"],
+    ["schwarzita P (cristalina)", 6.7, 0.1, "--s-cage"],
+    ["giroide (cristalina)", 5.0, 0.05, "--s-cage"],
+  ];
+  (function () {
+    const svg = document.getElementById("sel");
+    const L = 220, R = 60, T = 10, W = 760, row = 34;
+    const x = (v) => L + v / 240 * (W - L - R);
+    const H = T + sel.length * row + 30;
+    [0, 50, 100, 150, 200].forEach((v) => {
+      el("line", {x1: x(v), x2: x(v), y1: T, y2: T + sel.length * row, stroke: css("--rule"), "stroke-width": 1}, svg);
+      el("text", {x: x(v), y: T + sel.length * row + 18, "text-anchor": "middle", fill: css("--muted"), "font-size": 12, "font-family": mono}, svg, v);
+    });
+    sel.forEach(([name, s, err, color], i) => {
+      const cy = T + i * row + row / 2;
+      el("text", {x: L - 10, y: cy + 4, "text-anchor": "end", fill: css("--fg"), "font-size": 13}, svg, name);
+      el("rect", {x: L, y: cy - 9, width: Math.max(1, x(s) - L), height: 18, rx: 2, fill: css(color), opacity: color === "--s-cage" ? 0.7 : 1}, svg);
+      el("line", {x1: x(s - err), x2: x(s + err), y1: cy, y2: cy, stroke: css("--fg"), "stroke-width": 1.5}, svg);
+      el("text", {x: x(s + err) + 8, y: cy + 4, fill: css("--muted"), "font-size": 12, "font-family": mono}, svg, s.toFixed(0));
+    });
+    svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  })();
+
+  // Humidity (humedad/*.json; dry from the mixture runs), mol/kg CO2.
+  const hum = [
+    ["prístina", "--s-pri", [5.92, 5.70, 5.64]],
+    ["N 5 %", "--s-n", [7.14, 5.94, 5.30]],
+    ["COOH", "--s-cooh", [5.64, 5.59, 5.32]],
+  ];
+  (function () {
+    const svg = document.getElementById("hum");
+    const L = 46, R = 76, T = 14, B = 40, W = 420, H = 260;
+    const rh = [0, 30, 80];
+    const x = (v) => L + v / 80 * (W - L - R);
+    const y = (n) => H - B - (n - 5) / 2.5 * (H - T - B);
+    [5, 5.5, 6, 6.5, 7, 7.5].forEach((n) => {
+      el("line", {x1: L, x2: W - R, y1: y(n), y2: y(n), stroke: css("--rule"), "stroke-width": 1}, svg);
+      el("text", {x: L - 8, y: y(n) + 4, "text-anchor": "end", fill: css("--muted"), "font-size": 11, "font-family": mono}, svg, n.toFixed(1));
+    });
+    rh.forEach((v) => el("text", {x: x(v), y: H - B + 18, "text-anchor": "middle", fill: css("--muted"), "font-size": 11, "font-family": mono}, svg, v === 0 ? "seco" : v + " % HR"));
+    hum.forEach(([name, color, vals]) => {
+      const d = vals.map((n, i) => (i ? "L" : "M") + x(rh[i]).toFixed(1) + " " + y(n).toFixed(1)).join(" ");
+      el("path", {d, fill: "none", stroke: css(color), "stroke-width": 2.5}, svg);
+      vals.forEach((n, i) => el("circle", {cx: x(rh[i]), cy: y(n), r: 3.5, fill: css(color)}, svg));
+      const off = name === "COOH" ? 10 : (name === "N 5 %" ? -4 : -8);
+      el("text", {x: x(80) + 8, y: y(vals[2]) + 4 + off, fill: css(color), "font-size": 12}, svg, name);
+    });
+  })();
+})();
+</script>

@@ -100,6 +100,9 @@ class MixtureResult:
     acceptance: dict[str, float]
     energy_drift_k: float
     warnings: list[str] = field(default_factory=list)
+    #: Final configuration, only with ``keep_configuration``: one entry
+    #: per molecule, ``{"species": name, "sites": (3, 3) list}``.
+    configuration: list[dict] | None = None
 
 
 def run_mixture_gcmc(
@@ -115,6 +118,7 @@ def run_mixture_gcmc(
     blocks: int = 10,
     cutoff: float = CUTOFF,
     wall: dict | None = None,
+    keep_configuration: bool = False,
 ) -> MixtureResult:
     """Grand-canonical mixture in a rigid framework.
 
@@ -293,4 +297,8 @@ def run_mixture_gcmc(
         fugacity_coefficients=list(map(float, phi)),
         acceptance={k: accepted[k] / tried[k] if tried[k] else 0.0
                     for k in tried},
-        energy_drift_k=drift, warnings=warnings)
+        energy_drift_k=drift, warnings=warnings,
+        configuration=([{"species": system.species[k].name,
+                        "sites": np.asarray(m).tolist()}
+                       for m, k in zip(system.molecules, system._all_kinds())]
+                      if keep_configuration else None))
