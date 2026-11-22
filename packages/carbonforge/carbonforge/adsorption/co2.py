@@ -271,17 +271,23 @@ class Ewald:
 KCAL_TO_K: float = 503.2195
 
 
-def wall_parameters(framework: Atoms,
-                    neutralise: bool = True) -> dict[str, object]:
+def wall_parameters(framework: Atoms, neutralise: bool = True,
+                    forcefield: str = "adsorption") -> dict[str, object]:
     """Per-atom LJ sigma (A), epsilon (K) and charge (e) of a typed wall.
 
-    Types from :func:`carbonforge.forcefields.typing.assign_types`,
-    values from ``ELECTRODE_PARAMS``. An atom whose environment matched
-    no type is refused rather than given a default: a wrong type is a
-    wrong charge.
+    ``forcefield="adsorption"`` (the default) types with
+    :func:`carbonforge.forcefields.adsorption.assign_adsorption_types`
+    and charges from ``ADSORPTION_PARAMS``, where carboxyl, hydroxyl and
+    amine groups carry published, (nearly) neutral charges.
+    ``"electrode"`` is the EDLC table, ``ELECTRODE_PARAMS``, whose
+    carboxyl is charged like a carboxylate (-0.53 e per group) and
+    inflates a CO2 Henry constant almost fourfold. An atom whose
+    environment matched no type is refused rather than given a default:
+    a wrong type is a wrong charge.
 
-    The table's charges are per type and do NOT sum to zero over a
-    group: a hydroxyl leaves -0.03 e, a carboxyl -0.53 e. A charged
+    The charges are per type and need not sum to zero over a group (an
+    amine leaves -0.11 e, and in the electrode table a hydroxyl -0.03 e
+    and a carboxyl -0.53 e). A charged
     framework in an Ewald sum is a different system (it sits in a
     neutralising background), so with ``neutralise`` the net charge is
     spread evenly over the ``C_sp2`` atoms -- the delocalised sheet,
@@ -290,16 +296,23 @@ def wall_parameters(framework: Atoms,
     ``charge``, the ``types``, the ``net_charge`` before neutralising
     and ``shift``.
     """
-    from carbonforge.forcefields.parameters import ELECTRODE_PARAMS
-    from carbonforge.forcefields.typing import assign_types
+    if forcefield == "adsorption":
+        from carbonforge.forcefields.adsorption import (
+            ADSORPTION_PARAMS as table, assign_adsorption_types as typer)
+    elif forcefield == "electrode":
+        from carbonforge.forcefields.parameters import ELECTRODE_PARAMS as table
+        from carbonforge.forcefields.typing import assign_types as typer
+    else:
+        raise ValueError(f"unknown force field {forcefield!r}: "
+                         "'adsorption' or 'electrode'")
 
-    typed = assign_types(framework)
+    typed = typer(framework)
     if typed.unresolved:
         raise ValueError(f"untyped atoms: {typed.unresolved[:5]}")
-    missing = sorted(set(typed.types) - set(ELECTRODE_PARAMS))
+    missing = sorted(set(typed.types) - set(table))
     if missing:
         raise ValueError(f"no parameters for types {missing}")
-    rows = [ELECTRODE_PARAMS[t] for t in typed.types]
+    rows = [table[t] for t in typed.types]
     charge = np.array([r.charge for r in rows])
     net = float(charge.sum())
     shift = 0.0
@@ -312,7 +325,7 @@ def wall_parameters(framework: Atoms,
     return {"sigma": np.array([r.sigma for r in rows]),
             "epsilon": np.array([r.epsilon for r in rows]) * KCAL_TO_K,
             "charge": charge, "types": typed.types,
-            "net_charge": net, "shift": shift}
+            "net_charge": net, "shift": shift, "forcefield": forcefield}
 
 
 class CO2System:

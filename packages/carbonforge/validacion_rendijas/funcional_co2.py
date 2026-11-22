@@ -27,6 +27,7 @@ on the same structure, which separates the two.
 from __future__ import annotations
 
 import json
+import os
 import sys
 import time
 from dataclasses import asdict
@@ -50,6 +51,13 @@ TEMPERATURE = 298.0
 #: charged (the neutralising shift touches all of them) a move costs
 #: about 1 ms, and five variants at seven points is most of a day.
 PRESSURES = (1e-3, 1e-2, 3e-2, 0.1, 1.0)
+#: Wall force field: "adsorption" (published, neutral group charges; the
+#: default) or "electrode" (the EDLC table, whose carboxyl is a
+#: carboxylate). Set with CAMPO=electrode. The first study ran on the
+#: electrode table and its files carry no suffix; adsorption runs are
+#: suffixed "-ads". Pristine and N5 are the same in both (no groups).
+FORCEFIELD = os.environ.get("CAMPO", "adsorption")
+SUFFIX = "" if FORCEFIELD == "electrode" else "-ads"
 
 #: Variant -> how its sheet is made. Seeds fixed; N's seed is the first
 #: that puts no two N atoms side by side, an environment the typing
@@ -80,13 +88,15 @@ def slit(name: str):
 
 
 def henry() -> None:
-    out = HERE / "henry_co2_funcional.txt"
+    out = HERE / f"henry_co2_funcional{SUFFIX}.txt"
     done = out.read_text() if out.exists() else ""
     for name in VARIANTS:
+        if SUFFIX and name in ("pristina", "N5"):
+            continue                    # no groups: same in both fields
         if any(line.split()[:1] == [name] for line in done.splitlines()):
             continue
         atoms = slit(name)
-        wall = wall_parameters(atoms)
+        wall = wall_parameters(atoms, forcefield=FORCEFIELD)
         neutral = dict(wall, charge=np.zeros(len(atoms)))
         started = time.time()
         rows = []
@@ -105,10 +115,10 @@ def henry() -> None:
 
 def run(name: str) -> None:
     FOLDER.mkdir(exist_ok=True)
-    path = FOLDER / f"funcional-{name}.json"
+    path = FOLDER / f"funcional-{name}{SUFFIX}.json"
     stored = json.loads(path.read_text()) if path.exists() else {}
     atoms = slit(name)
-    wall = wall_parameters(atoms)
+    wall = wall_parameters(atoms, forcefield=FORCEFIELD)
     if "vacio_helio" not in stored:
         stored["vacio_helio"] = analyse_porosity(atoms).helium_void_fraction
         stored["formula"] = atoms.get_chemical_formula()
@@ -134,7 +144,9 @@ def run(name: str) -> None:
 
 def table() -> None:
     for name in VARIANTS:
-        path = FOLDER / f"funcional-{name}.json"
+        path = FOLDER / f"funcional-{name}{SUFFIX}.json"
+        if not path.exists() and SUFFIX:
+            path = FOLDER / f"funcional-{name}.json"     # no groups: same
         if not path.exists():
             continue
         stored = json.loads(path.read_text())

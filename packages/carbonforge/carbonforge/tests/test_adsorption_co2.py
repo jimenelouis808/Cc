@@ -132,8 +132,11 @@ def _hydroxylated_slit():
 
 class TestTheChargedWall:
     def test_it_is_neutralised_over_the_sheet(self):
-        wall = co2.wall_parameters(_hydroxylated_slit())
-        assert abs(wall["net_charge"]) > 0.01      # the table is not neutral
+        # The electrode table's hydroxyl is not neutral (-0.03 e), which
+        # is what exercises the neutralisation.
+        wall = co2.wall_parameters(_hydroxylated_slit(),
+                                   forcefield="electrode")
+        assert abs(wall["net_charge"]) > 0.01
         assert abs(float(np.sum(wall["charge"]))) < 1e-9
         assert wall["shift"] != 0.0
 
