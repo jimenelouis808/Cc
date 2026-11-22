@@ -1171,8 +1171,8 @@ pared y sin ajustar nada.
 
 - **El calor está un 6 % alto** y la pendiente un 7.5 %, en el límite del error
   experimental (±6 %). El sentido es el esperado: los parámetros TraPPE con
-  Lorentz-Berthelot dan pozos de 30–48 K contra el grafito, frente a los
-  25–28 K (C) que ajusta Steele. El cuadrupolo propio del grafito, que el
+  Lorentz-Berthelot dan pozos de 27.5 K (C) y 47 K (O) contra el carbono del
+  grafito, en el extremo alto de los 24–28 K y 42–46 K que ajusta Steele. El cuadrupolo propio del grafito, que el
   artículo también omite, no está incluido.
 - **B_AS/A queda entre 0.5 y 0.85 del valor normalizado con el área BET.** Esta
   comparación vale un factor ~3, no un porcentaje. El propio artículo, con su
