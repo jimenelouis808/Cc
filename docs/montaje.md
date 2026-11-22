@@ -75,3 +75,29 @@ Por eso el puerto WE es un **portaelectrodo desmontable**:
 2. Junta, vidrio superior y marco (O-rings de los conectores con grasa); 6 × M3 hasta el tope.
 3. Conectores de entrada y salida.
 4. **Electrodos:** una pinza en cada pad, afuera, en seco.
+
+## Celda T (`tcell`)
+1. Tapa inferior al cuerpo (4 × M3×10). Colector inferior desde arriba, con su terminal por la
+   tapa: apoya en ella y su cara queda en z = −we_t.
+2. Disco WE, separador (mojado con electrolito) y disco CE, centrados con pinzas.
+3. Colector superior, resorte y tapa superior (4 × M3×10 hasta el tope): el resorte da la presión.
+4. Con jeringa por el puerto −y, llenar el canal de la RE hasta que salga por +y; meter la RE
+   (punta Ø4) hasta que el hombro apoye en el resalte. Tapón ciego en −y.
+5. Pinzas del potenciostato en los terminales: WE abajo, CE arriba.
+
+## Celda H (`hcell`)
+1. O-ring 17 × 1.5 en la ranura de cada media celda; membrana (hidratada) centrada sobre uno.
+2. Juntar las dos medias celdas y apretar los 4 M3×20 en cruz hasta que las caras topen.
+3. Llenar cada lado hasta z = 12 (24.5 mL), barras de agitación, O-rings de tapa (36 × 1.5).
+4. Tapas (8 × M3×14). WE y RE por la tapa de trabajo, CE por la del CE: cada uno se desliza en su
+   O-ring radial hasta su altura (disco del WE a la altura de la ventana).
+5. Gas: tubo de burbujeo por `gas_in` hasta 1 mm sobre la barra; `gas_out` al análisis.
+   `sample` lleva un conector con septo para tomar líquido con jeringa.
+
+## Flujo wall-jet (`flow_walljet`)
+1. **Galga:** meter el GC en la galga hasta el fondo; bajar el collar hasta el borde de la galga y
+   apretar su tornillo de nylon. El disco queda a 16 mm bajo el collar.
+2. Tubo de entrada (1/16") por debajo, con su conector, hasta el asiento.
+3. GC por arriba hasta que el collar apoye: disco a 1.5 mm de la boquilla.
+4. RE por −y (hasta el resalte) y CE por +y; conector de salida en +x.
+5. Purgar con el electrolito (PBS desgasificado) antes de polarizar.

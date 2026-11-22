@@ -382,6 +382,115 @@ RING_PORTS = (
     {"name": "RE", "face": "-y", "offset": 0.0, "z": 7.8, "kind": "re_tip"},
 )
 
+# --- Celda T (tipo Swagelok) con RE: supercapacitores y baterías ------------------
+# Pila vertical dentro de un agujero de 1/2": colector inferior (WE) | electrodo WE |
+# separador | electrodo CE | colector superior. z = 0 es la cara del electrodo WE (sobre el
+# colector inferior, que apoya en la tapa inferior: z = 0 lo fija la geometría). El colector
+# superior lo empuja un resorte: la presión sobre la pila la fija el resorte, no el apriete.
+# La RE (punta Ø4) llega por +y al plano medio del separador; el puerto −y sirve para llenar
+# el canal de la RE y purgar burbujas (se tapa con un conector ciego).
+TCELL = {
+    "rod_d": 12.7,           # MEDIR: colectores de 1/2" (Ti gr. 2 o GC; 316L sólo en neutro)
+    "pin_d": 4.0,            # terminal del colector, sale por la tapa (pinza del potenciostato)
+    "pin_out": 10.0,         # cuánto sobresale el terminal de su tapa
+    "electrode_d": 12.0,     # discos de electrodo y separador (sacabocados de 12 mm)
+    "we_t": 0.20,            # MEDIR: electrodo de trabajo (película + soporte)
+    "sep_t": 0.26,           # MEDIR: separador (fibra de vidrio GF/A 0.26; Celgard 0.025)
+    "ce_t": 0.20,            # MEDIR: contraelectrodo
+    "body_w": 32.0,
+    "z0": -15.0, "z1": 15.0, # cuerpo
+    "corner_chamfer": 3.0,
+    "re_recess": 0.5,        # la punta de la RE queda 0.5 mm fuera del agujero (no toca la pila)
+    "cap_t": 10.0,
+    "cap_screw_r": 12.0,     # 4 × M3 en el medio de cada lado, a insertos en el cuerpo
+    "leg": 6.0,              # patas de 6 × 6 en las esquinas de la tapa inferior
+    "leg_h": 14.0,
+    # resorte de compresión sobre el colector superior (MEDIR: ficha del resorte comprado)
+    "spring_od": 9.0, "spring_wire_d": 1.0, "spring_free_l": 16.0, "spring_solid_l": 8.0,
+    "spring_k": 4.0,         # N/mm
+    "spring_pocket_depth": 8.0,
+    "spring_compression": 5.0,
+    "pressure_range": (0.1, 0.5),   # MPa sobre el disco de electrodo
+    "rod_seal_margin": 1.0,  # el colector cubre su O-ring con este margen
+}
+
+TCELL_PORTS = (
+    {"name": "RE", "face": "+y", "offset": 0.0, "z": None, "kind": "re_tip"},
+    {"name": "fill", "face": "-y", "offset": 0.0, "z": None, "kind": "fitting", "through_d": 1.0},
+)
+
+# --- Celda H: dos compartimentos separados por una membrana (Nafion) ----------------
+# Dos medias celdas IGUALES (se imprime la misma pieza dos veces) que se enfrentan por su cara
+# +x con la membrana entre dos O-rings de cara, apretadas por 4 tornillos M3 en las bridas.
+# Cada media celda lleva su tapa: la de trabajo con WE, RE, gas y muestreo; la del CE con CE y
+# gas. z = 0 es el disco del WE, a la altura del centro de la ventana de la membrana.
+HCELL = {
+    "chamber_d": 34.0,
+    "z_floor": -15.0, "floor_t": 3.0, "z_top": 25.0,
+    "z_fill": 12.0,          # nivel del electrolito
+    "body_w": 46.0,          # cuadrado; la cara de la membrana está en x = body_w / 2
+    "corner_chamfer": 4.0,
+    "window_d": 14.0,        # área de membrana expuesta: π·7² = 1.54 cm²
+    "membrane_d": 26.0,      # disco de Nafion
+    "membrane_t": 0.18,      # MEDIR: Nafion 117 = 0.18; 212 = 0.05
+    "mem_oring_id": 17.0,    # MEDIR: 17 × 1.5 EPDM en cada media celda
+    "mem_oring_cs": 1.5,
+    "flange_w": 64.0, "flange_t": 8.0,
+    "flange_bolts": ((27.5, -12.0), (27.5, 20.0)),   # (|y|, z) de los 4 M3 pasantes
+    "lid_t": 10.0,
+    "lid_oring_id": 36.0, "lid_oring_cs": 1.5,      # MEDIR
+    "lid_insert_xy": 17.5,
+    "stir_bar": (15.0, 6.0),
+    "gas_tube_z": -8.0,      # fin del tubo de burbujeo: 1 mm sobre la barra y fuera de su giro
+    "we_option": 1,          # ELECTRODES["GC_options"]: 1 = Corrtest Ø5 / Ø10
+}
+
+# Puertos verticales de las tapas (xy relativo al centro de la cámara; +x = hacia la membrana)
+HCELL_WE_PORTS = (
+    {"name": "WE", "xy": (10.0, 0.0), "kind": "radial", "rod_d": 10.0},
+    {"name": "RE", "xy": (1.5, -10.5), "kind": "radial", "rod_d": ELECTRODES["RE_body_d"]},
+    {"name": "gas_in", "xy": (-3.0, 9.5), "kind": "fitting", "through_d": 1.6},
+    {"name": "gas_out", "xy": (-13.75, 0.0), "kind": "fitting", "through_d": 1.6},
+    {"name": "sample", "xy": (-8.5, -10.8), "kind": "fitting", "through_d": 1.6},
+)
+HCELL_CE_PORTS = (
+    {"name": "CE", "xy": (10.0, 0.0), "kind": "radial", "rod_d": ELECTRODES["CE_rod_d"]},
+    {"name": "gas_in", "xy": (-3.0, 9.5), "kind": "fitting", "through_d": 1.6},
+    {"name": "gas_out", "xy": (-13.75, 0.0), "kind": "fitting", "through_d": 1.6},
+)
+
+# --- Celda de flujo wall-jet (detección de nitrito por inyección en flujo) ----------
+# El electrolito sube por una boquilla y choca contra el centro del disco del GC (que entra
+# desde arriba, boca abajo): el chorro se abre en abanico sobre el disco y sale por arriba
+# (purga burbujas). RE y CE en la misma cavidad, río abajo del disco. El tubo de entrada
+# asienta en el fondo plano de un conector 1/4-28 en la cara inferior: la boquilla es el
+# agujero de nozzle_d que sigue al asiento. z = 0 es la cara del disco: lo fija un collar
+# sobre el cuerpo del GC, puesto con una galga.
+FLOW = {
+    "we_option": 1,          # ELECTRODES["GC_options"]: 1 = Corrtest Ø5 / Ø10; 0 = Gamry Ø3 / Ø7
+    "jet_h": 1.5,            # boquilla → disco
+    "nozzle_d": 0.5,         # maquinar (broca de 0.5 en PEEK); impresa no sale
+    "nozzle_l": 5.0,
+    "boss_h": 2.5, "boss_top_d": 3.0, "boss_base_d": 8.0,
+    "cavity_d": 20.0, "cavity_top": 5.0,
+    "body_w": 40.0, "z_top": 16.0, "corner_chamfer": 4.0,
+    "skirt_h": 25.0, "skirt_wall": 4.0,   # patas: el tubo de entrada sale por abajo y se curva
+    "collar_od": 20.0, "collar_h": 8.0,   # collar con inserto M3 y tornillo de nylon
+    "gauge_floor_t": 3.0,
+    # hidrodinámica (para el resumen): PBS a 25 °C
+    "flow_ml_min": 1.0,
+    "nu_cm2_s": 0.0089,
+    "D_nitrite_cm2_s": 1.9e-5,
+    "n_electrons": 2,        # NO2⁻ → NO3⁻
+}
+
+FLOW_PORTS = (
+    {"name": "RE", "face": "-y", "offset": 0.0, "z": 1.5, "kind": "re_tip"},
+    {"name": "CE", "face": "+y", "offset": 4.0, "z": 1.8, "kind": "radial",
+     "rod_d": ELECTRODES["CE_rod_d"]},
+    {"name": "outlet", "face": "+x", "offset": 0.0, "z": 4.3, "kind": "fitting", "through_d": 1.0},
+)
+
 # --- Sellos -----------------------------------------------------------------
 ORING = {
     "face_cs": 1.5,          # MEDIR: sección del O-ring EPDM de cara

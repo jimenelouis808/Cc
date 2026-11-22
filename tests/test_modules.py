@@ -421,3 +421,130 @@ def test_tall_plug_flange_would_stick_out_below_the_cell():
 def test_every_cell_sits_flat():
     bad = [str(r) for r in walls.footing_checks() if not r.ok]
     assert not bad, "\n".join(bad)
+
+
+# --- puertos desplazados ----------------------------------------------------------
+
+def test_offset_port_mouth_opens_fully_into_a_round_cavity():
+    """Un puerto a 6 mm del eje en el pozo de Ø32 debe taladrarse hasta que todo su borde caiga
+    en el pozo: con r_in = R − 1 quedaba un labio de material en la boca."""
+    import math
+
+    from modules._geom import port_outer_r, r_inner
+    spec = next(s for s in P.CLAMP_PORTS if s["name"] == "CE")
+    R = P.CHAMBER_RING["well_d"] / 2
+    edge = abs(spec["offset"]) + port_outer_r(P, spec)
+    assert math.hypot(r_inner(P, spec, R), edge) <= R
+    assert r_inner(P, spec, R) < R - 1.0
+
+
+# --- celda T ------------------------------------------------------------------------
+
+def test_tcell_parts_valid():
+    from modules import tcell
+    for part in (tcell.build(), tcell.cap_bottom(), tcell.cap_top()):
+        s = part.val()
+        assert s.isValid() and len(s.Solids()) == 1
+
+
+def test_tcell_we_face_is_reference_plane():
+    from modules import tcell
+    lay = tcell.layout()
+    assert lay["rod_lo"][1] + P.TCELL["we_t"] == pytest.approx(0.0)
+    # el colector inferior apoya en la tapa inferior: z = 0 no depende del apriete
+    assert lay["rod_lo"][0] == pytest.approx(lay["cap_lo"][1])
+
+
+def test_tcell_checks_pass():
+    bad = [str(r) for r in walls.tcell_checks() if not r.ok]
+    assert not bad, "\n".join(bad)
+
+
+def test_tcell_weak_spring_is_rejected():
+    p = variant(TCELL={"spring_compression": 1.0})
+    bad = [r.name for r in walls.tcell_checks(p) if not r.ok]
+    assert any(n.startswith("presión sobre la pila ≥") for n in bad)
+
+
+def test_tcell_re_tip_stays_outside_the_stack():
+    from modules import tcell
+    from modules import assemblies as A
+    re_tip = next(s for n, s, _, g in A.tcell() if n.startswith("RE punta"))
+    assert re_tip.BoundingBox().ymin >= tcell.bore_r() + 0.2
+
+
+# --- celda H ------------------------------------------------------------------------
+
+def test_hcell_parts_valid():
+    from modules import hcell
+    for part in (hcell.build_half(), hcell.build_lid(which="we"), hcell.build_lid(which="ce")):
+        s = part.val()
+        assert s.isValid() and len(s.Solids()) == 1
+
+
+def test_hcell_halves_face_each_other_across_the_membrane():
+    from modules import hcell
+    a = hcell.build_half().val()
+    b = hcell.other_side(a)
+    lay = hcell.layout()
+    assert a.BoundingBox().xmax == pytest.approx(lay["face"])
+    assert b.BoundingBox().xmin == pytest.approx(lay["face"] + P.HCELL["membrane_t"])
+    assert a.intersect(b).Volume() < 1e-6
+
+
+def test_hcell_checks_pass():
+    bad = [str(r) for r in walls.hcell_checks() if not r.ok]
+    assert not bad, "\n".join(bad)
+
+
+def test_hcell_gas_tube_inside_the_stir_bar_sweep_is_rejected():
+    p = variant(HCELL_WE_PORTS=tuple(dict(s, xy=(-3.0, 6.0)) if s["name"] == "gas_in" else s
+                                     for s in P.HCELL_WE_PORTS))
+    bad = [r.name for r in walls.hcell_checks(p) if not r.ok]
+    assert any("fuera del giro de la barra" in n for n in bad)
+
+
+# --- celda de flujo -----------------------------------------------------------------
+
+def test_flow_parts_valid():
+    from modules import flow_walljet as fw
+    for part in (fw.build(), fw.build_collar(), fw.build_gauge()):
+        s = part.val()
+        assert s.isValid() and len(s.Solids()) == 1
+
+
+def test_flow_checks_pass():
+    bad = [str(r) for r in walls.flow_checks() if not r.ok]
+    assert not bad, "\n".join(bad)
+
+
+def test_walljet_current_scaling():
+    """Albery y Brett: i ∝ V^(3/4) a^(−1/2) R^(3/4) C."""
+    from modules import flow_walljet as fw
+    i1 = fw.walljet_current(conc_uM=1.0, flow_ml_min=1.0)
+    assert fw.walljet_current(conc_uM=2.0, flow_ml_min=1.0) == pytest.approx(2 * i1)
+    assert fw.walljet_current(conc_uM=1.0, flow_ml_min=2.0) == pytest.approx(2 ** 0.75 * i1)
+    p = variant(FLOW={"nozzle_d": 2 * P.FLOW["nozzle_d"]})
+    assert fw.walljet_current(p, 1.0, 1.0) == pytest.approx(i1 / 2 ** 0.5)
+    # orden de magnitud: decenas a cientos de nA por µM con un disco de 5 mm a 1 mL/min
+    assert 10e-9 < i1 < 1e-6
+
+
+def test_flow_jet_too_far_from_the_disk_is_rejected():
+    p = variant(FLOW={"jet_h": 8.0})
+    bad = [r.name for r in walls.flow_checks(p) if not r.ok]
+    assert any(n.startswith("chorro: h/a ≤") for n in bad)
+
+
+def test_hcell_submerged_tubes_hang_under_their_ports():
+    from modules import assemblies as A
+    from modules import hcell
+    lay = hcell.layout()
+    want = {f"tubo sumergido {s['name']}": s["xy"] for s in P.HCELL_WE_PORTS}
+    want.update({f"tubo sumergido {s['name']}_ce": (lay["x_other"] - s["xy"][0], -s["xy"][1])
+                 for s in P.HCELL_CE_PORTS})
+    tubes = [(n, s) for n, s, _, g in A.hcell() if n.startswith("tubo sumergido")]
+    assert len(tubes) == 3
+    for n, s in tubes:
+        c = s.BoundingBox().center
+        assert (c.x, c.y) == pytest.approx(want[n], abs=1e-6), n

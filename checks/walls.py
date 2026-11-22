@@ -509,9 +509,253 @@ def epd_checks(p=P) -> list[Result]:
     return res
 
 
+def _outside_of(outline: cq.Shape) -> cq.Shape:
+    """Todo lo que rodea a un contorno (para medir paredes contra caras de cualquier forma)."""
+    bb = outline.BoundingBox()
+    big = cq.Solid.makeBox(bb.xlen + 60, bb.ylen + 60, bb.zlen + 60,
+                           cq.Vector(bb.xmin - 30, bb.ymin - 30, bb.zmin - 30))
+    return big.cut(outline)
+
+
+def _vol(a: cq.Shape, b: cq.Shape) -> float:
+    if a.distance(b) > 1e-6:
+        return 0.0
+    return a.intersect(b).Volume()
+
+
+def tcell_checks(p=P) -> list[Result]:
+    """Celda T: paredes, puertos, sellos de los colectores, resorte y presión sobre la pila."""
+    import math
+
+    from modules import tcell as m
+    from modules._geom import block
+
+    t, lay = p.TCELL, m.layout(p)
+    wet, dry = p.CELL["min_wall"], p.CELL["min_wall_dry"]
+    f = m.features(p)
+    outline = block(t["body_w"], t["body_w"], t["z0"], t["z1"], t["corner_chamfer"])
+    for b in m.bosses(p):
+        outline = outline.fuse(b)
+    out = _outside_of(outline)
+    res = [
+        Result("celda T: agujero ↔ exterior lateral", dist(f["bore"], out.cut(
+            cyl(60, t["z0"] - 40, t["z0"])).cut(cyl(60, t["z1"], t["z1"] + 40))), wet),
+        Result("celda T: agujero ↔ insertos", dist(f["bore"], f["lid_inserts"]), wet),
+        Result("celda T: ranuras de los colectores ↔ insertos",
+               dist(f["rod_glands"], f["lid_inserts"]), dry),
+        Result("celda T: ranuras de los colectores ↔ exterior lateral",
+               dist(f["rod_glands"], out), dry),
+    ]
+    specs = m.port_specs(p)
+    res += _ports_checks(p, f, specs, t["z1"], t["z0"], t["z0"])
+    for s in specs:
+        res.append(Result(f"celda T: port_{s['name']} ↔ ranuras de los colectores",
+                          dist(f["port_" + s["name"]], f["rod_glands"]), dry))
+    # RE: fuera del agujero, en el plano medio del separador
+    res.append(Result("celda T: punta de la RE fuera del agujero (no toca la pila)",
+                      t["re_recess"], 0.2))
+    res.append(Result("celda T: la boca de la RE cubre el separador (radio − sep/2)",
+                      p.hole(p.ELECTRODES["RE_tip_d"]) / 2 - t["sep_t"] / 2, 0.5))
+    # colectores: cubren sus O-rings; los discos caben bajo el colector
+    g = p.oring_gland(p.ORING["re_cs"], "radial")
+    a, mg = p.ORING["re_groove_from_face"], t["rod_seal_margin"]
+    res += [
+        Result("colector superior cubre su O-ring (arriba)", lay["rod_hi"][1] - (t["z1"] - a), mg),
+        Result("colector superior cubre su O-ring (abajo)",
+               (t["z1"] - a - g["width"]) - lay["rod_hi"][0], mg),
+        Result("colector inferior cubre su O-ring",
+               lay["rod_lo"][1] - (t["z0"] + a + g["width"]), mg),
+        Result("disco de electrodo ≤ colector", t["rod_d"] - t["electrode_d"], 0.0),
+    ]
+    # resorte y presión
+    spring_l = lay["spring_l"]
+    area = math.pi * (t["electrode_d"] / 2) ** 2
+    pres = t["spring_k"] * t["spring_compression"] / area
+    lo, hi = t["pressure_range"]
+    res += [
+        Result("resorte: no llega a bloque (largo − largo sólido)",
+               spring_l - t["spring_solid_l"], 1.0),
+        Result("resorte: cabe en el agujero", p.hole(t["rod_d"]) - t["spring_od"], 0.5),
+        Result("resorte: el terminal pasa por dentro",
+               t["spring_od"] - 2 * t["spring_wire_d"] - t["pin_d"], 0.5),
+        Result(f"presión sobre la pila ≥ {lo} MPa", pres, lo),
+        Result(f"presión sobre la pila ≤ {hi} MPa (−)", -pres, -hi),
+        Result("terminal inferior no toca la mesa (patas − terminal)",
+               t["leg_h"] - t["pin_out"], 2.0),
+    ]
+    # piezas: sin interferencias; patas lejos de las cabezas de los tornillos
+    body, cb, ct = m.build(p).val(), m.cap_bottom(p).val(), m.cap_top(p).val()
+    for n, s in m.collectors(p):
+        for on, o in (("cuerpo", body), ("tapa inferior", cb), ("tapa superior", ct)):
+            res.append(Result(f"celda T: {n} ↔ {on} (−mm³)", -_vol(s, o), -1e-3))
+    res.append(Result("celda T: tapas ↔ cuerpo (−mm³)", -(_vol(cb, body) + _vol(ct, body)), -1e-3))
+    heads = compound(cyl(p.CELL["bolt_head_d"] + 1, lay["legs"][0], lay["cap_lo"][0], x, y)
+                     for x, y in m.screw_xy(p))
+    res.append(Result("celda T: patas ↔ cabezas de tornillo (acceso)", dist(cb, heads), 0.0))
+    return res
+
+
+def hcell_checks(p=P) -> list[Result]:
+    """Celda H: paredes de la media celda, sello de la membrana, tapas, niveles y agitación."""
+    import math
+
+    from modules import hcell as m
+    from modules._geom import block
+
+    h, c, lay = p.HCELL, p.CELL, m.layout(p)
+    wet, dry = c["min_wall"], c["min_wall_dry"]
+    f = m.half_features(p)
+    out = _outside_of(m.half_outline(p))
+    res = [
+        Result("celda H: cámara ↔ exterior lateral", dist(f["chamber"], out.cut(
+            cyl(200, h["z_top"], h["z_top"] + 50))), wet),
+        Result("celda H: cámara ↔ cara inferior",
+               dist(f["chamber"], slab(p, lay["z_bottom"], False)), wet),
+        Result("celda H: ranura de la membrana ↔ ventana", dist(f["mem_gland"], f["window"]), dry),
+        Result("celda H: ranura de la membrana ↔ tornillos", dist(f["mem_gland"], f["bolts"]), dry),
+        Result("celda H: tornillos de brida ↔ cámara", dist(f["bolts"], f["chamber"]), wet),
+        # el agujero sale por las dos caras de la brida: se mide contra lo de arriba, abajo y
+        # los lados de la brida
+        Result("celda H: tornillos de brida ↔ exterior", dist(f["bolts"], out.cut(
+            cq.Solid.makeBox(h["flange_t"] + 20, 200, 200,
+                             cq.Vector(lay["face"] - h["flange_t"] - 10, -100, -100)).cut(
+                block(h["flange_t"] + 20, h["flange_w"] + 40, lay["z_bottom"], h["z_top"],
+                      0.0, lay["face"] - h["flange_t"] / 2, 0.0).cut(
+                    block(h["flange_t"] + 20, h["flange_w"], lay["z_bottom"] - 1,
+                          h["z_top"] + 1, 0.0, lay["face"] - h["flange_t"] / 2, 0.0))))), dry),
+        Result("celda H: insertos de tapa ↔ cámara", dist(f["lid_inserts"], f["chamber"]), wet),
+        Result("celda H: insertos de tapa ↔ exterior lateral",
+               dist(f["lid_inserts"], out.cut(cyl(200, h["z_top"], h["z_top"] + 50))), dry),
+    ]
+    # cabeza y tuerca de los tornillos de brida fuera del cuerpo
+    nut_r = c["nut_af"] / math.sqrt(3)
+    y_min = min(abs(y) for y, _ in m.bolt_yz(p))
+    res.append(Result("celda H: cabeza/tuerca de brida fuera del cuerpo",
+                      y_min - max(c["bolt_head_d"] / 2, nut_r) - h["body_w"] / 2, 0.5))
+    # membrana
+    gl = m.face_gland(p)
+    res.append(Result("membrana cubre los O-rings", h["membrane_d"] / 2 - gl["r_out"], 1.5))
+    near = min(math.hypot(y, z) for y, z in m.bolt_yz(p))
+    res.append(Result("membrana dentro de los tornillos",
+                      near - p.hole(c["bolt_clearance_d"]) / 2 - h["membrane_d"] / 2, 1.0))
+    comp = (h["mem_oring_cs"] - gl["depth"]) / h["mem_oring_cs"]
+    res.append(Result("O-rings de la membrana: compresión ≥ 15 %", comp, 0.15))
+    res.append(Result("O-rings de la membrana: compresión ≤ 35 % (−)", -comp, -0.35))
+    res.append(Result("ventana bajo el nivel del electrolito",
+                      h["z_fill"] - h["window_d"] / 2, 3.0))
+    # tapas
+    R = h["chamber_d"] / 2
+    for which in ("we", "ce"):
+        lf = m.lid_features(p, which)
+        lid_out = _outside_of(block(h["body_w"], h["body_w"], *lay["z_lid"], h["corner_chamfer"]))
+        ports = {k: v for k, v in lf.items() if k.startswith("port_")}
+        names = sorted(ports)
+        for i, a in enumerate(names):
+            res += [Result(f"tapa {which}: {a} ↔ ranura del O-ring",
+                           dist(ports[a], lf["gland"]), dry),
+                    Result(f"tapa {which}: {a} ↔ tornillos", dist(ports[a], lf["screws"]), dry)]
+            res += [Result(f"tapa {which}: {a} ↔ {b}", dist(ports[a], ports[b]), dry)
+                    for b in names[i + 1:]]
+        specs = m.lid_ports(p, which)
+        from modules._geom import axial_port_r
+        for s in specs:
+            r_b, _ = axial_port_r(p, s)
+            res.append(Result(f"tapa {which}: {s['name']} desemboca en la cámara",
+                              R - math.hypot(*s["xy"]) - r_b, 0.5))
+        fit = [s for s in specs if s["kind"] == "fitting"]
+        for i, a in enumerate(fit):
+            for b in fit[i + 1:]:
+                res.append(Result(f"tapa {which}: conectores {a['name']}/{b['name']}: paso",
+                                  math.dist(a["xy"], b["xy"]), p.PORTS["fitting_pitch_min"]))
+        res.append(Result(f"tapa {which}: ranura ↔ tornillos",
+                          dist(lf["gland"], lf["screws"]), dry))
+        res.append(Result(f"tapa {which}: tornillos ↔ exterior", dist(lf["screws"], lid_out.cut(
+            cyl(200, lay["z_lid"][1], lay["z_lid"][1] + 50)).cut(
+            cyl(200, lay["z_lid"][0] - 50, lay["z_lid"][0]))), dry))
+        res.append(Result(f"tapa {which}: O-ring fuera de la cámara",
+                          h["lid_oring_id"] / 2 - R, 0.5))
+    # electrodos, tubos y agitación
+    we = next(s for s in p.HCELL_WE_PORTS if s["name"] == "WE")
+    res.append(Result("WE dentro de la cámara (al costado de la ventana)",
+                      R - (we["xy"][0] + we["rod_d"] / 2), 1.0))
+    res.append(Result("disco del WE bajo el nivel", h["z_fill"] - 0.0, 5.0))
+    bar_l, bar_d = h["stir_bar"]
+    res.append(Result("barra de agitación cabe en la cámara", h["chamber_d"] - bar_l, 4.0))
+    res.append(Result("barra bajo el disco del WE", 0.0 - (h["z_floor"] + bar_d), 3.0))
+    for which in ("we", "ce"):
+        gas = next(s for s in m.lid_ports(p, which) if s["name"] == "gas_in")
+        res.append(Result(f"tubo de gas ({which}) fuera del giro de la barra",
+                          math.hypot(*gas["xy"]) - 0.8 - bar_l / 2, 1.0))
+    res.append(Result("tubo de gas sobre la barra", h["gas_tube_z"] - (h["z_floor"] + bar_d), 1.0))
+    res.append(Result("tubo de gas bajo el nivel", h["z_fill"] - h["gas_tube_z"], 5.0))
+    # medias celdas y membrana sin interferencias
+    a = m.build_half(p).val()
+    b = m.other_side(a, p)
+    res.append(Result("celda H: media celda ↔ media celda (−mm³)", -_vol(a, b), -1e-3))
+    mem = m.membrane(p)
+    res.append(Result("celda H: membrana ↔ medias celdas (−mm³)",
+                      -(_vol(mem, a) + _vol(mem, b)), -1e-3))
+    return res
+
+
+def flow_checks(p=P) -> list[Result]:
+    """Celda de flujo wall-jet: paredes, puertos, régimen del chorro, burbujas y collar."""
+    from modules import flow_walljet as m
+
+    fl, lay = p.FLOW, m.layout(p)
+    wet, dry = p.CELL["min_wall"], p.CELL["min_wall_dry"]
+    f = m.features(p)
+    out = _outside_of(m.outline(p))
+    g = m.we(p)
+    a, R = fl["nozzle_d"], g["disk_d"] / 2
+    res = [
+        Result("flujo: cavidad ↔ exterior lateral", dist(f["cavity"], out.cut(
+            cyl(200, lay["z_skirt"] - 50, lay["z_bottom"]))), wet),
+        Result("flujo: cavidad ↔ cara superior",
+               dist(f["cavity"], slab(p, fl["z_top"], True)), wet),
+        Result("flujo: piso de la cavidad sobre el asiento del tubo",
+               lay["z_floor"] - lay["z_seat"], wet),
+        Result("flujo: asiento ↔ cara inferior (rosca completa)",
+               lay["z_seat"] - lay["z_bottom"], p.PORTS["thread_depth"]),
+    ]
+    lat = {k: v for k, v in f.items() if k.startswith("port_") and k != "port_WE"}
+    res += _ports_checks(p, lat, p.FLOW_PORTS, fl["z_top"], lay["z_bottom"], lay["z_floor"])
+    for k, v in lat.items():      # sólo lo que atraviesa material (la cavidad está vacía)
+        v = v.cut(f["cavity"])
+        res.append(Result(f"flujo: {k} ↔ port_WE", dist(v, f["port_WE"]), dry))
+        res.append(Result(f"flujo: {k} ↔ entrada", dist(v, f["inlet"]), dry))
+    res.append(Result("flujo: ranura del WE ↔ cavidad", dist(f["port_WE"].cut(
+        cyl(p.hole(g["body_d"]), fl["cavity_top"] - 1, fl["z_top"] + 1)), f["cavity"]), wet))
+    # chorro (wall-jet de Albery y Brett: h del orden de a, R varias veces a, laminar)
+    res += [
+        Result("chorro: h/a ≥ 1", fl["jet_h"] / a, 1.0),
+        Result("chorro: h/a ≤ 10 (−)", -fl["jet_h"] / a, -10.0),
+        Result("chorro: R/a ≥ 3 (el disco recibe el abanico)", R / a, 3.0),
+        Result("chorro: laminar (−Re ≥ −2000)", -m.nozzle_reynolds(p), -2000.0),
+        Result("chorro: espacio radial alrededor del WE",
+               fl["cavity_d"] / 2 - g["body_d"] / 2, 2.0),
+    ]
+    out_spec = next(s for s in p.FLOW_PORTS if s["name"] == "outlet")
+    res.append(Result("salida en lo alto de la cavidad (−hueco sobre la boca)",
+                      -(fl["cavity_top"] - (out_spec["z"] + p.hole(out_spec["through_d"]) / 2)),
+                      -0.6))
+    res.append(Result("patas: el conector de entrada cabe entre ellas",
+                      fl["body_w"] - 2 * fl["skirt_wall"] - 8.0, 4.0))
+    res.append(Result("patas: altura para conector y curva del tubo", fl["skirt_h"] - 10.0, 12.0))
+    # collar y galga
+    collar = m.build_collar(p).val()
+    body = m.build(p).val()
+    res.append(Result("collar ↔ cuerpo (−mm³)", -_vol(collar, body), -1e-3))
+    res.append(Result("collar: pared para el inserto radial M3",
+                      (fl["collar_od"] - p.hole(g["body_d"])) / 2, 4.0))
+    res.append(Result("galga = distancia collar → disco (−diferencia)",
+                      -abs(m.build_gauge(p).val().BoundingBox().zmax - lay["collar"][0]), -1e-6))
+    return res
+
+
 def _instrument(name: str) -> str:
     """Agrupa las piezas de un mismo electrodo por su prefijo (RE, CE, CS945, double knob)."""
-    for key in ("RE", "CE", "CS945", "double knob"):
+    for key in ("RE", "CE", "CS945", "double knob", "GC"):
         if name.startswith(key):
             suffix = name[name.find("(pad"):] if "(pad" in name else ""
             return key + suffix
@@ -526,7 +770,9 @@ def electrode_checks(p=P, configs=None) -> list[Result]:
     for key in configs or A.CONFIGS:
         parts = A.CONFIGS[key][1](p)
         elec = [(n, s) for n, s, _, g in parts if g == A.ELECTRODE and "Ag/AgCl" not in n]
-        others = [(n, s) for n, s, _, g in parts if g in (A.CELL, A.SAMPLE)]
+        # obstáculos: celda, muestra y los tubos que entran al líquido
+        others = [(n, s) for n, s, _, g in parts if g in (A.CELL, A.SAMPLE)
+                  or (g == A.FLOW and n.startswith("tubo sumergido"))]
         worst = {}
         def overlap(a, b) -> float:
             # la distancia (BRepExtrema) es robusta; la intersección booleana de un alambre
@@ -582,8 +828,10 @@ def assembly_access_checks(p=P) -> list[Result]:
     e, c = p.ELECTRODES, p.WE_CLAMP
     coil_od = e["CE_coil_d"] + 0.5
     res = []
+    from modules import tcell
     for cell, ports in (("Raman sellada", p.RING_PORTS), ("Raman pinza", p.CLAMP_PORTS),
-                        ("XRD", p.XRD_PORTS)):
+                        ("XRD", p.XRD_PORTS), ("Celda T", tcell.port_specs(p)),
+                        ("Flujo", p.FLOW_PORTS)):
         for s in ports:
             bore = 2 * port_bore_r(p, s)
             if s["name"] == "RE":
@@ -620,6 +868,14 @@ def assembly_access_checks(p=P) -> list[Result]:
     up, _ = clamp_extent(c, s_xrd.get("clamp_screw", "down"))
     res.append(Result("XRD: la cabeza del tornillo queda bajo la tapa del bolsillo",
                       -k["cover_t"] - (lay["z_clip"] + up), 0.3))
+    # Celda H: todo entra desde arriba por su O-ring radial
+    for s_ in p.HCELL_WE_PORTS + p.HCELL_CE_PORTS:
+        if s_["name"] == "CE":
+            res.append(Result("Celda H: la espiral del CE pasa por la tapa",
+                              p.hole(s_["rod_d"]) - coil_od, 0.2))
+        elif s_["name"] in ("WE", "RE"):
+            res.append(Result(f"Celda H: el {s_['name']} pasa por la tapa",
+                              p.hole(s_["rod_d"]) - s_["rod_d"], 0.1))
     # Chladni: la RE entra desde arriba por la tapa; el CE se coloca con la celda abierta
     res.append(Result("Chladni: la punta de la RE pasa por la tapa",
                       p.hole(e["RE_tip_d"]) - e["RE_tip_d"], 0.1))
@@ -641,7 +897,8 @@ def run(p=P) -> list[Result]:
     return (ring_checks(p) + base_checks(p) + seal_checks(p) + assembly_checks(p)
             + lid_raman_checks(p) + clamp_checks(p) + lid_raman_checks(p, "clamp")
             + xrd_checks(p) + chladni_checks(p) + epd_checks(p) + electrode_checks(p)
-            + assembly_access_checks(p) + footing_checks(p))
+            + assembly_access_checks(p) + footing_checks(p)
+            + tcell_checks(p) + hcell_checks(p) + flow_checks(p))
 
 
 if __name__ == "__main__":

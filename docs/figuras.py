@@ -35,6 +35,12 @@ PANELS = {
                 ("y", 0.0, "Corte y = 0: cable del CE (−x) y pinza en la lengüeta (+x)")],
     "epd": [("y", 0.0, "Corte y = 0: canal, entrada y salida"),
             ("y", 5.0, "Corte y = +5: pinza del pad A")],
+    "tcell": [("x", 0.0, "Corte x = 0: RE (+y), llenado (−y), pila, resorte y terminales"),
+              ("y", 0.0, "Corte y = 0: pila entre colectores, tapas y patas")],
+    "hcell": [("y", 0.0, "Corte y = 0: WE frente a la ventana, membrana y CE"),
+              ("x", 1.5, "Corte x = 1.5: RE junto al WE")],
+    "flujo": [("x", 0.0, "Corte x = 0: chorro bajo el disco, RE (−y)"),
+              ("x", -4.0, "Corte x = −4: CE (+y)")],
 }
 
 
@@ -92,7 +98,7 @@ def _draw(ax, solid, color, cut, edge="k", lw=0.4, alpha=None):
 
 def _instrument(name):
     for key, label in (("RE", "RE"), ("CE", "CE"), ("CS945", "CS945"),
-                       ("double knob", "double knob")):
+                       ("double knob", "double knob"), ("GC", "WE · GC")):
         if name.startswith(key):
             return label + (" " + name[name.find("(pad"):] if "(pad" in name else "")
     return name
@@ -188,7 +194,8 @@ def top_panel(ax, parts, z_cell):
     ax.set_ylabel("y (mm)")
 
 
-TOP_Z = {"raman_sellada": 7.0, "raman_pinza": 6.5, "xrd": -8.0, "chladni": 4.0, "epd": 0.03}
+TOP_Z = {"raman_sellada": 7.0, "raman_pinza": 6.5, "xrd": -8.0, "chladni": 4.0, "epd": 0.03,
+         "tcell": 0.13, "hcell": 0.0, "flujo": 1.8}
 
 
 def figure(key, vistas3d=None, out_dir=None):

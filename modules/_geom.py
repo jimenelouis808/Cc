@@ -235,3 +235,58 @@ def port_outer_r(p, spec) -> float:
     rod = p.ELECTRODES["RE_tip_d"] if spec["kind"] == "re_tip" else spec.get(
         "rod_d", p.ELECTRODES["RE_body_d"])
     return p.hole(rod + 2 * p.oring_gland(p.ORING["re_cs"], "radial")["depth"]) / 2
+
+
+def block(wx: float, wy: float, z0: float, z1: float, chamfer: float = 0.0,
+          x: float = 0.0, y: float = 0.0) -> cq.Solid:
+    """Bloque rectangular centrado en (x, y), entre z0 y z1, con aristas verticales biseladas."""
+    wp = cq.Workplane("XY").box(wx, wy, z1 - z0, centered=(True, True, False))
+    if chamfer > 0:
+        wp = wp.edges("|Z").chamfer(chamfer)
+    return wp.translate((x, y, z0)).val()
+
+
+def axial_port(p, spec: dict, z_face: float, z_end: float) -> cq.Shape:
+    """Puerto vertical en (spec["xy"]): de la cara z_face hacia z_end (abajo si z_end < z_face).
+
+    kind "radial": vástago spec["rod_d"] con O-ring radial a re_groove_from_face de la cara.
+    kind "fitting": conector 1/4-28 de fondo plano y agujero spec["through_d"] hasta z_end.
+    """
+    x, y = spec["xy"]
+    s = 1.0 if z_end > z_face else -1.0          # sentido hacia adentro
+
+    def bar(d, a, b):
+        lo, hi = min(a, b), max(a, b)
+        return cq.Solid.makeCylinder(d / 2, hi - lo, cq.Vector(x, y, lo))
+
+    outside = z_face - s * 0.5
+    if spec["kind"] == "fitting":
+        z_seat = z_face + s * p.PORTS["thread_depth"]
+        sol = bar(p.PORTS["tap_drill_d"], outside, z_seat)
+        sol = sol.fuse(bar(p.hole(spec["through_d"]), z_seat - s * 0.01, z_end))
+    elif spec["kind"] == "radial":
+        g = p.oring_gland(p.ORING["re_cs"], "radial")
+        sol = bar(p.hole(spec["rod_d"]), outside, z_end)
+        zg = z_face + s * p.ORING["re_groove_from_face"]
+        sol = sol.fuse(bar(p.hole(spec["rod_d"] + 2 * g["depth"]), zg, zg + s * g["width"]))
+    else:
+        raise ValueError(f"puerto vertical de tipo desconocido: {spec['kind']}")
+    return sol.clean()
+
+
+def axial_port_r(p, spec) -> tuple[float, float]:
+    """(radio del agujero que desemboca, radio máximo) de un puerto vertical."""
+    if spec["kind"] == "fitting":
+        return p.hole(spec["through_d"]) / 2, p.PORTS["tap_drill_d"] / 2
+    g = p.oring_gland(p.ORING["re_cs"], "radial")
+    return p.hole(spec["rod_d"]) / 2, p.hole(spec["rod_d"] + 2 * g["depth"]) / 2
+
+
+def r_inner(p, spec, cavity_r: float, margin: float = 0.5) -> float:
+    """Hasta dónde se taladra un puerto lateral para que TODA su boca caiga en una cavidad
+    cilíndrica de radio cavity_r: con el eje desplazado `offset`, el borde exterior del agujero
+    toca la pared antes que el eje. Nunca menos profundo que cavity_r − 1 (puertos centrados)."""
+    edge = abs(spec["offset"]) + port_outer_r(p, spec)
+    if edge >= cavity_r:
+        raise ValueError(f"el puerto {spec['name']} no cabe en la cavidad (borde {edge:.2f} mm)")
+    return min(cavity_r - 1.0, math.sqrt(cavity_r ** 2 - edge ** 2) - margin)

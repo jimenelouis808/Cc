@@ -109,9 +109,16 @@ def plug(p=P) -> cq.Shape:
 
 
 def port_axes(p=P):
-    """(spec, cara exterior, interior de la cavidad) de cada puerto, sobre su eje."""
-    r_in = p.CHAMBER_RING["well_d"] / 2 - 1.0
-    return [(spec, p.CELL["body_w"] / 2, r_in) for spec in p.CLAMP_PORTS]
+    """(spec, cara exterior, interior de la cavidad) de cada puerto, sobre su eje.
+
+    RE y tapón usan well_r − 1 (de ahí salen la punta de la RE y el largo del tapón); los
+    demás se taladran hasta que toda su boca cae en el pozo (_geom.r_inner).
+    """
+    from modules._geom import r_inner
+    R = p.CHAMBER_RING["well_d"] / 2
+    return [(spec, p.CELL["body_w"] / 2,
+             R - 1.0 if spec["kind"] in ("re_tip", "plug") else r_inner(p, spec, R))
+            for spec in p.CLAMP_PORTS]
 
 
 def bosses(p=P) -> list:

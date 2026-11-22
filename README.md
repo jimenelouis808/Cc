@@ -18,7 +18,10 @@ python modules/chladni.py                  # → out/chladni_{wall,bottom,lid,pl
 python sim/chladni_estimate.py             # modos de la placa y acoplamiento del piezo
 python modules/epd.py                      # → out/epd_{base,frame,gasket,cover} + out/epd_mask.dxf
 python sim/epd_dep.py                      # captura DEP por segmento (estimación)
-python checks/walls.py                     # paredes, holguras, sellos e interferencias (282 checks)
+python modules/tcell.py                    # → out/tcell_{body,cap_bottom,cap_top} + resumen
+python modules/hcell.py                    # → out/hcell_{half,lid_we,lid_ce} + resumen
+python modules/flow_walljet.py             # → out/flow_{body,collar,gauge} + resumen
+python checks/walls.py                     # paredes, holguras, sellos e interferencias (443 checks)
 python checks/raman_clearance.py           # objetivo y cono de luz vs cada pieza, gap 0.1–0.5
 python checks/xrd_clearance.py             # huella y altura máxima permitida
 python sim/chladni_estimate.py             # modos de la placa-WE
@@ -36,6 +39,9 @@ python -m pytest -q
 | 5a | `modules/chladni.py` (electrodeposición acústica) | lista; falta medir piezo y placa |
 | 5b | `modules/epd.py` (EPD / DEP selectivo) | lista; ver el aviso sobre el gap |
 | 5c | Decoración con NPs | pendiente |
+| 7 | `modules/tcell.py` (celda T con RE, supercapacitores) | lista; falta medir pila, colectores y resorte |
+| 8 | `modules/hcell.py` (celda H con membrana) | lista; falta medir membrana y O-rings |
+| 9 | `modules/flow_walljet.py` (flujo wall-jet, nitrito) | lista; la boquilla de 0.5 mm se maquina |
 | 5d | Base para glassy carbon desde abajo (Ø7 y Ø10) | pendiente |
 | 6 | Simulación (gmsh → FEniCSx / Elmer) | pendiente |
 
@@ -211,3 +217,52 @@ Re[K] ≈ 10³–10⁴ (CNT metálicos) baja a ~17–54 V, y cada factor 10 meno
 ~3. Los semiconductores no llegan. La separación por DEP de CNT individuales que se reporta usa
 gaps de ~1 µm (litografía): el soporte sirve igual con un chip litografiado, y esa es una
 decisión para la fase de dimensiones. Para EPD en DC el chip sirve tal cual.
+
+## Celda T (tipo Swagelok) con RE: `tcell.py`
+Supercapacitores y baterías con tres electrodos: la RE mide cada electrodo por separado.
+
+| | |
+|---|---|
+| Pila | colector inferior · WE Ø12 · separador · CE Ø12 · colector superior, en un agujero de 1/2" |
+| Referencia | z = 0 es la cara del WE: el colector inferior apoya en la tapa inferior (tope duro) |
+| Presión | resorte de 4 N/mm comprimido 5 mm: 20 N, **0.18 MPa** sobre el disco (rango del check: 0.1–0.5) |
+| Colectores | Ø12.7 × 14.8 (inferior) y × 11.5 (superior), con terminal Ø4 que sale por cada tapa; Ti gr. 2 o carbón vítreo (316L sólo en neutro) |
+| Sellos | O-ring radial sobre cada colector; la RE sobre su punta Ø4, el hombro en un resalte |
+| RE | por +y, en el plano medio del separador; la punta queda 0.5 mm fuera del agujero |
+| Llenado | puerto 1/4-28 por −y al mismo plano: llena el canal de la RE y purga burbujas (luego, tapón ciego) |
+| Tornillería | 8 × M3×10 a insertos; la tapa inferior tiene patas para que el terminal no toque la mesa |
+
+Los espesores de la pila (`we_t`, `sep_t`, `ce_t`) y el resorte están marcados MEDIR: si la pila
+es más gruesa, el resorte se comprime más y la presión sube (el check la vigila).
+
+## Celda H con membrana: `hcell.py`
+Electrólisis con análisis de productos (reducción de NO3⁻/NO2⁻ a NH3, HER, CO2): los productos
+del CE no llegan al WE.
+
+| | |
+|---|---|
+| Medias celdas | dos piezas iguales (se imprime la misma dos veces), cámara Ø34, 24.5 mL hasta z = 12 |
+| Membrana | Nafion Ø26 entre dos O-rings de cara 17 × 1.5 (25 % de compresión cada uno); ventana Ø14 = 1.54 cm² |
+| Cierre | 4 × M3×20 con tuerca en las bridas: las caras topan con la membrana, la compresión la fija la ranura |
+| Tapa de trabajo | GC Ø5 boca abajo a 2 mm de la ventana; RE al lado; burbujeo, salida de gas y muestreo (1/4-28) |
+| Tapa del CE | CE de Pt Ø6, burbujeo y salida de gas |
+| Agitación | una barra de 15 × 6 en cada cámara; los tubos de gas quedan fuera de su giro |
+| Referencia | z = 0 es el disco del WE, a la altura del centro de la ventana |
+
+## Celda de flujo wall-jet para nitrito: `flow_walljet.py`
+El electrolito sube por una boquilla de 0.5 mm y choca contra el centro del disco del GC, que
+entra desde arriba boca abajo. Es el arreglo para detección amperométrica por inyección en
+flujo: la señal la fija el caudal, no la agitación.
+
+| | |
+|---|---|
+| WE | Corrtest CS920 (disco Ø5, cuerpo Ø10), o Gamry Ø3/Ø7 con `FLOW["we_option"] = 0` |
+| Chorro | Ø0.5 a 1.5 mm del disco (h/a = 3, R/a = 5); Re = 48 a 1 mL/min (laminar) |
+| Altura del disco | collar sobre el cuerpo del GC, ajustado con la galga (`out/flow_gauge`) |
+| Cavidad | Ø20, 2.4 mL; RE y CE a la altura del disco; salida arriba (purga burbujas) |
+| Entrada | tubo de 1/16" en un conector 1/4-28 de fondo plano por debajo, entre las patas |
+
+**Señal esperada** (Albery y Brett, i = 1.38 n F C D^2/3 ν^−5/12 V^3/4 a^−1/2 R^3/4, con n = 2 y
+D = 1.9 × 10⁻⁵ cm²/s): **≈100 nA por µM de nitrito a 1 mL/min** (59 nA a 0.5 mL/min; 167 nA a
+2 mL/min). La boquilla de 0.5 mm no sale impresa: el cuerpo se maquina en PEEK, o en una pieza
+impresa se pega un tramo de tubo PEEK de 0.5 mm de diámetro interior como boquilla.

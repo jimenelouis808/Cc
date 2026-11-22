@@ -195,12 +195,105 @@ def epd(p=P) -> list:
     return parts
 
 
+def tcell(p=P) -> list:
+    from modules import tcell as m
+    parts = [   # la primera pieza es el apoyo (footing_checks): aquí, las patas de la tapa
+        ("tapa inferior con patas", m.cap_bottom(p).val(), C["lid"], CELL),
+        ("cuerpo de la celda T", m.build(p).val(), C["body"], CELL),
+        ("tapa superior", m.cap_top(p).val(), C["lid"], CELL),
+        ("resorte", m.spring(p), C["metal"], CELL),
+    ]
+    for n, s in m.collectors(p):
+        if n == "electrodo WE":
+            parts.append(("muestra: electrodo WE", s, C["sample"], SAMPLE))
+        elif n == "separador":
+            parts.append((n, s, E.COLORS["ptfe"], CELL))
+        elif n == "electrodo CE":
+            parts.append((n, s, (0.30, 0.30, 0.32, 1.0), CELL))
+        else:
+            parts.append((n, s, C["ti"], CELL))
+    for spec, r_out, r_in in m.port_axes(p):
+        if spec["name"] == "RE":
+            r_tip = m.bore_r(p) + p.TCELL["re_recess"]
+            parts += _electrode(E.place(E.reference(p), E.port_tip(spec, r_tip),
+                                        FACE_ANGLE[spec["face"]]))
+        else:
+            parts += side_fitting(spec, r_out)
+    return parts
+
+
+def hcell(p=P) -> list:
+    from modules import hcell as m
+    h, lay = p.HCELL, m.layout(p)
+    o = lambda s: m.other_side(s, p)  # noqa: E731
+    parts = [
+        ("media celda de trabajo", m.build_half(p).val(), C["body"], CELL),
+        ("tapa de trabajo (WE, RE, gas, muestreo)", m.build_lid(p, "we").val(), C["lid"], CELL),
+        ("media celda del CE (misma pieza, girada)", o(m.build_half(p).val()), C["body"], CELL),
+        ("tapa del CE", o(m.build_lid(p, "ce").val()), C["lid"], CELL),
+        ("membrana (Nafion)", m.membrane(p), C["film"], CELL),
+    ]
+    parts += [("O-ring de la membrana", r, C["gasket"], CELL) for r in m.mem_orings(p)]
+    parts += [("tornillo M3 de brida", b, C["metal"], CELL) for b in m.bolts(p)]
+    parts += [("barra de agitación", m.stir_bar(p), E.COLORS["ptfe"], CELL),
+              ("barra de agitación (CE)", o(m.stir_bar(p)), E.COLORS["ptfe"], CELL)]
+    z_lid = lay["z_lid"][1]
+    for spec in p.HCELL_WE_PORTS:
+        x, y = spec["xy"]
+        if spec["name"] == "WE":
+            parts += _electrode(E.place(E.glassy_carbon(h["we_option"], p), (x, y, 0.0), 0,
+                                        vertical="up"))
+        elif spec["name"] == "RE":
+            parts += _electrode(E.place(E.reference(p), (x, y, 0.0), 0, vertical="up"))
+        else:
+            parts += top_fitting(spec["name"], x, y, z_lid)
+            z_end = h["gas_tube_z"] if spec["name"] == "gas_in" else (
+                -5.0 if spec["name"] == "sample" else None)
+            if z_end is not None:
+                parts.append((f"tubo sumergido {spec['name']}", cyl(1.6, z_end, z_lid, x, y),
+                              C["tube"], FLOW))
+    for spec in p.HCELL_CE_PORTS:
+        x, y = spec["xy"]
+        X, Y = lay["x_other"] - x, -y
+        if spec["name"] == "CE":
+            coil_h, straight = E.ce_lengths(p)
+            parts += _electrode(E.place(E.counter_pt(p), (X, Y, -coil_h), 0, vertical="up"))
+        else:
+            parts += top_fitting(spec["name"] + "_ce", X, Y, z_lid)
+            if spec["name"] == "gas_in":
+                parts.append(("tubo sumergido gas_in_ce",
+                              cyl(1.6, h["gas_tube_z"], z_lid, X, Y), C["tube"], FLOW))
+    return parts
+
+
+def flow(p=P) -> list:
+    from modules import flow_walljet as m
+    f, lay = p.FLOW, m.layout(p)
+    parts = [
+        ("cuerpo de la celda de flujo", m.build(p).val(), C["body"], CELL),
+        ("collar del GC", m.build_collar(p).val(), C["lid"], CELL),
+    ]
+    parts += _electrode(E.place(E.glassy_carbon(f["we_option"], p), (0.0, 0.0, 0.0), 0,
+                                vertical="up"))
+    parts += _ports(p, m.port_axes(p))
+    zb, zt = lay["z_bottom"], lay["z_skirt"] + 4.0
+    parts += [("conector inlet", cyl(8.0, zb - 10.0, zb), C["fitting"], FLOW),
+              ("tubo inlet", cyl(1.6, zt, zb - 10.0), C["tube"], FLOW),
+              ("tubo inlet (salida lateral)",
+               cq.Solid.makeCylinder(0.8, 40, cq.Vector(0, 0.8, zt), cq.Vector(0, -1, 0)),
+               C["tube"], FLOW)]
+    return parts
+
+
 CONFIGS = {
     "raman_sellada": ("Raman · muestra sellada (base + anillo + tapa)", raman_sealed),
     "raman_pinza": ("Raman · muestra en pinza CS945", raman_clamp),
     "xrd": ("XRD · película y pinza CS945", xrd),
     "chladni": ("Electrodeposición acústica (Chladni)", chladni),
     "epd": ("EPD / DEP · chip interdigitado", epd),
+    "tcell": ("Celda T (tipo Swagelok) con RE · supercapacitores", tcell),
+    "hcell": ("Celda H · dos compartimentos con membrana", hcell),
+    "flujo": ("Celda de flujo wall-jet · nitrito", flow),
 }
 
 
@@ -234,12 +327,33 @@ NOTES = {
         "Dos pinzas CS945 toman los pads en el extremo +x del chip, que sobresale de la base.",
         "Entrada y salida verticales sobre los agujeros del vidrio superior.",
     ],
+    "tcell": [
+        "Pila vertical en un agujero de 1/2\": colector inferior (WE), electrodo WE, separador, "
+        "electrodo CE, colector superior.",
+        "z = 0 es la cara del electrodo WE: el colector inferior apoya en la tapa (tope duro).",
+        "Un resorte en la tapa superior da la presión sobre la pila (≈0.18 MPa).",
+        "RE por +y en el plano del separador (punta 0.5 mm fuera del agujero); llenado por −y.",
+    ],
+    "hcell": [
+        "Dos medias celdas iguales; la membrana va entre dos O-rings de cara, 4 M3 en las bridas.",
+        "Trabajo: GC Ø5 boca abajo frente a la ventana, RE al lado, burbujeo, salida y muestreo.",
+        "CE de Pt en el otro compartimento: sus productos no llegan al WE.",
+        "Una barra de agitación en cada cámara, bajo los electrodos.",
+    ],
+    "flujo": [
+        "El chorro sube por la boquilla de 0.5 mm y choca en el centro del disco del GC (z = 0).",
+        "El collar fija la altura del GC: se ajusta con la galga antes de montar.",
+        "RE y CE en la cavidad, a la altura del disco; salida arriba (purga burbujas).",
+        "El tubo de entrada sale por debajo, entre las patas.",
+    ],
 }
 
 
-LABELS = {"RE": "RE Ag/AgCl", "CE": "CE (Pt)", "CS945": "WE · pinza CS945",
+LABELS = {"RE": "RE Ag/AgCl", "CE": "CE (Pt)", "CS945": "WE · pinza CS945", "GC": "WE · GC",
           "double knob": "WE · pinza double knob"}
-FLOW_LABELS = {"inlet": "entrada", "outlet": "salida", "vent": "venteo", "CE": "cable del CE"}
+FLOW_LABELS = {"inlet": "entrada", "outlet": "salida", "vent": "venteo", "CE": "cable del CE",
+               "fill": "llenado", "gas_in": "entrada de gas", "gas_out": "salida de gas",
+               "sample": "muestreo", "gas_in_ce": "gas (CE)", "gas_out_ce": "salida (CE)"}
 
 
 def _anchors(parts) -> dict:
