@@ -40,6 +40,7 @@ Para verlo funcionando sin haber exportado nada todavía: `python3 start.py --de
 | `queries/scopus.md` | Consultas de Scopus: núcleo, alta sensibilidad, facetas, corpus de contexto, checklist de exportación |
 | `queries/wos.md` | Lo mismo para WoS, con las diferencias de sintaxis que sí cambian los resultados |
 | `queries/thesaurus_seed.txt` | Tesauro de arranque para biblioshiny (29 grupos curados) |
+| `queries/DICCIONARIO.md` | **Generado**: todos los términos que reconoce el clasificador, y si la consulta puede recuperarlos |
 | `docs/PROTOCOL.md` | Preguntas de investigación, decisiones de alcance, criterios, sesgos, reporte |
 | `docs/WORKFLOW.md` | El recorrido completo paso a paso, y las herramientas complementarias |
 | `nanocarbon_biblio/` | El paquete de Python |
@@ -181,6 +182,21 @@ cp queries/gold_standard_template.csv queries/gold_standard.csv   # y complétal
 python -m nanocarbon_biblio.cli recall --raw data/raw --gold queries/gold_standard.csv
 ```
 
+### ¿La consulta puede recuperar lo que el clasificador etiqueta?
+
+```bash
+python -m nanocarbon_biblio.cli vocab
+```
+
+Regenera `queries/DICCIONARIO.md` —el vocabulario completo, por faceta y
+etiqueta— y comprueba que cada dopante y cada defecto del léxico sea alcanzable
+por la consulta. Si añades un dopante a `lexicons.py` y olvidas la consulta, la
+etiqueta nunca podría dispararse porque esos registros no se recuperarían: esto
+lo detecta y devuelve código 1. Hoy: **25/25 cubiertas**.
+
+El diccionario sirve también como descripción del esquema de clasificación para
+Métodos, que es justo lo que un revisor pide. Publícalo como suplementario.
+
 Da el **recall relativo** (objetivo ≥ 0.95) y la lista de los que no salieron.
 Cada uno señala un agujero de vocabulario: **arréglalo en la consulta, no añadas
 el artículo a mano** — el mismo agujero esconde trabajos que no conoces.
@@ -241,14 +257,14 @@ clasificador opaco:
 pytest nanocarbon_biblio/tests -q
 ```
 
-72 tests. Cubren el parseo de ambos formatos, la conservación literal de `CR` en
+80 tests. Cubren el parseo de ambos formatos, la conservación literal de `CR` en
 el viaje de ida y vuelta, la deduplicación entre bases puntuada **contra la
 verdad conocida** del corpus sintético, los guardas de desambiguación, la
 protección contra re-ingerir la propia salida, y el arranque de la GUI.
 
 ## Estado de verificación
 
-- **Python**: probado y ejecutado en este entorno; los 72 tests pasan.
+- **Python**: probado y ejecutado en este entorno; los 80 tests pasan.
 - **GUI**: recorrida de principio a fin (cargar → deduplicar → clasificar →
   cribar → exportar) contra el corpus de demostración, y capturada en imágenes.
   Los botones de R se activan solos cuando `Rscript` está en el PATH.

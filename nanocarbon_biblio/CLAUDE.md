@@ -82,7 +82,10 @@ Rscript R/00_build_M.R && Rscript R/01_core_analyses.R
 ```
 
 ## Dónde añadir cosas
-- Nuevo dopante o tipo de defecto → `lexicons.py` (`FACETS`) + test en `tests/test_classify.py`.
+- Nuevo dopante o tipo de defecto → `lexicons.py` (`FACETS`) + test en
+  `tests/test_classify.py` + **añadirlo a `queries/scopus.md` y `wos.md`** y
+  regenerar con `cli vocab`. Si no está en la consulta, esos registros no se
+  recuperan y la etiqueta nunca puede dispararse. `test_vocabulary.py` lo vigila.
 - Nueva base de datos (Dimensions, Lens, OpenAlex) → `loaders.py` con un
   `load_<db>()` que preserve el crudo, más una rama en `exporters.py` y el
   `dbsource` correspondiente en `R/00_build_M.R`.
@@ -98,6 +101,18 @@ Rscript R/00_build_M.R && Rscript R/01_core_analyses.R
 - **`R/fixtures/` es un corpus sintético de 25 obras** para que
   `99_check_r_setup.R` sea autónomo. Es la única excepción a «nada de datos en
   el repo», y son inventados.
+
+## Vocabulario
+- **`queries/DICCIONARIO.md` se genera, no se edita.** Sale de `lexicons.py` con
+  `cli vocab`; editarlo a mano lo desincroniza del código en la siguiente corrida.
+- **El léxico y la consulta NO son la misma lista, a propósito.** La consulta
+  recupera; el léxico describe lo recuperado. Los términos de aplicación y de
+  método no deben entrar en los bloques núcleo de la consulta: arruinarían su
+  precisión. Solo las facetas `host`, `dopant` y `defect` tienen que estar en
+  ambas, y eso es lo que comprueba `coverage_report`.
+- **Las ausencias deliberadas se declaran en `BY_DESIGN_ABSENT`**, con su razón.
+  Sin eso, el comprobador marcaría la decisión de alcance sobre el grafeno como
+  un defecto en cada corrida.
 
 ## Qué no hacer
 - No usar el corpus de demostración para nada que acabe en el manuscrito: son

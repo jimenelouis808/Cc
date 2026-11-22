@@ -24,6 +24,7 @@ from .indicators import combined_share_trend, dopant_lag_table, gap_matrix, anno
 from .loaders import load_directory
 from .prisma import counts_from_manifest, write_svg
 from .validation import load_gold_standard, score_agreement, score_recall
+from .vocabulary import coverage_report, write_dictionary
 from .thesaurus import suggest_synonyms, write_thesaurus
 
 __all__ = ["main", "build_parser"]
@@ -200,6 +201,35 @@ def _cmd_demo(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_vocab(args: argparse.Namespace) -> int:
+    """Generate the classifier's vocabulary reference and check query coverage."""
+    query_text = ""
+    for name in ("scopus.md", "wos.md"):
+        path = Path(args.queries) / name
+        if path.exists():
+            query_text += path.read_text(encoding="utf-8")
+    if not query_text:
+        print(f"AVISO: no encontré consultas en {args.queries}; "
+              "el diccionario saldrá sin la sección de cobertura.", file=sys.stderr)
+
+    out = write_dictionary(args.out, query_text=query_text)
+    print(f"Wrote {out}")
+
+    if query_text:
+        rows = coverage_report(query_text)
+        uncovered = [r for r in rows if not r["covered"]]
+        by_design = [r for r in rows if r["by_design"]]
+        print(f"Cobertura: {len(rows) - len(uncovered)}/{len(rows)} etiquetas de "
+              f"recuperación alcanzables por la consulta "
+              f"({len(by_design)} ausentes por diseño).")
+        for row in uncovered:
+            print(f"  SIN CUBRIR  {row['facet']}/{row['label']} "
+                  f"({row['n_terms']} términos, ninguno en la consulta)", file=sys.stderr)
+        if uncovered:
+            return 1
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     """Build the argument parser (exposed so tests can invoke subcommands)."""
     parser = argparse.ArgumentParser(
@@ -262,6 +292,15 @@ def build_parser() -> argparse.ArgumentParser:
                     help="final included count (derived from --excluded if omitted)")
     pr.add_argument("--title", default="Flujo PRISMA 2020")
     pr.set_defaults(func=_cmd_prisma)
+
+    vocab = sub.add_parser(
+        "vocab",
+        help="generate the classifier vocabulary reference and check query coverage",
+    )
+    vocab.add_argument("--queries", default="queries",
+                       help="directory holding scopus.md and wos.md")
+    vocab.add_argument("--out", default="queries/DICCIONARIO.md")
+    vocab.set_defaults(func=_cmd_vocab)
     return parser
 
 
