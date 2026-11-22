@@ -46,18 +46,22 @@ from llenado import MIN_EDGE
 HERE = Path(__file__).resolve().parent
 FOLDER = HERE / "isotermas_co2"
 WIDTH = 6.6
-TEMPERATURE = 298.0
+#: TEMPERATURA=373 runs the desorption isotherm of a temperature swing
+#: (files suffixed "-373K"); only the pressures a swing needs.
+TEMPERATURE = float(os.environ.get("TEMPERATURA", "298"))
 #: Five, not the seven of the pristine study: with every wall atom
 #: charged (the neutralising shift touches all of them) a move costs
 #: about 1 ms, and five variants at seven points is most of a day.
-PRESSURES = (1e-3, 1e-2, 3e-2, 0.1, 1.0)
+PRESSURES = ((1e-3, 1e-2, 3e-2, 0.1, 1.0) if TEMPERATURE == 298.0
+             else (0.015, 0.1))
 #: Wall force field: "adsorption" (published, neutral group charges; the
 #: default) or "electrode" (the EDLC table, whose carboxyl is a
 #: carboxylate). Set with CAMPO=electrode. The first study ran on the
 #: electrode table and its files carry no suffix; adsorption runs are
 #: suffixed "-ads". Pristine and N5 are the same in both (no groups).
 FORCEFIELD = os.environ.get("CAMPO", "adsorption")
-SUFFIX = "" if FORCEFIELD == "electrode" else "-ads"
+SUFFIX = ("" if FORCEFIELD == "electrode" else "-ads") + (
+    "" if TEMPERATURE == 298.0 else f"-{TEMPERATURE:g}K")
 
 #: Variant -> how its sheet is made. Seeds fixed; N's seed is the first
 #: that puts no two N atoms side by side, an environment the typing
