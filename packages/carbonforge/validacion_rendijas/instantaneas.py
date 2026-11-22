@@ -30,7 +30,7 @@ COLOURS = {"wall": (0.62, 0.65, 0.68), "C": (0.25, 0.25, 0.25),
            "O": (0.85, 0.18, 0.15), "N": (0.20, 0.35, 0.85),
            "H": (0.97, 0.97, 0.97), "Hw": (0.97, 0.97, 0.97),
            "H2": (0.95, 0.55, 0.75), "Nw": (0.2, 0.55, 0.85),
-           "Ow": (0.85, 0.18, 0.15)}
+           "Ow": (0.85, 0.18, 0.15), "water_O": (0.96, 0.66, 0.10)}
 
 
 def combine(framework: Atoms, configuration: list[dict]) -> Atoms:
@@ -41,7 +41,8 @@ def combine(framework: Atoms, configuration: list[dict]) -> Atoms:
         for symbol, pos in zip(SITES[mol["species"]], sites):
             if symbol is None:
                 continue
-            a = Atoms(symbol, positions=[pos], tags=[1])
+            a = Atoms(symbol, positions=[pos],
+                      tags=[3 if mol["species"] == "H2O" else 1])
             out += a
     return out
 
@@ -112,21 +113,35 @@ def colours(atoms: Atoms) -> list:
                        COLOURS["H"] if s == "H" else COLOURS["wall"])
         elif t == 2:
             out.append(COLOURS["H2"])
+        elif t == 3:
+            out.append(COLOURS["water_O"] if s == "O" else COLOURS["H"])
         else:
             out.append(COLOURS[s])
     return out
 
 
-VIEWS = {"lado": "-80x,10y", "arriba": "0x", "perspectiva": "-30x,20y"}
+VIEWS = {"lado": "-80x,10y", "arriba": "0x", "perspectiva": "-30x,20y",
+         "corte": "-90x"}
+
+
+#: 3D crystals are drawn as a slab this thick (A) through the cell
+#: centre, seen along y, or everything overlaps.
+SLABS = {"co2-schwarzita-d": 7.0}
 
 
 def draw(path: Path, view: str) -> None:
     atoms = read(str(path))
+    if path.stem in SLABS and view == "lado":
+        y = atoms.positions[:, 1] % atoms.cell[1, 1]
+        keep = np.abs(y - atoms.cell[1, 1] / 2) < SLABS[path.stem] / 2
+        atoms = atoms[keep]
+        view = "corte"
     tags = atoms.get_tags()
     radii = [0.55 if t == 0 else (1.0 if t == 2 else
              {"H": 0.35, "C": 0.6, "O": 0.62, "N": 0.65}[s])
              for s, t in zip(atoms.get_chemical_symbols(), tags)]
-    write(str(path.with_name(f"{path.stem}_{view}.png")), atoms,
+    name = "lado" if view == "corte" else view
+    write(str(path.with_name(f"{path.stem}_{name}.png")), atoms,
           rotation=VIEWS[view],
           colors=colours(atoms), radii=radii, scale=22, show_unit_cell=0)
 
