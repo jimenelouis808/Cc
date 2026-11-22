@@ -47,6 +47,7 @@ tbkit/
 │                     #   site_screening: substitutional dopant sites, TB ranking, top-N for DFT
 │                     #   delta_fit: fit and cross-validate a Δ correction (writes to a workdir only)
 │                     #   validation_report: writes docs/VALIDACION.md from validation/ and parameters/
+│                     #   validation_figures: docs/GRAFICOS.md + docs/figuras (bands as lines, every GPAW check)
 │                     #   band_validation: graphene and 5 tubes, every model vs GPAW PW bands (+ dzp)
 │                     #   band_fit: electronic-only C set (c_bandas) fitted to those bands
 │                     #   interlayer: GPAW PBE (+D3 apart) bilayers, graphite, ABC, sliding (resumable)

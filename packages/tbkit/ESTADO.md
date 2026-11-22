@@ -181,6 +181,8 @@ Lo que hizo falta, en orden:
 
 El precio, en `validity`: niveles moleculares 0,43 → 0,71 eV; Mo2 sin gap (fuera de lo
 cubierto); MoS3/MoOS2 con 0,8-1 eV; red ~10 veces más rígida (no relajar la celda); el
-error de ~0,2 eV en la valencia K − Γ hace frágil el carácter directo bajo deformación.
+error de ~0,2 eV en la valencia K − Γ hace frágil el carácter directo bajo deformación. Visto al
+graficar (`docs/GRAFICOS.md`): en Mo bcc la celda de GPAW no es mínimo de `xu_chnosmo` (±2 %
+en el plano bajan la energía 0,02-0,04 eV; GPAW la suben 0,02-0,03).
 Siguiente para la rigidez: el estrés de la celda como objetivo, o más deformaciones con
 relajación interna.
