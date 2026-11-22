@@ -18,8 +18,16 @@ group sums to (nearly) zero:
 * NH2: Chen et al., *Phys. Chem. Chem. Phys.* (2026), SI Table S1 (DFT,
   NBO-style per-atom charges; the group leaves -0.109 e on the sheet).
 
-Lattice nitrogen (graphitic, pyridinic, pyrrolic) keeps the electrode
-table's representative charges: neither source gives them. These charges
+* Graphitic N: computed here (``validacion_rendijas/dft_cargas``, UKS
+  PBE/def2-SVP on an H-terminated C36NH15 flake, IAO charges, stable to
+  0.04 e against a C12NH9 flake). The N is nearly neutral and its three
+  carbons slightly positive; the ~+0.25 e left per N is the electron it
+  donates to the pi system, spread over the sheet by the neutralisation.
+  With these, the CO2 q_st rise on 5 % N (+3.3 kJ/mol) matches a measured
+  one (NH3-nitrided carbon, Nanomaterials 9 (2019) 1776: +3.3).
+
+Pyridinic and pyrrolic N keep the electrode table's representative
+charges: no source here gives them. These charges
 are still model choices, not settled values; for quantitative work derive
 them from DFT with :mod:`~carbonforge.forcefields.charges`.
 """
@@ -34,6 +42,8 @@ from .typing import TypingResult, assign_types
 
 _TENNEY = "Tenney & Lastoskie, Environ. Prog. 25 (2006) 343, Table 3"
 _CHEN = "Chen et al., Phys. Chem. Chem. Phys. (2026), SI Table S1"
+_DFT = ("this repository, validacion_rendijas/dft_cargas "
+        "(PBE/def2-SVP, IAO, C36NH15 flake)")
 _C = ELECTRODE_PARAMS["C_sp2"]
 
 
@@ -63,6 +73,9 @@ ADSORPTION_OVERRIDES: dict[str, LJParams] = {
     "C_amine": _like("C_N", -0.172, _CHEN),
     "N_amine": _like("N_amine", -0.539, _CHEN),
     "H_N": _like("H_N", 0.301, _CHEN),
+    # Graphitic (substitutional) N and the carbons bonded to it.
+    "N_graph": _like("N_graph", -0.017, _DFT),
+    "C_graphN": _like("C_N", 0.089, _DFT),
 }
 
 #: The full table: electrode parameters with the overrides applied.
@@ -78,7 +91,9 @@ def assign_adsorption_types(atoms: Atoms) -> TypingResult:
     ``O_carboxyl_hydroxyl``, that one's H ``H_carboxyl``, and the ring
     carbon it hangs from ``C_base_carboxyl``. A carbon bonded to an
     ``N_amine`` becomes ``C_amine``, so the amine's carbon is not charged
-    as the neighbour of a lattice nitrogen. Everything else is left as
+    as the neighbour of a lattice nitrogen, and one bonded to an
+    ``N_graph`` becomes ``C_graphN`` (its DFT charge is not the one a
+    pyridinic N's neighbour would carry). Everything else is left as
     :func:`~carbonforge.forcefields.typing.assign_types` typed it.
 
     Returns a :class:`TypingResult` with the refined ``types``.
@@ -110,5 +125,7 @@ def assign_adsorption_types(atoms: Atoms) -> TypingResult:
                     types[c] = "C_base_carboxyl"
         elif any(types[j] == "N_amine" for j in neighbours(i)):
             types[i] = "C_amine"
+        elif any(types[j] == "N_graph" for j in neighbours(i)):
+            types[i] = "C_graphN"
     typed.types = types
     return typed

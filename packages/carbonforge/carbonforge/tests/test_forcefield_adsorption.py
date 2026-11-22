@@ -55,10 +55,16 @@ def test_the_wall_uses_it_by_default_and_the_electrode_on_request():
         wall_parameters(atoms, forcefield="nope")
 
 
-def test_lattice_nitrogen_keeps_the_electrode_charges():
+def test_graphitic_nitrogen_carries_the_dft_charges():
+    """Nearly neutral N, slightly positive neighbours: the donated
+    electron (+0.25 e per N here) is left for the neutralisation."""
     from carbonforge.dopants.substitutional import dope_random
     atoms = dope_random(build_graphene_supercell(nx=6, ny=4, vacuum=10.0),
                         "N", 0.05, seed=1)
+    typed = assign_adsorption_types(atoms)
+    n = typed.types.count("N_graph")
+    assert n and typed.types.count("C_graphN") == 3 * n
     a = wall_parameters(atoms, neutralise=False)
-    e = wall_parameters(atoms, neutralise=False, forcefield="electrode")
-    assert np.allclose(a["charge"], e["charge"])
+    assert a["net_charge"] == pytest.approx(n * (-0.017 + 3 * 0.089))
+    assert np.sum(wall_parameters(atoms)["charge"]) == pytest.approx(0.0,
+                                                                    abs=1e-9)
