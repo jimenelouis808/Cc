@@ -1,0 +1,5 @@
+cristalina-knee-schwarzite-diamond       canal   6.72 A  K_H    318.6 (308-329)  q_st 33.82
+cristalina-knee-schwarzite-gyroid        canal  15.80 A  K_H     14.9 (15-15)  q_st 15.55
+cristalina-knee-schwarzite-primitive     canal  14.61 A  K_H     22.4 (22-23)  q_st 18.60
+cristalina-knee-super-graphene_k22       canal  10.03 A  K_H    347.4 (343-352)  q_st 36.40
+cristalina-knee-super-square_k12_n7      canal  10.49 A  K_H    327.2 (326-328)  q_st 29.11

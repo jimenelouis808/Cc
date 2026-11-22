@@ -1,0 +1,2 @@
+warning: The `UV_NATIVE_TLS` environment variable is deprecated and will be removed in a future release. Use `UV_SYSTEM_CERTS` instead.
+COOH HR 80 %: CO2 5.319, H2O 1.322 mol/kg, S 177

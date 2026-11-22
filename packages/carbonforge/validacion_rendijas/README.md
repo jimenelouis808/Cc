@@ -1353,3 +1353,33 @@ ahora las del campo de adsorción (`ADSORPTION_PARAMS`). Con él, la rendija N 5
 da las cargas de `n_dft.py` (a 4·10⁻⁴ e por el redondeo), así que sus resultados (K_H 1189,
 S 221) son los de N 5 % con ese campo. El N piridínico y el pirrólico siguen con
 cargas representativas.
+
+## CO₂ en las superestructuras cristalinas
+
+`henry_cristalinas.py` y `selectividad.py` sobre las cinco cristalinas (ruta de
+rodillas, `cristalinas/*.extxyz`), con pared Steele neutra. 298 K; la mezcla es
+15 % CO₂ en N₂ a 0.1 MPa.
+
+| estructura | canal (Å) | K_H | q_st (kJ/mol) | CO₂ en mezcla (mol/kg) | S CO₂/N₂ |
+|---|---|---|---|---|---|
+| súper-cuadrado k12 | 10.49 | 327 | 29.1 | 1.59 | 28.9 ± 0.5 |
+| schwarzita D | 6.72 | 319 | 33.8 | 1.50 | 27.0 ± 0.5 |
+| súper-grafeno k22 | 10.03 | 347 | 36.4 | 0.74 | 16.6 ± 0.2 |
+| schwarzita P | 14.61 | 22 | 18.6 | 0.33 | 6.7 |
+| giroide | 15.80 | 15 | 15.6 | 0.22 | 5.0 |
+| *rendija 6.6 Å* | *(3.2)* | *547* | *29.7* | *5.76* | *129 ± 4* |
+
+- **Ninguna cristalina se acerca a la rendija**: la que más carga, el
+  súper-cuadrado, adsorbe 3.6 veces menos CO₂ en mezcla y separa 4.5 veces peor.
+- **Corrección a lo que dije al lanzarlo.** El canal de 6.72 Å de la schwarzita D
+  NO es el ancho de la rendija de 6.6 Å. El canal es la esfera libre más grande,
+  mientras que 6.6 Å es la distancia entre los planos de carbono de la rendija,
+  cuya esfera libre es ~3.2 Å (6.6 − 3.4). La schwarzita D tiene poros el doble
+  de anchos que el óptimo para CO₂, y eso es lo que la hunde.
+- **El súper-grafeno tiene el pozo más profundo del estudio** (q_st 36.4 kJ/mol),
+  pero en pocos sitios. Son bolsillos en los nodos, como los de las jaulas con
+  H₂: sube la pendiente inicial y no la capacidad.
+- **El veredicto de antes se mantiene para CO₂**: la variable que manda es el
+  ancho de poro, y una superestructura de carbono cristalina no baja de ~6.7 Å
+  de canal sin colapsar. Las superestructuras ganaron algo con H₂ a 77 K
+  (molécula pequeña, bolsillos); con CO₂ a 298 K no hay ninguna que valga la pena.
