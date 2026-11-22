@@ -35,12 +35,22 @@ EQUILIBRATION, PRODUCTION = 200_000, 600_000
 
 PURE = ("rendija-6.6", "super-cube", "super-tetrahedron")
 FUNCTIONAL = tuple(f"funcional-{n}" for n in funcional_co2.VARIANTS)
+#: Crystalline (knee-route) superstructures from nanocarbon_lab, in
+#: ``cristalinas/`` as extxyz. Schwarz D's channel (6.72 A) is the 6.6 A
+#: slit's width; the others bracket it.
+CRYSTALLINE = tuple(f"cristalina-{p.stem}" for p in
+                    sorted((HERE / "cristalinas").glob("*.extxyz")))
 
 
 def structure(name: str):
     """(atoms, wall) for a structure name."""
     if name in PURE:
         return pure_framework(name), None
+    if name.startswith("cristalina-"):
+        from ase.io import read
+        from llenado_super import embed
+        path = HERE / "cristalinas" / f"{name.split('-', 1)[1]}.extxyz"
+        return embed(read(str(path)))[0], None
     atoms = funcional_co2.slit(name.split("-", 1)[1])
     return atoms, wall_parameters(atoms, forcefield="adsorption")
 
@@ -64,7 +74,7 @@ def run(name: str) -> None:
 def table() -> None:
     print(f"{'estructura':24s} {'CO2 mol/kg':>10s} {'N2 mol/kg':>10s} "
           f"{'x_CO2':>6s} {'S CO2/N2':>14s}")
-    for name in PURE + FUNCTIONAL:
+    for name in PURE + FUNCTIONAL + CRYSTALLINE:
         path = FOLDER / f"{name}.json"
         if not path.exists():
             continue
