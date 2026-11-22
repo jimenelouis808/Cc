@@ -1350,6 +1350,6 @@ las cargas DFT el calor de adsorción coincide con el experimento.
 
 Estas cargas del N grafítico (N −0.017, C vecinos +0.089, tipo `C_graphN`) son
 ahora las del campo de adsorción (`ADSORPTION_PARAMS`). Con él, la rendija N 5 %
-da exactamente las cargas de `n_dft.py`, así que sus resultados (K_H 1189,
+da las cargas de `n_dft.py` (a 4·10⁻⁴ e por el redondeo), así que sus resultados (K_H 1189,
 S 221) son los de N 5 % con ese campo. El N piridínico y el pirrólico siguen con
 cargas representativas.
