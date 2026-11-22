@@ -35,7 +35,7 @@ class TestEwald:
         for precision in (1e-5, 1e-7):
             system = co2.CO2System(None, box)
             system.ewald = co2.Ewald(box, co2.CUTOFF, precision)
-            system.constant = system.ewald.molecule_constant()
+            system.constants = [system.ewald.molecule_constant()]
             system.molecules = list(molecules)
             totals.append(system.total_energy())
         assert abs(totals[0] - totals[1]) < 1e-3 * abs(totals[1])
@@ -52,7 +52,8 @@ class TestEwald:
 
         def coulomb(other_centre, other_axis):
             system = co2.CO2System(None, box)
-            system.pair_epsilon = system.pair_epsilon * 0.0
+            system.pairs = {k: (sig, eps * 0.0, qq)
+                            for k, (sig, eps, qq) in system.pairs.items()}
             system.molecules = [co2.molecule(centre, np.array([1.0, 0, 0]))]
             system.ewald.structure = system.ewald.terms(
                 system.molecules[0], co2.SITE_CHARGE)

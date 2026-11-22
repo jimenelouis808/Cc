@@ -64,6 +64,42 @@ SITE_SIGMA = np.array([3.05, 2.80, 3.05])
 SITE_EPSILON = np.array([79.0, 27.0, 79.0])
 SITE_CHARGE = np.array([-0.35, 0.70, -0.35])
 
+
+
+@dataclass(frozen=True)
+class Species:
+    """A rigid, linear, three-site molecule: end, centre, end.
+
+    ``half`` is the centre-to-end distance in A. Site arrays are in the
+    order end, centre, end. A site with sigma 0 carries charge only (N2's
+    centre of mass). Critical constants are for the Peng-Robinson
+    reservoir.
+    """
+
+    name: str
+    half: float
+    sigma: tuple[float, float, float]
+    epsilon: tuple[float, float, float]
+    charge: tuple[float, float, float]
+    molar_mass: float
+    tc: float
+    pc_mpa: float
+    omega: float
+
+
+#: TraPPE CO2 (Potoff & Siepmann 2001).
+CO2 = Species("CO2", BOND_CO, (3.05, 2.80, 3.05), (79.0, 27.0, 79.0),
+              (-0.35, 0.70, -0.35), 44.0095, 304.13, 7.3773, 0.22394)
+#: TraPPE N2 (Potoff & Siepmann 2001): N-N 1.10 A, a massless charge at
+#: the centre of mass keeps the molecule neutral and gives its quadrupole.
+N2 = Species("N2", 0.55, (3.31, 0.0, 3.31), (36.0, 0.0, 36.0),
+             (-0.482, 0.964, -0.482), 28.0134, 126.19, 3.3958, 0.0372)
+
+#: Peng-Robinson binary interaction parameters. CO2-N2 from fits to
+#: vapour-liquid equilibrium (around -0.02); at 0.1 MPa and 298 K the
+#: reservoir is within 0.1 % of ideal whatever its value.
+PR_KIJ: dict[frozenset, float] = {frozenset(("CO2", "N2")): -0.017}
+
 #: Steele graphite carbon.
 WALL_SIGMA: float = 3.40
 WALL_EPSILON: float = 28.0
@@ -170,10 +206,14 @@ def activity(temperature: float, pressure_mpa: float) -> float:
 # Geometry
 # --------------------------------------------------------------------------
 
-def molecule(centre: np.ndarray, axis: np.ndarray) -> np.ndarray:
-    """Positions of O, C, O for a molecule centred at `centre`."""
+def molecule(centre: np.ndarray, axis: np.ndarray,
+             half: float = BOND_CO) -> np.ndarray:
+    """Sites of a linear three-site molecule centred at `centre`.
+
+    Default is CO2 (O, C, O); pass ``half=species.half`` for another.
+    """
     axis = axis / np.linalg.norm(axis)
-    return np.array([centre - BOND_CO * axis, centre, centre + BOND_CO * axis])
+    return np.array([centre - half * axis, centre, centre + half * axis])
 
 
 def random_axis(rng: np.random.Generator) -> np.ndarray:
@@ -246,14 +286,14 @@ class Ewald:
     def reciprocal(self) -> float:
         return float(np.sum(self.weights * np.abs(self.structure) ** 2))
 
-    def molecule_constant(self) -> float:
+    def molecule_constant(self, species: Species = CO2) -> float:
         """Self and intramolecular corrections for ONE molecule, in K.
 
-        The same for every molecule (rigid, identical), so an insertion
-        adds it and a deletion removes it.
+        The same for every molecule of a species (rigid, identical), so
+        an insertion adds it and a deletion removes it.
         """
-        sites = molecule(np.zeros(3), np.array([0.0, 0.0, 1.0]))
-        q = SITE_CHARGE
+        sites = molecule(np.zeros(3), np.array([0.0, 0.0, 1.0]), species.half)
+        q = np.asarray(species.charge)
         self_term = -COULOMB_K_A * self.alpha / np.sqrt(np.pi) * np.sum(q * q)
         intra = 0.0
         for i in range(3):
@@ -337,7 +377,8 @@ class CO2System:
     """
 
     def __init__(self, framework: Atoms | None, edges: np.ndarray,
-                 cutoff: float = CUTOFF, wall: dict | None = None):
+                 cutoff: float = CUTOFF, wall: dict | None = None,
+                 species: tuple[Species, ...] = (CO2,)):
         edges = np.asarray(edges, dtype=float)
         if edges.min() < 2.0 * cutoff:
             raise ValueError(
@@ -347,7 +388,11 @@ class CO2System:
         self.volume = float(np.prod(edges))
         self.cutoff = cutoff
         self.ewald = Ewald(edges, cutoff)
-        self.constant = self.ewald.molecule_constant()
+        self.species = tuple(species)
+        self.site_q = [np.asarray(sp.charge, float) for sp in self.species]
+        self.constants = [self.ewald.molecule_constant(sp)
+                          for sp in self.species]
+        self.constant = self.constants[0]
         self.wall_charge = None
         self.wall_frame_structure = None
         if framework is not None and len(framework):
@@ -377,22 +422,36 @@ class CO2System:
                     self.ewald.structure = self.wall_frame_structure.copy()
             # Lorentz-Berthelot per (wall atom, CO2 site); an atom with no
             # LJ (sigma 0, e.g. a hydroxyl H) contributes none.
-            self.wall_sig = 0.5 * (sigma[:, None] + SITE_SIGMA[None, :])
-            self.wall_eps = np.sqrt(epsilon[:, None] * SITE_EPSILON[None, :])
-            self.wall_eps[sigma == 0.0] = 0.0
+            self.wall_sig, self.wall_eps = [], []
+            for sp in self.species:
+                ss = np.asarray(sp.sigma)
+                se = np.asarray(sp.epsilon)
+                ws = 0.5 * (sigma[:, None] + ss[None, :])
+                we = np.sqrt(epsilon[:, None] * se[None, :])
+                we[sigma == 0.0] = 0.0
+                self.wall_sig.append(ws)
+                self.wall_eps.append(we)
         else:
             self.wall = None
             self.wall_tree = None
             self.carbon_mass_g = 0.0
-        sig = 0.5 * (SITE_SIGMA[:, None] + SITE_SIGMA[None, :])
-        eps = np.sqrt(SITE_EPSILON[:, None] * SITE_EPSILON[None, :])
-        self.pair_sigma, self.pair_epsilon = sig, eps
-        self.pair_charge = SITE_CHARGE[:, None] * SITE_CHARGE[None, :]
+        # Per species pair (a, b): 3x3 sigma, epsilon, q_i q_j.
+        self.pairs = {}
+        for a, sa in enumerate(self.species):
+            for b, sb in enumerate(self.species):
+                sig = 0.5 * (np.asarray(sa.sigma)[:, None]
+                             + np.asarray(sb.sigma)[None, :])
+                eps = np.sqrt(np.asarray(sa.epsilon)[:, None]
+                              * np.asarray(sb.epsilon)[None, :])
+                qq = self.site_q[a][:, None] * self.site_q[b][None, :]
+                self.pairs[a, b] = (sig, eps, qq)
+        self.reach = 2 * max(sp.half for sp in self.species) + 0.5
         self.molecules: list[np.ndarray] = []      # each (3, 3)
+        self.kinds: list[int] = []                 # species index of each
 
     # -- energies ---------------------------------------------------------
 
-    def wall_energy(self, sites: np.ndarray) -> float:
+    def wall_energy(self, sites: np.ndarray, kind: int = 0) -> float:
         if self.wall_tree is None:
             return 0.0
         total = 0.0
@@ -403,8 +462,8 @@ class CO2System:
                 r = np.linalg.norm(_wrap(self.wall[near] - sites[s],
                                          self.edges), axis=1)
                 total += float(np.sum(_lj(np.maximum(r, 0.5),
-                                          self.wall_sig[near, s],
-                                          self.wall_eps[near, s])))
+                                          self.wall_sig[kind][near, s],
+                                          self.wall_eps[kind][near, s])))
             if self.wall_charge is not None:
                 near = self.charged_tree.query_ball_point(
                     sites[s] % self.edges, self.cutoff)
@@ -412,79 +471,110 @@ class CO2System:
                     r = np.maximum(np.linalg.norm(_wrap(
                         self.charged[near] - sites[s], self.edges), axis=1),
                         0.5)
-                    total += float(COULOMB_K_A * SITE_CHARGE[s]
+                    total += float(COULOMB_K_A * self.site_q[kind][s]
                                    * np.sum(self.charged_q[near]
                                             * erfc(self.ewald.alpha * r) / r))
         return total
 
-    def fluid_energy(self, sites: np.ndarray, skip: int | None = None) -> float:
+    def fluid_energy(self, sites: np.ndarray, skip: int | None = None,
+                     kind: int = 0) -> float:
         """LJ + real-space Coulomb of one molecule with all the others."""
         if not self.molecules:
             return 0.0
         others = np.asarray(self.molecules)
+        kinds = np.asarray(self._all_kinds(), dtype=int)
         if skip is not None:
             others = np.delete(others, skip, axis=0)
+            kinds = np.delete(kinds, skip)
             if not len(others):
                 return 0.0
         # Molecule cutoff on centres, generous by the molecule's length.
         centre = sites[1]
         dc = np.linalg.norm(_wrap(others[:, 1] - centre, self.edges), axis=1)
-        others = others[dc < self.cutoff + 2 * BOND_CO + 0.5]
-        if not len(others):
-            return 0.0
-        delta = _wrap(others[:, None, :, :] - sites[None, :, None, :],
-                      self.edges)               # (m, 3 mine, 3 theirs, 3)
-        r = np.maximum(np.linalg.norm(delta, axis=-1), 0.5)
-        inside = r < self.cutoff
-        lj = _lj(r, self.pair_sigma[None], self.pair_epsilon[None])
-        coulomb = (COULOMB_K_A * self.pair_charge[None]
-                   * erfc(self.ewald.alpha * r) / r)
-        return float(np.sum((lj + coulomb) * inside))
+        near = dc < self.cutoff + self.reach
+        others, kinds = others[near], kinds[near]
+        total = 0.0
+        for b in np.unique(kinds):
+            theirs = others[kinds == b]
+            sig, eps, qq = self.pairs[kind, int(b)]
+            delta = _wrap(theirs[:, None, :, :] - sites[None, :, None, :],
+                          self.edges)           # (m, 3 mine, 3 theirs, 3)
+            r = np.maximum(np.linalg.norm(delta, axis=-1), 0.5)
+            inside = r < self.cutoff
+            lj = _lj(r, sig[None], eps[None])
+            coulomb = COULOMB_K_A * qq[None] * erfc(self.ewald.alpha * r) / r
+            total += float(np.sum((lj + coulomb) * inside))
+        return total
 
     def total_energy(self) -> float:
         """Every term from scratch. For checking the incremental moves."""
         total = 0.0
-        saved = self.molecules
+        saved, saved_kinds = self.molecules, self._all_kinds()
         for i, sites in enumerate(saved):
-            total += self.wall_energy(sites)
-            self.molecules = saved[:i]
-            total += self.fluid_energy(sites)
-        self.molecules = saved
+            k = saved_kinds[i]
+            total += self.wall_energy(sites, k)
+            self.molecules, self.kinds = saved[:i], saved_kinds[:i]
+            total += self.fluid_energy(sites, kind=k)
+        self.molecules, self.kinds = saved, saved_kinds
         frame = (self.wall_frame_structure if self.wall_frame_structure
                  is not None else np.zeros_like(self.ewald.structure))
         structure = frame.copy()
-        for sites in saved:
-            structure += self.ewald.terms(sites, SITE_CHARGE)
+        for sites, k in zip(saved, saved_kinds):
+            structure += self.ewald.terms(sites, self.site_q[k])
         # The wall-wall reciprocal energy is a constant of the rigid
         # framework and is not part of any move: subtract it.
         total += float(np.sum(self.ewald.weights * (np.abs(structure) ** 2
                                                     - np.abs(frame) ** 2)))
-        total += len(saved) * self.constant
+        total += sum(self.constants[k] for k in saved_kinds)
         return total
 
     # -- moves ------------------------------------------------------------
 
-    def insertion(self, sites: np.ndarray) -> tuple[float, np.ndarray]:
-        delta = self.ewald.terms(sites, SITE_CHARGE)
-        energy = (self.wall_energy(sites) + self.fluid_energy(sites)
-                  + self.ewald.change(delta) + self.constant)
+    def insertion(self, sites: np.ndarray,
+                  kind: int = 0) -> tuple[float, np.ndarray]:
+        delta = self.ewald.terms(sites, self.site_q[kind])
+        energy = (self.wall_energy(sites, kind)
+                  + self.fluid_energy(sites, kind=kind)
+                  + self.ewald.change(delta) + self.constants[kind])
         return energy, delta
 
     def deletion(self, index: int) -> tuple[float, np.ndarray]:
-        sites = self.molecules[index]
-        delta = -self.ewald.terms(sites, SITE_CHARGE)
-        energy = -(self.wall_energy(sites) + self.fluid_energy(sites, index)
-                   + self.constant) + self.ewald.change(delta)
+        sites, kind = self.molecules[index], self.kind_of(index)
+        delta = -self.ewald.terms(sites, self.site_q[kind])
+        energy = -(self.wall_energy(sites, kind)
+                   + self.fluid_energy(sites, index, kind)
+                   + self.constants[kind]) + self.ewald.change(delta)
         return energy, delta
 
     def displacement(self, index: int, trial: np.ndarray) -> tuple[float, np.ndarray]:
-        old = self.molecules[index]
-        delta = (self.ewald.terms(trial, SITE_CHARGE)
-                 - self.ewald.terms(old, SITE_CHARGE))
-        energy = (self.wall_energy(trial) + self.fluid_energy(trial, index)
-                  - self.wall_energy(old) - self.fluid_energy(old, index)
+        old, kind = self.molecules[index], self.kind_of(index)
+        q = self.site_q[kind]
+        delta = self.ewald.terms(trial, q) - self.ewald.terms(old, q)
+        energy = (self.wall_energy(trial, kind)
+                  + self.fluid_energy(trial, index, kind)
+                  - self.wall_energy(old, kind)
+                  - self.fluid_energy(old, index, kind)
                   + self.ewald.change(delta))
         return energy, delta
+
+    def kind_of(self, index: int) -> int:
+        """Species index of a molecule; 0 (the first species) for one
+        placed in ``molecules`` directly, without :meth:`add`."""
+        return self.kinds[index] if index < len(self.kinds) else 0
+
+    def _all_kinds(self) -> list[int]:
+        return [self.kind_of(i) for i in range(len(self.molecules))]
+
+    def add(self, sites: np.ndarray, kind: int, delta: np.ndarray) -> None:
+        self.molecules.append(sites)
+        self.kinds.append(kind)
+        self.ewald.structure += delta
+
+    def remove(self, index: int, delta: np.ndarray) -> None:
+        self.kinds = self._all_kinds()
+        self.molecules.pop(index)
+        self.kinds.pop(index)
+        self.ewald.structure += delta
 
 
 # --------------------------------------------------------------------------
@@ -581,8 +671,7 @@ def run_co2_gcmc(
             energy, delta = system.insertion(sites)
             if rng.random() < zeta * volume / (n + 1) * np.exp(
                     -beta * min(energy, 1e6)):
-                system.molecules.append(sites)
-                system.ewald.structure += delta
+                system.add(sites, 0, delta)
                 running += energy
                 accepted["insert"] += 1
         elif choice < 0.5:
@@ -592,8 +681,7 @@ def run_co2_gcmc(
                 energy, delta = system.deletion(index)
                 if rng.random() < n / (zeta * volume) * np.exp(
                         -beta * energy):
-                    system.molecules.pop(index)
-                    system.ewald.structure += delta
+                    system.remove(index, delta)
                     running += energy
                     accepted["delete"] += 1
         else:
