@@ -68,12 +68,14 @@ SITE_CHARGE = np.array([-0.35, 0.70, -0.35])
 
 @dataclass(frozen=True)
 class Species:
-    """A rigid, linear, three-site molecule: end, centre, end.
+    """A rigid three-site molecule; site 1 is its centre.
 
-    ``half`` is the centre-to-end distance in A. Site arrays are in the
-    order end, centre, end. A site with sigma 0 carries charge only (N2's
-    centre of mass). Critical constants are for the Peng-Robinson
-    reservoir.
+    Linear by default: sites end, centre, end, with ``half`` the
+    centre-to-end distance in A. A bent molecule gives ``body``, the
+    three site positions in its own frame with site 1 at the origin
+    (water: H, O, H). A site with sigma 0 carries charge only (N2's
+    centre of mass, water's hydrogens). Critical constants are for the
+    Peng-Robinson reservoir.
     """
 
     name: str
@@ -85,6 +87,18 @@ class Species:
     tc: float
     pc_mpa: float
     omega: float
+    body: tuple | None = None
+
+    def frame(self) -> np.ndarray:
+        """Site positions in the molecule's frame, (3, 3), centre at 0."""
+        if self.body is not None:
+            return np.asarray(self.body, dtype=float)
+        return np.array([[0.0, 0.0, -self.half], [0.0, 0.0, 0.0],
+                         [0.0, 0.0, self.half]])
+
+    def extent(self) -> float:
+        """Largest distance of a site from the centre, A."""
+        return float(np.linalg.norm(self.frame(), axis=1).max())
 
 
 #: TraPPE CO2 (Potoff & Siepmann 2001).
@@ -98,6 +112,16 @@ N2 = Species("N2", 0.55, (3.31, 0.0, 3.31), (36.0, 0.0, 36.0),
 #: Peng-Robinson binary interaction parameters. CO2-N2 from fits to
 #: vapour-liquid equilibrium (around -0.02); at 0.1 MPa and 298 K the
 #: reservoir is within 0.1 % of ideal whatever its value.
+#: SPC/E water (Berendsen et al. 1987): O-H 1.0 A, H-O-H 109.47 deg,
+#: LJ on O only. Site order H, O, H. Rigid and non-polarisable, and its
+#: own vapour pressure is not water's: a humidity quoted against the
+#: real saturation pressure is not the same humidity for the model.
+_HOH = np.deg2rad(109.47) / 2
+WATER = Species("H2O", 1.0, (0.0, 3.166, 0.0), (0.0, 78.20, 0.0),
+                (0.4238, -0.8476, 0.4238), 18.0153, 647.10, 22.064, 0.3443,
+                body=((-np.sin(_HOH), 0.0, np.cos(_HOH)), (0.0, 0.0, 0.0),
+                      (np.sin(_HOH), 0.0, np.cos(_HOH))))
+
 PR_KIJ: dict[frozenset, float] = {frozenset(("CO2", "N2")): -0.017}
 
 #: Steele graphite carbon.
@@ -216,6 +240,22 @@ def molecule(centre: np.ndarray, axis: np.ndarray,
     return np.array([centre - half * axis, centre, centre + half * axis])
 
 
+def random_rotation(rng: np.random.Generator) -> np.ndarray:
+    """A rotation matrix uniform over SO(3), from a random unit quaternion."""
+    q = rng.normal(size=4)
+    w, x, y, z = q / np.linalg.norm(q)
+    return np.array([
+        [1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)],
+        [2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w)],
+        [2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)]])
+
+
+def place(species: Species, centre: np.ndarray,
+          rotation: np.ndarray) -> np.ndarray:
+    """Sites of ``species`` with its centre at ``centre``, rotated."""
+    return centre + species.frame() @ rotation.T
+
+
 def random_axis(rng: np.random.Generator) -> np.ndarray:
     """A direction uniform on the sphere."""
     v = rng.normal(size=3)
@@ -292,7 +332,7 @@ class Ewald:
         The same for every molecule of a species (rigid, identical), so
         an insertion adds it and a deletion removes it.
         """
-        sites = molecule(np.zeros(3), np.array([0.0, 0.0, 1.0]), species.half)
+        sites = species.frame()
         q = np.asarray(species.charge)
         self_term = -COULOMB_K_A * self.alpha / np.sqrt(np.pi) * np.sum(q * q)
         intra = 0.0
@@ -445,7 +485,7 @@ class CO2System:
                               * np.asarray(sb.epsilon)[None, :])
                 qq = self.site_q[a][:, None] * self.site_q[b][None, :]
                 self.pairs[a, b] = (sig, eps, qq)
-        self.reach = 2 * max(sp.half for sp in self.species) + 0.5
+        self.reach = 2 * max(sp.extent() for sp in self.species) + 0.5
         self.molecules: list[np.ndarray] = []      # each (3, 3)
         self.kinds: list[int] = []                 # species index of each
 

@@ -32,7 +32,7 @@ import numpy as np
 from ase import Atoms
 
 from .co2 import (AVOGADRO, BOLTZMANN, CO2, CUTOFF, N2, PR_KIJ, CO2System,
-                  Species, molecule, random_axis)
+                  Species, place, random_rotation)
 
 R_SI = 8.314462618
 
@@ -180,8 +180,8 @@ def run_mixture_gcmc(
         if choice < 0.2:
             tried["insert"] += 1
             k = int(rng.integers(ns))
-            sites = molecule(rng.random(3) * box, random_axis(rng),
-                             species[k].half)
+            sites = place(species[k], rng.random(3) * box,
+                          random_rotation(rng))
             energy, delta = system.insertion(sites, k)
             if rng.random() < zeta[k] * volume / (counts[k] + 1) * np.exp(
                     -beta * min(energy, 1e6)):
@@ -208,8 +208,9 @@ def run_mixture_gcmc(
                 new_k = int(rng.choice([k for k in range(ns) if k != old_k]))
                 index = int(rng.choice(of_kind(old_k)))
                 old = system.molecules[index]
-                axis = old[2] - old[1]
-                trial = molecule(old[1], axis, species[new_k].half)
+                # Same centre, fresh orientation: uniform, so the move
+                # is symmetric and its reverse draws the same way.
+                trial = place(species[new_k], old[1], random_rotation(rng))
                 e_out, d_out = system.deletion(index)
                 system.remove(index, d_out)
                 e_in, d_in = system.insertion(trial, new_k)
@@ -234,14 +235,13 @@ def run_mixture_gcmc(
             if n:
                 index = int(rng.integers(n))
                 old = system.molecules[index]
-                half = species[system.kinds[index]].half
-                centre = old[1]
                 if kind == "move":
-                    centre = (centre + (rng.random(3) - 0.5) * 2.0) % box
-                    axis = old[2] - old[1]
+                    shift = (rng.random(3) - 0.5) * 2.0
+                    trial = old + shift
+                    trial = trial - box * np.floor(trial[1] / box)
                 else:
-                    axis = random_axis(rng)
-                trial = molecule(centre, axis, half)
+                    trial = place(species[system.kinds[index]], old[1],
+                                  random_rotation(rng))
                 energy, delta = system.displacement(index, trial)
                 if energy < 0 or rng.random() < np.exp(-beta * energy):
                     system.molecules[index] = trial

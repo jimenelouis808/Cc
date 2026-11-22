@@ -52,3 +52,34 @@ class TestTheSimulation:
         def theta(sp):
             return 2 * sp.charge[0] * sp.half ** 2
         assert 0.25 < theta(co2.N2) / theta(co2.CO2) < 0.4
+
+
+class TestRigidMolecules:
+    def test_a_linear_frame_is_the_old_molecule(self):
+        rot = co2.random_rotation(np.random.default_rng(0))
+        centre = np.array([3.0, 4.0, 5.0])
+        sites = co2.place(co2.CO2, centre, rot)
+        assert np.allclose(sites, co2.molecule(centre, sites[2] - sites[1]))
+
+    def test_water_is_spce(self):
+        f = co2.WATER.frame()
+        oh = np.linalg.norm(f[[0, 2]] - f[1], axis=1)
+        assert np.allclose(oh, 1.0)
+        cos = f[0] @ f[2] / (oh[0] * oh[1])
+        assert np.degrees(np.arccos(cos)) == pytest.approx(109.47, abs=1e-6)
+        assert sum(co2.WATER.charge) == pytest.approx(0.0)
+
+    def test_rotations_are_proper(self):
+        rng = np.random.default_rng(1)
+        for _ in range(5):
+            r = co2.random_rotation(rng)
+            assert np.allclose(r @ r.T, np.eye(3))
+            assert np.linalg.det(r) == pytest.approx(1.0)
+
+    def test_a_ternary_with_water_keeps_its_bookkeeping(self):
+        box = np.array([25.0, 25.0, 25.0])
+        r = run_mixture_gcmc(None, 298.0, 0.1, (0.15, 0.82, 0.03),
+                             species=(co2.CO2, co2.N2, co2.WATER), edges=box,
+                             equilibration=500, production=2000, seed=4)
+        assert r.energy_drift_k < 1e-6
+        assert len(r.mean_counts) == 3
