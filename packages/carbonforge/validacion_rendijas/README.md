@@ -1306,3 +1306,44 @@ CO₂ puro por vacío conviene la rendija sin modificar. Las jaulas quedan
 descartadas para CO₂. La cifra del N sigue dependiendo de cargas
 representativas, cuyo efecto sobre el calor ya parecía exagerado frente al
 experimento.
+
+## Las cargas del N grafítico por DFT
+
+`dft_cargas/cargas_n_grafitico.py` se corre con PySCF en un entorno aparte;
+carbonforge no depende de él. Usa un copo de grafeno terminado en H con el N
+en el centro, UKS PBE/def2-SVP, y dos esquemas de carga:
+
+| | IAO, C₁₂NH₉ | IAO, C₃₆NH₁₅ | ESP, C₁₂NH₉ | ESP, C₃₆NH₁₅ | tabla representativa |
+|---|---|---|---|---|---|
+| N | +0.02 | −0.02 | +0.12 | +0.26 | −0.45 |
+| C vecinos (media) | +0.11 | +0.09 | +0.28 | −0.08 | +0.15 |
+
+- **IAO converge** (cambia menos de 0.04 e entre copos). **El ajuste ESP no**: el
+  signo de los vecinos cambia, así que se descarta. El copo de 7.5 Å no
+  terminó en 2 h.
+- **El N grafítico es casi neutro, no N⁻.** Alrededor de cada N quedan unos
+  +0.25 e: es el electrón que el N dona al sistema π, y en la rendija se reparte
+  sobre los C_sp2, que es lo que ya hacía la neutralización.
+
+**La rendija N 5 % con esas cargas** (`n_dft.py`, `n_dft.json`):
+
+| N 5 % | K_H | q_st (kJ/mol) | S CO₂/N₂ |
+|---|---|---|---|
+| tabla representativa | 1305 | 35.0 | 185 ± 7 |
+| cargas DFT (IAO) | 1189 | 33.0 | 221 ± 8 |
+| cargas DFT, y LJ del N igual al del C | 973 | 32.7 | — |
+| sin cargas (solo LJ de la tabla) | 820 | 30.9 | — |
+| prístina | 552 | 29.7 | 133 ± 4 |
+
+- **La ventaja del N sobrevive a las cargas DFT.** Aunque el N cargue el sitio al
+  revés, el contraste entre un sitio positivo y una lámina negativa sigue
+  atrayendo el cuadrupolo del CO₂. La selectividad incluso sube.
+- **El pozo LJ del N** (85 K en la tabla, frente a 28 K del C) explica una parte,
+  no la mayoría. Con el N igual al C en LJ, K_H queda 1.76 veces el de la prístina.
+- **q_st 33.0 frente a 29.7, +3.3 kJ/mol**, exactamente lo que mide el
+  experimento (carbón nitrurado con NH₃, *Nanomaterials* 2019: 28.5 → 31.7). Con
+  la tabla representativa salía +5.3.
+
+**Conclusión**: el dopaje con N grafítico mejora de verdad la captura de CO₂ en
+una rendija de 6.6 Å, con constante de Henry ×2 y selectividad CO₂/N₂ ×1.6. Con
+las cargas DFT el calor de adsorción coincide con el experimento.
