@@ -822,12 +822,196 @@ def not_adopted(plt) -> str:
     return "\n".join(parts)
 
 
+def spectra_header(plt) -> str:
+    return ("## Espectros y resultados calculados\n\n"
+            "Raman, IR y XPS que tbkit ya calculó, con GPAW donde hay referencia.\n")
+
+
+def graphene_raman(plt) -> str:
+    data = json.loads((VALIDATION / "graphene_2d_gpaw.json").read_text())
+    grid = np.asarray(data["spectra"]["grid"])
+    lasers = [k for k in data["spectra"] if k != "grid"]
+    fig, ax = plt.subplots(figsize=(8, 3.8), constrained_layout=True)
+    for laser, colour in zip(lasers, SERIES, strict=False):
+        y = np.asarray(data["spectra"][laser])
+        ax.plot(grid, y / y.max(), color=colour, lw=1.3, label=f"láser {laser.replace('.', ',')} eV")
+    ax.set_xlabel("desplazamiento Raman (cm⁻¹)")
+    ax.set_ylabel("intensidad (normalizada)")
+    ax.set_yticks([])
+    ax.grid(axis="x", color=GRID, lw=0.5)
+    ax.legend(loc="upper right")
+    image = _save(fig, "raman_grafeno_2d")
+    plt.close(fig)
+    rows = [[_f(r["laser_ev"]), _f(r["g_frequency"], 0), _f(r["2D_position"], 0),
+             _f(r["2D'_position"], 0), _f(r["2D_intensity"] / r["g_intensity"], 1)]
+            for r in data["results"]]
+    return ("### Grafeno: bandas 2D y 2D' por doble resonancia\n\n"
+            "Fonones GPAW PBE (LCAO dzp, 6×6) con electrones del modelo π; la dispersión de "
+            "la 2D con el láser es la de la doble resonancia.\n\n"
+            f"![Raman 2D del grafeno]({image})\n\n"
+            + _md_table(["láser (eV)", "G (cm⁻¹)", "2D (cm⁻¹)", "2D' (cm⁻¹)", "I(2D)/I(G)"],
+                        rows) + "\n\n(`validation/graphene_2d_gpaw.json`.)\n")
+
+
+def nanotube_raman(plt) -> str:
+    data = json.loads((VALIDATION / "cnt_xu_carbon.json").read_text())
+    d = np.array([t["diameter_nm"] for t in data])
+    order = np.argsort(d)
+    fig, axes = plt.subplots(1, 2, figsize=(10, 3.8), constrained_layout=True)
+    ax = axes[0]
+    ax.plot(d[order], [data[i]["rbm"] for i in order], color=SERIES[0], lw=1.4, marker="o",
+            ms=5, label="tbkit (Xu)")
+    ax.plot(d[order], [data[i]["rbm_araujo"] for i in order], color=INK, lw=1.4,
+            label="Araujo 2008 (experimental)")
+    ax.plot(d[order], [data[i]["rbm_jorio"] for i in order], color=MUTED, lw=1.2,
+            ls=(0, (4, 2)), label="Jorio 2001 (experimental)")
+    ax.set_xlabel("diámetro (nm)")
+    ax.set_ylabel("RBM (cm⁻¹)")
+    ax.set_title("modo radial (RBM)", loc="left")
+    ax.legend(loc="upper right")
+    ax.grid(color=GRID, lw=0.5)
+    ax = axes[1]
+    ax.plot(d[order], [data[i]["g_plus"] for i in order], color=SERIES[0], lw=1.4, marker="o",
+            ms=5, label="G⁺")
+    ax.plot(d[order], [data[i]["g_minus"] for i in order], color=SERIES[1], lw=1.4, marker="s",
+            ms=5, label="G⁻")
+    ax.set_xlabel("diámetro (nm)")
+    ax.set_ylabel("frecuencia (cm⁻¹)")
+    ax.set_title("banda G", loc="left")
+    ax.legend(loc="lower right")
+    ax.grid(color=GRID, lw=0.5)
+    image = _save(fig, "raman_nanotubos")
+    plt.close(fig)
+    rows = [[t["tube"], "metálico" if t["kind"] == "metal" else "semiconductor",
+             _f(t["diameter_nm"], 3), _f(t["rbm"], 0), _f(t["rbm_araujo"], 0), _f(t["g_plus"], 0),
+             _f(t["g_minus"], 0)] for t in (data[i] for i in order)]
+    return ("### Nanotubos: RBM y G con Xu\n\n"
+            "Frecuencias de Γ de tbkit (Xu, sin escalar) frente a las relaciones experimentales "
+            "RBM(d). La G⁻ de los tubos metálicos depende de la malla k (anomalía de Kohn).\n\n"
+            f"![RBM y G de nanotubos]({image})\n\n"
+            + _md_table(["tubo", "tipo", "d (nm)", "RBM (cm⁻¹)", "RBM Araujo", "G⁺", "G⁻"],
+                        rows) + "\n\n(`validation/cnt_xu_carbon.json`.)\n")
+
+
+def coil_raman(plt) -> str:
+    data = json.loads((VALIDATION / "coil204_doped_raman.json").read_text())["summary_by_laser_eV"]
+    names = {"pristine": "sin dopar", "N": "N grafítico", "amine": "amina"}
+    fig, axes = plt.subplots(1, 3, figsize=(12, 3.6), constrained_layout=True)
+    for (key, ylabel), ax in zip((("G_centroid", "centroide G (cm⁻¹)"),
+                                  ("D_centroid", "centroide de la ventana D (cm⁻¹)"),
+                                  ("D_over_G", "I(D)/I(G)")), axes, strict=True):
+        for (name, label), colour, marker in zip(names.items(), SERIES, "os^", strict=False):
+            lasers = sorted(data[name], key=float)
+            ax.plot([float(x) for x in lasers], [data[name][x][key] for x in lasers],
+                    color=colour, lw=1.4, marker=marker, ms=5, label=label)
+        ax.set_xlabel("energía del láser (eV)")
+        ax.set_ylabel(ylabel)
+        ax.grid(color=GRID, lw=0.5)
+    axes[0].legend(loc="best")
+    image = _save(fig, "raman_coil")
+    plt.close(fig)
+    unc = json.loads((VALIDATION / "coil204_raman_uncertainty.json").read_text())["eta"]
+    rows = []
+    for name, label in names.items():
+        for eta in sorted(unc[name], key=float):
+            r = unc[name][eta].get("2.33", {})
+            rows.append([label, eta.replace(".", ","), _f(r.get("G_centroid"), 0),
+                         _f(r.get("D_centroid"), 0), _f(r.get("ID_IG"), 3)])
+    return ("### Coil de 204 átomos: Raman resonante\n\n"
+            "tbkit `xu_chn`, Raman resonante a tres láseres. No hay una banda D separada: "
+            "la «ventana D» es la intensidad entre 1250 y 1450 cm⁻¹.\n\n"
+            f"![Raman de la coil]({image})\n\n"
+            "Sensibilidad al ensanchamiento η (láser 2,33 eV):\n\n"
+            + _md_table(["estructura", "η (eV)", "G (cm⁻¹)", "ventana D (cm⁻¹)", "I(D)/I(G)"],
+                        rows) +
+            "\n\n(`validation/coil204_doped_raman.json`, `coil204_raman_uncertainty.json`.)\n")
+
+
+def coil_ir(plt) -> str:
+    data = json.loads((VALIDATION / "coil204_doped_raman.json").read_text())["ir"]["by_structure"]
+    names = {"pristine": "sin dopar", "N": "N grafítico", "amine": "amina"}
+    bands = list(next(iter(data.values()))["band_fractions"])
+    fig, ax = plt.subplots(figsize=(8, 3.6), constrained_layout=True)
+    _bars(ax, [b + " cm⁻¹" for b in bands],
+          [[data[n]["band_fractions"][b] for b in bands] for n in names], SERIES[:3],
+          list(names.values()))
+    ax.set_ylabel("fracción de la intensidad IR")
+    _top_legend(fig, ax, 3)
+    image = _save(fig, "ir_coil")
+    plt.close(fig)
+    rows = [[label, _f(data[n]["total_km_mol"], 0),
+             ", ".join(f"{f:.0f} ({i:.0f})" for f, i in data[n]["strongest_cm1_km_mol"][:5])]
+            for n, label in names.items()]
+    return ("### Coil de 204 átomos: infrarrojo\n\n"
+            f"![IR de la coil]({image})\n\n"
+            + _md_table(["estructura", "intensidad total (km/mol)",
+                         "modos más intensos: cm⁻¹ (km/mol)"], rows) +
+            "\n\n(`validation/coil204_doped_raman.json`.)\n")
+
+
+def xps_spectra(plt) -> str:
+    data = json.loads((VALIDATION / "xps_tb_vs_gpaw.json").read_text())["rows"]
+    systems = ("coronene", "coronene_N_graphitic", "coronene_N_pyridinic", "coronene_epoxide",
+               "coronene_diol")
+    fig, axes = plt.subplots(1, len(systems), figsize=(14, 3.4), constrained_layout=True)
+    grid = np.linspace(-4, 4, 801)
+    sigma = 0.35
+
+    def curve(values):
+        return sum(np.exp(-0.5 * ((grid - v) / sigma) ** 2) for v in values)
+
+    for ax, name in zip(axes, systems, strict=True):
+        rows = [r for r in data if r["system"] == name and r["element"] == "C"]
+        g = [r["gpaw"] for r in rows]
+        t = [r["xu_chno/hole"]["total"] for r in rows]
+        ax.plot(grid, curve(g), color=INK, lw=1.6, label="GPAW ΔSCF")
+        ax.plot(grid, curve(t), color=SERIES[0], lw=1.3, label="tbkit (hueco)")
+        ax.set_title({"coronene": "coroneno", "coronene_N_graphitic": "coroneno, N grafítico",
+                      "coronene_N_pyridinic": "coroneno, N piridínico",
+                      "coronene_epoxide": "coroneno, epóxido",
+                      "coronene_diol": "coroneno, diol"}[name], loc="left")
+        ax.set_xlabel("desplazamiento C 1s (eV)")
+        ax.set_yticks([])
+        ax.grid(axis="x", color=GRID, lw=0.5)
+    _top_legend(fig, axes[0], 2)
+    image = _save(fig, "xps_espectros")
+    plt.close(fig)
+    return ("### XPS C 1s de láminas (coroneno)\n\n"
+            "Un pico gaussiano (σ 0,35 eV) por sitio inequivalente calculado, sin multiplicidad: "
+            "las alturas no son las de un espectro medido, las posiciones sí.\n\n"
+            f"![Espectros C 1s]({image})\n")
+
+
+def coil_sites(plt) -> str:
+    n = json.loads((VALIDATION / "coil204_N_graphitic.json").read_text())["comparison"]
+    a = json.loads((VALIDATION / "coil204_amine_tb.json").read_text())["gpaw_check"]
+    fig, axes = plt.subplots(1, 2, figsize=(9.5, 3.4), constrained_layout=True)
+    _bars(axes[0], [f"sitio {r['site']} ({r['rings']})" for r in n],
+          [[r["gpaw_relative_eV"] for r in n], [r["tb_relative_eV"] for r in n]],
+          [INK, SERIES[0]], ["GPAW", "tbkit xu_chn"])
+    axes[0].set_ylabel("energía relativa (eV)")
+    axes[0].set_title("N grafítico en la coil", loc="left")
+    names = list(a)
+    _bars(axes[1], names, [[a[k]["gpaw"] for k in names], [a[k]["tb"] for k in names]],
+          [INK, SERIES[0]], ["GPAW", "tbkit xu_chn"])
+    axes[1].set_title("amina (-NH₂ + H) en la coil", loc="left")
+    _top_legend(fig, axes[0], 2)
+    image = _save(fig, "coil_sitios")
+    plt.close(fig)
+    return ("### Coil: sitio preferido del dopante\n\n"
+            "Energía de cada sitio respecto al más estable, GPAW en la geometría TB.\n\n"
+            f"![Sitios del dopante]({image})\n")
+
+
 SECTIONS = {"bandas": ("carbon_bands", "graphene_strain_bands", "layer_bands", "mo_bands",
                        "mo_crystals"),
             "otros": ("crystals", "crystal_energies", "molecular_gaps", "infrared",
                       "frequency_table", "frequencies_by_file", "coil_modes", "spin",
                       "spin_profiles", "xps", "xtb_table", "xtb_layers", "timing",
-                      "not_adopted")}
+                      ),
+            "espectros": ("spectra_header", "graphene_raman", "nanotube_raman", "coil_raman",
+                          "coil_ir", "xps_spectra", "coil_sites"),
+            "no_adoptado": ("not_adopted",)}
 
 
 def build(only: str | None = None) -> Path:

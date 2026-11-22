@@ -287,6 +287,92 @@ Segundos de reloj por energía + fuerzas de un flake triangular h-saturado (omp_
 
 ![Tiempo de cálculo](figuras/tiempos.png)
 
+## Espectros y resultados calculados
+
+Raman, IR y XPS que tbkit ya calculó, con GPAW donde hay referencia.
+
+### Grafeno: bandas 2D y 2D' por doble resonancia
+
+Fonones GPAW PBE (LCAO dzp, 6×6) con electrones del modelo π; la dispersión de la 2D con el láser es la de la doble resonancia.
+
+![Raman 2D del grafeno](figuras/raman_grafeno_2d.png)
+
+| láser (eV) | G (cm⁻¹) | 2D (cm⁻¹) | 2D' (cm⁻¹) | I(2D)/I(G) |
+|---|---|---|---|---|
+| 1,96 | 1605 | 2819 | 3287 | 9,6 |
+| 2,41 | 1605 | 2872 | 3313 | 12,0 |
+| 2,80 | 1605 | 2913 | 3327 | 13,0 |
+
+(`validation/graphene_2d_gpaw.json`.)
+
+### Nanotubos: RBM y G con Xu
+
+Frecuencias de Γ de tbkit (Xu, sin escalar) frente a las relaciones experimentales RBM(d). La G⁻ de los tubos metálicos depende de la malla k (anomalía de Kohn).
+
+![RBM y G de nanotubos](figuras/raman_nanotubos.png)
+
+| tubo | tipo | d (nm) | RBM (cm⁻¹) | RBM Araujo | G⁺ | G⁻ |
+|---|---|---|---|---|---|---|
+| (6,3) | metálico | 0,630 | 352 | 361 | 1661 | 1623 |
+| (8,0) | semiconductor | 0,636 | 349 | 357 | 1668 | 1623 |
+| (5,5) | metálico | 0,685 | 327 | 332 | 1655 | 1587 |
+| (8,2) | metálico | 0,725 | 306 | 313 | 1652 | 1598 |
+| (10,0) | semiconductor | 0,790 | 282 | 287 | 1669 | 1643 |
+| (6,6) | metálico | 0,819 | 271 | 277 | 1672 | 1621 |
+| (12,0) | metálico | 0,945 | 235 | 240 | 1643 | 1626 |
+| (8,8) | metálico | 1,088 | 201 | 209 | 1684 | 1652 |
+| (14,0) | semiconductor | 1,100 | 201 | 206 | 1687 | 1665 |
+| (17,0) | semiconductor | 1,334 | 165 | 170 | 1689 | 1671 |
+| (10,10) | metálico | 1,358 | 160 | 167 | 1689 | 1665 |
+
+(`validation/cnt_xu_carbon.json`.)
+
+### Coil de 204 átomos: Raman resonante
+
+tbkit `xu_chn`, Raman resonante a tres láseres. No hay una banda D separada: la «ventana D» es la intensidad entre 1250 y 1450 cm⁻¹.
+
+![Raman de la coil](figuras/raman_coil.png)
+
+Sensibilidad al ensanchamiento η (láser 2,33 eV):
+
+| estructura | η (eV) | G (cm⁻¹) | ventana D (cm⁻¹) | I(D)/I(G) |
+|---|---|---|---|---|
+| sin dopar | 0,05 | 1593 | 1295 | 0,046 |
+| sin dopar | 0,1 | 1596 | 1290 | 0,048 |
+| sin dopar | 0,2 | 1598 | 1282 | 0,046 |
+| N grafítico | 0,05 | 1588 | 1285 | 0,013 |
+| N grafítico | 0,1 | 1595 | 1283 | 0,011 |
+| N grafítico | 0,2 | 1599 | 1287 | 0,010 |
+| amina | 0,05 | 1596 | 1292 | 0,024 |
+| amina | 0,1 | 1597 | 1288 | 0,021 |
+| amina | 0,2 | 1599 | 1284 | 0,019 |
+
+(`validation/coil204_doped_raman.json`, `coil204_raman_uncertainty.json`.)
+
+### Coil de 204 átomos: infrarrojo
+
+![IR de la coil](figuras/ir_coil.png)
+
+| estructura | intensidad total (km/mol) | modos más intensos: cm⁻¹ (km/mol) |
+|---|---|---|
+| sin dopar | 2082 | 1472 (74), 1290 (70), 1298 (69), 1237 (63), 1368 (60) |
+| N grafítico | 2244 | 1262 (49), 1123 (48), 1294 (48), 1470 (45), 1287 (43) |
+| amina | 2288 | 988 (64), 1296 (61), 1299 (45), 1234 (37), 1238 (35) |
+
+(`validation/coil204_doped_raman.json`.)
+
+### XPS C 1s de láminas (coroneno)
+
+Un pico gaussiano (σ 0,35 eV) por sitio inequivalente calculado, sin multiplicidad: las alturas no son las de un espectro medido, las posiciones sí.
+
+![Espectros C 1s](figuras/xps_espectros.png)
+
+### Coil: sitio preferido del dopante
+
+Energía de cada sitio respecto al más estable, GPAW en la geometría TB.
+
+![Sitios del dopante](figuras/coil_sitios.png)
+
 ## Medido, no adoptado
 
 Comparaciones con GPAW que llevaron a no adoptar un método. El error que cuenta es el de validación cruzada o el de las estructuras apartadas, no el de entrenamiento.
