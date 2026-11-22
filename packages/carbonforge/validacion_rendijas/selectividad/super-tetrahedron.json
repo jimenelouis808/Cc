@@ -1,0 +1,47 @@
+{
+ "temperature": 298.0,
+ "pressure_mpa": 0.1,
+ "species": [
+  "CO2",
+  "N2"
+ ],
+ "gas_fractions": [
+  0.15,
+  0.85
+ ],
+ "mean_counts": [
+  5.266273333333333,
+  1.8995083333333334
+ ],
+ "count_errors": [
+  0.19923827143323572,
+  0.03620902462793182
+ ],
+ "mol_per_kg": [
+  0.5399682201550605,
+  0.19476279885201023
+ ],
+ "adsorbed_fractions": [
+  0.734919591233243,
+  0.26508040876675704
+ ],
+ "selectivity": 15.710494674791576,
+ "selectivity_error": 0.5488088082553579,
+ "fugacity_coefficients": [
+  0.9958104399785842,
+  0.9995863953502274
+ ],
+ "acceptance": {
+  "insert": 0.17736717098988236,
+  "delete": 0.17777597189490596,
+  "swap": 0.29917833193891186,
+  "move": 0.2888650789175235,
+  "rotate": 0.3769744208886692
+ },
+ "energy_drift_k": 1.5279510989785194e-10,
+ "warnings": [
+  "N2 averages 1.90 molecules: the selectivity rests on too few."
+ ],
+ "segundos": 546.0722100734711,
+ "formula": "C812"
+}
