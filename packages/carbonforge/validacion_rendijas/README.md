@@ -1217,3 +1217,31 @@ Tenney y Lastoskie, que no encuentran ningún poro con grupos que supere al
 grafítico plano. El dopaje con N es la única modificación que ayuda a baja presión
 y no cuesta nada a 0.1 MPa. Las isotermas COOH del paso 3 usan las cargas
 infladas y sobrestiman la carga a baja presión.
+
+## Paso 3 repetido con el campo de adsorción
+
+`carbonforge.forcefields.adsorption` (separado de `ELECTRODE_PARAMS`, que las
+celdas EDLC siguen usando): COOH y OH con las cargas de Tenney y Lastoskie
+(2006), con los grupos neutros; NH₂ con las de Chen et al. (2026). Los archivos
+llevan el sufijo `-ads` (`henry_co2_funcional-ads.txt`,
+`isotermas_co2/funcional-*-ads.json`). Prístina y N 5 % no tienen grupos, así que
+dan lo mismo con los dos campos. Rendija de 6.6 Å, 298 K, mol/kg absolutos.
+
+| variante | K_H | q_st (kJ/mol) | 1 kPa | 0.1 MPa | 1 MPa |
+|---|---|---|---|---|---|
+| prístina | 552 | 29.7 | 0.62 | 9.10 | 9.96 |
+| N 5 % | 1305 | 35.0 | 1.36 | 9.26 | 9.76 |
+| OH | 503 | 30.6 | 0.72 | 8.42 | 9.38 |
+| COOH | 667 | 33.4 | 0.82 ± 0.3 | 7.82 | 8.63 |
+| NH₂ | 532 | 31.0 | 0.73 | 8.72 | 9.03 |
+
+Antes, con la tabla del electrodo, COOH daba K_H 2108 y 1.68 mol/kg a 1 kPa.
+
+**Veredicto final del paso 3.** Los grupos oxigenados y amino **no mejoran** una
+rendija grafítica de 6.6 Å para CO₂. A baja presión quedan dentro del ruido o
+ligeramente por encima (COOH +20 % en K_H). A 0.1 MPa todos quedan por debajo de
+la prístina, entre un 4 % y un 14 %, porque ocupan volumen del poro. Coincide con
+Tenney y Lastoskie. **El N sustitucional es la única modificación que mejora**
+(K_H ×2.4, el doble de carga a 1 kPa, igual a 0.1 MPa), aunque probablemente
+exagera algo el efecto: el calor sube 5.3 kJ/mol aquí y 3.3 en el experimento.
+Sus cargas siguen siendo las representativas.

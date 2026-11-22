@@ -1,0 +1,3 @@
+OH              C960H16O16  carga neta +0.00 e/celda -> 0  |  con cargas: K_H    502.6 (500-505)  q_st 30.55  |  sin cargas: K_H    578.4 (571-585)  q_st 30.34  (184 s)
+COOH            C972H12O24  carga neta -0.00 e/celda -> 0  |  con cargas: K_H    666.7 (598-735)  q_st 33.37  |  sin cargas: K_H    564.0 (563-565)  q_st 30.63  (188 s)
+NH2             C960H32N16  carga neta -1.74 e/celda -> 0  |  con cargas: K_H    531.9 (529-535)  q_st 31.02  |  sin cargas: K_H    565.0 (559-571)  q_st 30.33  (228 s)
