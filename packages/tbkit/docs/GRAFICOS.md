@@ -29,6 +29,20 @@ GPAW PBE ondas planas (400 eV) frente a tres conjuntos de carbono. (8,0), (5,5) 
 
 RMS de bandas en eV, dentro de ±1 eV del nivel de referencia (`validation/bands_tb_vs_gpaw.json`).
 
+### Grafeno deformado: el ajuste de c_bandas
+
+Las tres constantes de red con las que se ajustaron las leyes de distancia de `c_bandas`; ventana del ajuste −9 a +3 eV.
+
+![Grafeno a tres constantes de red](figuras/bandas_grafeno_deformado.png)
+
+| grafeno | RMS c_bandas (eV) | RMS Xu (eV) | v_F GPAW (eV·Å) | v_F c_bandas | v_F Xu |
+|---|---|---|---|---|---|
+| a = 2,42 Å | 0,11 | 2,85 | 5,48 | 5,33 | 4,25 |
+| a = 2,467 Å | 0,07 | 2,60 | 5,32 | 5,15 | 4,10 |
+| a = 2,52 Å | 0,10 | 2,33 | 5,14 | 4,96 | 3,94 |
+
+(`validation/c_bandas_fit.json`.)
+
 ## Bandas de bicapas y grafito
 
 GPAW PBE (bandas sin D3, que no cambia los autovalores) frente a `c_capas` y `xu_capas`, los dos con salto entre capas. ABC queda fuera del ajuste.
@@ -71,6 +85,27 @@ GPAW PBE ondas planas (500 eV, Mo con 6 electrones, sin espín-órbita) frente a
 
 Q: el mínimo de conducción entre K y Γ. El RMS incluye el peso de los bordes del ajuste desactivado (peso 1).
 
+### Energía y fuerzas de MoS₂ y Mo con xu_chnosmo
+
+Solo tres puntos por cristal (−2 %, 0, +2 %): las líneas los unen, no son una curva calculada. La red de MoS₂ sale demasiado rígida, y en Mo bcc la celda de GPAW no es un mínimo de tbkit (las dos deformaciones bajan la energía): `xu_chnosmo` no sirve para la energía de la red del metal.
+
+![Energía de MoS2 y Mo](figuras/mo_energias.png)
+
+| cristal | punto | RMS fuerzas TB − GPAW (eV/Å) | |F| GPAW (eV/Å) | ΔE TB (eV) | ΔE GPAW (eV) |
+|---|---|---|---|---|---|
+| MoS2 | relaxed | 0,41 | 0,01 | 0,000 | 0,000 |
+| MoS2 | rnd0 | 0,44 | 0,89 | 0,100 | 0,135 |
+| MoS2 | rnd1 | 1,39 | 1,48 | 0,414 | 0,354 |
+| MoS2 | rnd2 | 0,45 | 1,15 | 0,171 | 0,213 |
+| MoS2 | x0.98 | 0,44 | 0,20 | 0,083 | 0,052 |
+| MoS2 | x1.02 | 0,36 | 0,19 | 0,345 | 0,039 |
+| Mo_bcc | relaxed | 0,00 | 0,00 | 0,000 | 0,000 |
+| Mo_bcc | rnd0 | 0,00 | 0,00 | 0,000 | 0,000 |
+| Mo_bcc | rnd1 | 0,00 | 0,00 | 0,000 | 0,000 |
+| Mo_bcc | rnd2 | 0,00 | 0,00 | 0,000 | 0,000 |
+| Mo_bcc | x0.98 | 0,00 | 0,00 | -0,020 | 0,027 |
+| Mo_bcc | x1.02 | 0,00 | 0,00 | -0,041 | 0,023 |
+
 ## Cristales y láminas dopadas
 
 Cada conjunto en su cristal, en geometrías GPAW (LCAO dzp, PBE): relajada, ±2 % y tres desplazamientos aleatorios.
@@ -94,6 +129,17 @@ Cada conjunto en su cristal, en geometrías GPAW (LCAO dzp, PBE): relajada, ±2 
 | diamond_N | xu_chn | 64 | 0,71 | 2,32 | 1,73 |
 
 (`validation/crystals_tb_vs_gpaw.json`.)
+
+### Energías de los cristales
+
+Energía de cada punto respecto a la celda relajada, por átomo, los 13 cristales juntos.
+
+![Energías en cristales](figuras/cristales_energias.png)
+
+| puntos | n | MAE (meV/átomo) |
+|---|---|---|
+| deformación ±2 % | 26 | 15,6 |
+| desplazamientos aleatorios | 39 | 6,3 |
 
 ## Gaps de moléculas
 
@@ -138,6 +184,10 @@ RMS frente a las frecuencias GPAW, cada método relajando desde la geometría GP
 
 (`validation/xtb_vs_tbkit.json`.)
 
+### Frecuencias por archivo de referencia
+
+![Frecuencias por archivo](figuras/frecuencias_por_archivo.png)
+
 ## Coil de 204 átomos: modos frente a PBE
 
 Frecuencia PBE de cada modo TB como cociente de Rayleigh con fuerzas GPAW (cota superior si el modo TB no es un modo PBE). Escala PBE/TB: red de carbono 0,960, modos G 0,950.
@@ -174,6 +224,12 @@ Energía de cada estado respecto al fundamental de GPAW (cintas zigzag, triangul
 | CH2 | S | 1,129 | -0,038 | 0,966 |
 
 (`validation/spin_tb_vs_gpaw.json`.)
+
+### Momentos a lo ancho de las cintas zigzag
+
+Momento de Mulliken (GPAW: el de la celda de cada átomo) del estado antiferromagnético, de un borde al otro.
+
+![Momentos en cintas zigzag](figuras/espin_cintas.png)
 
 ## XPS: desplazamientos de núcleo
 
@@ -220,3 +276,48 @@ Distancia a PBE (GFN no se ajustó a PBE: no es una medida de exactitud de GFN).
 | gpaw_se.json | GFN2-xTB | 0,56 | 0,179 | 0,57 |
 
 (`validation/xtb_vs_tbkit.json`.)
+
+### Bicapas: tbkit y xTB frente a PBE+D3
+
+![Bicapas con xTB](figuras/capas_xtb.png)
+
+### Tiempo de cálculo
+
+Segundos de reloj por energía + fuerzas de un flake triangular h-saturado (omp_num_threads=2), tbkit xu_chn con scc (kt 0,1 ev) frente a tblite (300 k).
+
+![Tiempo de cálculo](figuras/tiempos.png)
+
+## Medido, no adoptado
+
+Comparaciones con GPAW que llevaron a no adoptar un método. El error que cuenta es el de validación cruzada o el de las estructuras apartadas, no el de entrenamiento.
+
+### Cargas de Born corregidas para el IR
+
+![Modelos de carga](figuras/born_modelos.png)
+
+| conjunto | modelo | |log10 I_TB/I_GPAW| mediana, modos apartados | fracción dentro de un factor 2 |
+|---|---|---|---|
+| xu_chn | tbkit | 0,326 | 0,46 |
+| xu_chn | flujo de enlace | 0,284 | 0,52 |
+| xu_chn | entorno (SOAP) | 0,299 | 0,50 |
+| xu_chn | ambos | 0,298 | 0,50 |
+| xu_chno | tbkit | 0,342 | 0,46 |
+| xu_chno | flujo de enlace | 0,275 | 0,54 |
+| xu_chno | entorno (SOAP) | 0,292 | 0,51 |
+| xu_chno | ambos | 0,287 | 0,51 |
+
+### MACE-MP-0 sin ajuste fino
+
+![MACE frente a tbkit](figuras/mace.png)
+
+### Corrección Δ lineal (SOAP)
+
+![Corrección delta](figuras/delta.png)
+
+Validación cruzada por grupos, RMS de fuerzas con el mejor ridge: 0,68 eV/Å.
+
+### Se con orbitales d (publicado como conjunto aparte)
+
+Con d mejora el Se hipervalente (deriva de DMSeO y SeO₂) y empeoran las frecuencias de varias moléculas apartadas.
+
+![Se con y sin d](figuras/se_d.png)

@@ -519,9 +519,315 @@ def frequency_table() -> str:
             + "\n\n(`validation/xtb_vs_tbkit.json`.)\n")
 
 
-SECTIONS = {"bandas": ("carbon_bands", "layer_bands", "mo_bands"),
-            "otros": ("crystals", "molecular_gaps", "infrared", "frequency_table", "coil_modes",
-                      "spin", "xps", "xtb_table")}
+def _top_legend(fig, ax, ncol):
+    handles, labels = ax.get_legend_handles_labels()
+    fig.legend(handles, labels, loc="upper center", ncol=ncol, bbox_to_anchor=(0.5, 1.0))
+    fig.get_layout_engine().set(rect=(0, 0, 1, 0.9))
+
+
+def _bars(ax, groups, series, colours, labels, horizontal=False):
+    """Grouped bars: ``series`` is a list (one per method) of values per group."""
+    n = len(series)
+    width = 0.8 / n
+    pos = np.arange(len(groups))
+    for k, (values, colour, label) in enumerate(zip(series, colours, labels, strict=True)):
+        offset = pos - 0.4 + width * (k + 0.5)
+        if horizontal:
+            ax.barh(offset, values, height=width * 0.9, color=colour, label=label)
+        else:
+            ax.bar(offset, values, width=width * 0.9, color=colour, label=label)
+    if horizontal:
+        ax.set_yticks(pos, groups)
+        ax.invert_yaxis()
+        ax.grid(axis="x", color=GRID, lw=0.5)
+    else:
+        ax.set_xticks(pos, groups, rotation=45, ha="right")
+        ax.grid(axis="y", color=GRID, lw=0.5)
+    ax.set_axisbelow(True)
+
+
+def crystal_energies(plt) -> str:
+    data = json.loads((VALIDATION / "crystals_tb_vs_gpaw.json").read_text())["crystals"]
+    fig, axes = plt.subplots(1, 2, figsize=(9.5, 4.4), constrained_layout=True)
+    rows = []
+    for ax, kind, title in ((axes[0], "x", "deformación ±2 %"),
+                            (axes[1], "rnd", "desplazamientos aleatorios")):
+        g, t = [], []
+        for c in data:
+            for p in c["points"]:
+                if p["label"].startswith(kind):
+                    g.append(p["dE_dft"] / c["atoms"] * 1000)
+                    t.append(p["dE_model"] / c["atoms"] * 1000)
+        parity(ax, g, t, SERIES[0])
+        _diagonal(ax, g + t)
+        ax.set_title(title, loc="left")
+        ax.set_xlabel("ΔE GPAW (meV/átomo)")
+        rows.append([title, len(g), _f(float(np.mean(np.abs(np.subtract(t, g)))), 1)])
+    axes[0].set_ylabel("ΔE TB (meV/átomo)")
+    image = _save(fig, "cristales_energias")
+    plt.close(fig)
+    return ("### Energías de los cristales\n\n"
+            "Energía de cada punto respecto a la celda relajada, por átomo, los 13 cristales "
+            "juntos.\n\n"
+            f"![Energías en cristales]({image})\n\n"
+            + _md_table(["puntos", "n", "MAE (meV/átomo)"], rows) + "\n")
+
+
+def spin_profiles(plt) -> str:
+    data = json.loads((VALIDATION / "spin_tb_vs_gpaw.json").read_text())["systems"]
+    fig, axes = plt.subplots(1, 3, figsize=(12, 3.8), constrained_layout=True, sharey=True)
+    for ax, name in zip(axes, ("zgnr4", "zgnr6", "zgnr8"), strict=True):
+        s = data[name]["states"]["AFM"]
+        n_c = len(s["gpaw"]["moments"]) - 2           # the two edge H last
+        x = np.arange(1, n_c + 1)
+        ax.plot(x, s["gpaw"]["moments"][:n_c], color=INK, lw=1.7, label="GPAW PBE")
+        ax.plot(x, s["tb"]["moments"][:n_c], color=SERIES[0], lw=1.2, label="TB, W atómico")
+        ax.plot(x, s["tb_scaled"]["moments"][:n_c], color=SERIES[1], lw=1.2,
+                label="TB, W escalado")
+        ax.axhline(0, color=MUTED, lw=0.6)
+        ax.set_title(f"{name}, antiferromagnético", loc="left")
+        ax.set_xlabel("átomo de C a lo ancho de la cinta")
+        ax.grid(color=GRID, lw=0.5)
+    axes[0].set_ylabel("momento (μB)")
+    axes[0].legend(loc="upper center")
+    image = _save(fig, "espin_cintas")
+    plt.close(fig)
+    return ("### Momentos a lo ancho de las cintas zigzag\n\n"
+            "Momento de Mulliken (GPAW: el de la celda de cada átomo) del estado "
+            "antiferromagnético, de un borde al otro.\n\n"
+            f"![Momentos en cintas zigzag]({image})\n")
+
+
+def mo_crystals(plt) -> str:
+    from ..params import load_parameters
+    from .xu_family import crystal_validation, load_crystal_points
+
+    model = load_parameters("xu_chnosmo")
+    refs = load_crystal_points([REFS / "tm_crystals" / "MoS2", REFS / "tm_crystals" / "Mo_bcc"])
+    report = crystal_validation(model, refs)
+    fig, axes = plt.subplots(1, 2, figsize=(9.5, 3.8), constrained_layout=True)
+    rows = []
+    for ax, name, title in ((axes[0], "MoS2", "MoS₂ (energía por celda de 3 átomos)"),
+                            (axes[1], "Mo_bcc", "Mo bcc (deformación solo en el plano a, b)")):
+        points = report[name]["points"]
+        strain = [(0.98, "x0.98"), (1.0, "relaxed"), (1.02, "x1.02")]
+        x = [s for s, _ in strain]
+        ax.plot(x, [points[k]["delta_e_gpaw"] for _, k in strain], color=INK, lw=1.7,
+                marker="o", ms=5, label="GPAW PBE")
+        ax.plot(x, [points[k]["delta_e_tb"] for _, k in strain], color=SERIES[0], lw=1.3,
+                marker="s", ms=5, label="xu_chnosmo")
+        ax.set_title(title, loc="left")
+        ax.set_xlabel("a / a₀")
+        ax.grid(color=GRID, lw=0.5)
+        for label, pt in points.items():
+            rows.append([name, label, _f(pt["force_rms"]), _f(pt["force_rms_gpaw"]),
+                         _f(pt["delta_e_tb"], 3), _f(pt["delta_e_gpaw"], 3)])
+    axes[0].set_ylabel("E − E(a₀) (eV)")
+    axes[0].legend(loc="upper center")
+    image = _save(fig, "mo_energias")
+    plt.close(fig)
+    return ("### Energía y fuerzas de MoS₂ y Mo con xu_chnosmo\n\n"
+            "Solo tres puntos por cristal (−2 %, 0, +2 %): las líneas los unen, no son una "
+            "curva calculada. La red de MoS₂ sale demasiado rígida, y en Mo bcc la celda de "
+            "GPAW no es un mínimo de tbkit (las dos deformaciones bajan la energía): "
+            "`xu_chnosmo` no sirve para la energía de la red del metal.\n\n"
+            f"![Energía de MoS2 y Mo]({image})\n\n"
+            + _md_table(["cristal", "punto", "RMS fuerzas TB − GPAW (eV/Å)",
+                         "|F| GPAW (eV/Å)", "ΔE TB (eV)", "ΔE GPAW (eV)"], rows) + "\n")
+
+
+def graphene_strain_bands(plt) -> str:
+    from . import band_validation as bv
+
+    cases = (("graphene@2.42", "graphene_a2.42", "a = 2,42 Å"),
+             ("graphene", "graphene", "a = 2,467 Å"),
+             ("graphene@2.52", "graphene_a2.52", "a = 2,52 Å"))
+    fig, axes = plt.subplots(1, 3, figsize=(12, 4), constrained_layout=True, sharey=True)
+    for ax, (name, slug, title) in zip(axes, cases, strict=True):
+        ref = json.loads((REFS / "bands_gpaw" / f"{slug}.json").read_text())
+        _, x, ticks = bv.kpath(name, bv.geometry(name))
+        tb = json.loads(bv.run_tb(name, "c_bandas").read_text())
+        _band_panel(ax, x, ticks, _aligned(ref), [(_aligned(tb), SERIES[0])], (-9.0, 4.0),
+                    f"Grafeno, {title}")
+    axes[0].set_ylabel("E − E_F (eV)")
+    _legend(fig, [("c_bandas", SERIES[0])])
+    fig.get_layout_engine().set(rect=(0, 0, 1, 0.9))
+    image = _save(fig, "bandas_grafeno_deformado")
+    plt.close(fig)
+    data = json.loads((VALIDATION / "c_bandas_fit.json").read_text())["systems"]
+    rows = []
+    for name, _, title in cases:
+        e = data[name]
+        rows.append([title, _f(e["c_bandas"]["band_rms_eV"]), _f(e["xu_carbon"]["band_rms_eV"]),
+                     _f(e["c_bandas"]["fermi_velocity_gpaw_eV_A"]),
+                     _f(e["c_bandas"]["fermi_velocity_eV_A"]),
+                     _f(e["xu_carbon"]["fermi_velocity_eV_A"])])
+    return ("### Grafeno deformado: el ajuste de c_bandas\n\n"
+            "Las tres constantes de red con las que se ajustaron las leyes de distancia de "
+            "`c_bandas`; ventana del ajuste −9 a +3 eV.\n\n"
+            f"![Grafeno a tres constantes de red]({image})\n\n"
+            + _md_table(["grafeno", "RMS c_bandas (eV)", "RMS Xu (eV)", "v_F GPAW (eV·Å)",
+                         "v_F c_bandas", "v_F Xu"], rows) +
+            "\n\n(`validation/c_bandas_fit.json`.)\n")
+
+
+METHODS = (("tb", "tbkit"), ("tb_scaled", "tbkit escalado"), ("GFN1-xTB", "GFN1-xTB"),
+           ("GFN2-xTB", "GFN2-xTB"))
+
+
+def frequencies_by_file(plt) -> str:
+    data = json.loads((VALIDATION / "xtb_vs_tbkit.json").read_text())["frequencies"]["per_file"]
+    files = list(data)
+    series = [[float(np.median([m[key] for m in data[f].values() if key in m])) for f in files]
+              for key, _ in METHODS]
+    fig, ax = plt.subplots(figsize=(9, 3.8), constrained_layout=True)
+    _bars(ax, [f.replace("gpaw_", "").replace("_hessians.json", "")
+               .replace("_frequencies.json", "").replace(".json", "") for f in files],
+          series, SERIES, [lab for _, lab in METHODS])
+    ax.set_ylabel("RMS de frecuencias, mediana (cm⁻¹)")
+    _top_legend(fig, ax, 4)
+    image = _save(fig, "frecuencias_por_archivo")
+    plt.close(fig)
+    return ("### Frecuencias por archivo de referencia\n\n"
+            f"![Frecuencias por archivo]({image})\n")
+
+
+def xtb_layers(plt) -> str:
+    data = json.loads((VALIDATION / "xtb_vs_tbkit.json").read_text())["layers"]
+    fig, axes = plt.subplots(1, 2, figsize=(10, 3.8), constrained_layout=True, sharey=True)
+    for ax, stack in zip(axes, ("AB", "AA"), strict=True):
+        pts = sorted((float(k.split("@")[1]), v) for k, v in data.items()
+                     if k.startswith(stack + "@"))
+        d = [p[0] for p in pts]
+        ax.plot(d, [p[1]["pbe_d3"] for p in pts], color=INK, lw=1.7, label="GPAW PBE+D3(BJ)")
+        for (key, label), colour in zip((("xu_capas", "xu_capas"), ("GFN1-xTB", "GFN1-xTB"),
+                                         ("GFN2-xTB", "GFN2-xTB")), SERIES, strict=False):
+            ax.plot(d, [p[1][key] for p in pts], color=colour, lw=1.3, label=label)
+        ax.axhline(0, color=MUTED, lw=0.6)
+        ax.set_title(f"Apilamiento {stack}", loc="left")
+        ax.set_xlabel("distancia entre capas (Å)")
+        ax.grid(color=GRID, lw=0.5)
+    axes[0].set_ylabel("energía de enlace (meV/átomo)")
+    axes[0].legend(loc="upper right")
+    image = _save(fig, "capas_xtb")
+    plt.close(fig)
+    return ("### Bicapas: tbkit y xTB frente a PBE+D3\n\n"
+            f"![Bicapas con xTB]({image})\n")
+
+
+def timing(plt) -> str:
+    data = json.loads((VALIDATION / "xtb_vs_tbkit.json").read_text())["timing"]
+    rows = data["rows"]
+    n = [r["atoms"] for r in rows]
+    fig, ax = plt.subplots(figsize=(5.4, 4), constrained_layout=True)
+    for (key, label), colour in zip((("tb", "tbkit xu_chn"), ("GFN1-xTB", "GFN1-xTB"),
+                                     ("GFN2-xTB", "GFN2-xTB")), SERIES, strict=False):
+        ax.plot(n, [r[key] for r in rows], color=colour, lw=1.4, marker="o", ms=4, label=label)
+    ax.set_xscale("log")
+    ax.set_yscale("log")
+    ax.set_xlabel("átomos")
+    ax.set_ylabel("segundos por energía + fuerzas")
+    ax.grid(color=GRID, lw=0.5, which="both")
+    ax.legend(loc="upper left")
+    image = _save(fig, "tiempos")
+    plt.close(fig)
+    return ("### Tiempo de cálculo\n\n"
+            f"{data['note'].capitalize()}.\n\n![Tiempo de cálculo]({image})\n")
+
+
+def not_adopted(plt) -> str:
+    parts = ["## Medido, no adoptado\n\nComparaciones con GPAW que llevaron a no adoptar "
+             "un método. El error que cuenta es el de validación cruzada o el de las "
+             "estructuras apartadas, no el de entrenamiento.\n"]
+    # Born charges
+    fig, axes = plt.subplots(1, 2, figsize=(10, 3.6), constrained_layout=True)
+    rows = []
+    for ax, f in zip(axes, ("chn", "chno"), strict=True):
+        d = json.loads((VALIDATION / f"ir_charge_models_{f}.json").read_text())
+        models = list(d["born_fits"])
+        tb = d["born_fits"][models[0]]["rms_tb_e"]
+        train = [d["born_fits"][m]["rms_train_e"] for m in models]
+        cv = [d["born_fits"][m]["rms_cv_e"] for m in models]
+        names = {"bond_flux": "flujo de enlace", "environment_flux": "entorno (SOAP)",
+                 "both": "ambos"}
+        _bars(ax, [names.get(m, m) for m in models], [train, cv], SERIES[:2],
+              ["entrenamiento", "validación cruzada"])
+        ax.axhline(tb, color=INK, lw=1.4, label="tbkit sin corrección")
+        ax.set_title(f"cargas de Born, xu_{f}", loc="left")
+        ax.set_ylabel("RMS frente a GPAW (e)")
+        held = d["ir_on_tb_modes_heldout"]
+        for m in ["tb"] + models:
+            rows.append([f"xu_{f}", names.get(m, "tbkit"), _f(held["median_abs_log10"][m], 3),
+                         _f(held["within_factor_2"][m], 2)])
+    _top_legend(fig, axes[0], 3)
+    image = _save(fig, "born_modelos")
+    plt.close(fig)
+    parts.append("### Cargas de Born corregidas para el IR\n\n"
+                 f"![Modelos de carga]({image})\n\n"
+                 + _md_table(["conjunto", "modelo", "|log10 I_TB/I_GPAW| mediana, modos "
+                              "apartados", "fracción dentro de un factor 2"], rows) + "\n")
+    # MACE
+    mace = json.loads((VALIDATION / "mace_mp_vs_gpaw.json").read_text())["molecules_chno_hessians"]
+    tbm = json.loads((VALIDATION / "xtb_vs_tbkit.json").read_text())["frequencies"]["per_file"]
+    tbm = tbm.get("gpaw_chno_hessians.json", {})
+    mols = [m for m in mace["small"] if m in tbm]
+    fig, ax = plt.subplots(figsize=(10, 3.8), constrained_layout=True)
+    _bars(ax, mols, [[tbm[m]["tb"] for m in mols], [mace["small"][m] for m in mols],
+                     [mace["medium"][m] for m in mols]], SERIES[:3],
+          ["tbkit xu_chno", "MACE-MP-0 small", "MACE-MP-0 medium"])
+    ax.set_ylabel("RMS de frecuencias frente a GPAW (cm⁻¹)")
+    _top_legend(fig, ax, 3)
+    image = _save(fig, "mace")
+    plt.close(fig)
+    parts.append("### MACE-MP-0 sin ajuste fino\n\n"
+                 f"![MACE frente a tbkit]({image})\n")
+    # Δ-learning
+    d = json.loads((VALIDATION / "delta_learning.json").read_text())["tang_carbon_on_gpaw_carbon_env"]
+    groups = list(d["groups"])
+    fig, ax = plt.subplots(figsize=(9, 3.8), constrained_layout=True)
+    _bars(ax, [g + (" (apartado)" if d["groups"][g]["held_out"] else "") for g in groups],
+          [[d["groups"][g]["tb_force_rmse"] for g in groups],
+           [d["groups"][g]["tb_delta_force_rmse"] for g in groups]], SERIES[:2],
+          ["tang_carbon", "tang_carbon + Δ (SOAP)"])
+    ax.set_ylabel("RMS de fuerzas frente a GPAW (eV/Å)")
+    _top_legend(fig, ax, 2)
+    image = _save(fig, "delta")
+    plt.close(fig)
+    cv = d["cv_force_rmse"]
+    parts.append("### Corrección Δ lineal (SOAP)\n\n"
+                 f"![Corrección delta]({image})\n\n"
+                 f"Validación cruzada por grupos, RMS de fuerzas con el mejor ridge: "
+                 f"{_f(min(cv.values()))} eV/Å.\n")
+    # Se with d
+    d = json.loads((VALIDATION / "xu_chnose_d_vs_xu_chnose.json").read_text())
+    held = d["frequencies_held_out"]
+    drift = {k: v for k, v in d["relax_max_drift_A"].items() if k != "order"}
+    fig, axes = plt.subplots(1, 2, figsize=(11, 3.8), constrained_layout=True)
+    names = list(held)
+    _bars(axes[0], names, [[held[m]["xu_chnose"] for m in names],
+                           [held[m]["xu_chnose_d"] for m in names]], SERIES[:2],
+          ["xu_chnose (sin d)", "xu_chnose_d (con d)"])
+    axes[0].set_ylabel("RMS de frecuencias, moléculas apartadas (cm⁻¹)")
+    _top_legend(fig, axes[0], 2)
+    names = list(drift)
+    _bars(axes[1], names, [[drift[m][1] for m in names], [drift[m][0] for m in names]],
+          SERIES[:2], ["xu_chnose (sin d)", "xu_chnose_d (con d)"])
+    axes[1].set_ylabel("deriva máxima al relajar desde GPAW (Å)")
+    image = _save(fig, "se_d")
+    plt.close(fig)
+    parts.append("### Se con orbitales d (publicado como conjunto aparte)\n\n"
+                 "Con d mejora el Se hipervalente (deriva de DMSeO y SeO₂) y empeoran las "
+                 "frecuencias de varias moléculas apartadas.\n\n"
+                 f"![Se con y sin d]({image})\n")
+    return "\n".join(parts)
+
+
+SECTIONS = {"bandas": ("carbon_bands", "graphene_strain_bands", "layer_bands", "mo_bands",
+                       "mo_crystals"),
+            "otros": ("crystals", "crystal_energies", "molecular_gaps", "infrared",
+                      "frequency_table", "frequencies_by_file", "coil_modes", "spin",
+                      "spin_profiles", "xps", "xtb_table", "xtb_layers", "timing",
+                      "not_adopted")}
 
 
 def build(only: str | None = None) -> Path:
