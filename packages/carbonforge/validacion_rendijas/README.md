@@ -1383,3 +1383,40 @@ rodillas, `cristalinas/*.extxyz`), con pared Steele neutra. 298 K; la mezcla es
   ancho de poro, y una superestructura de carbono cristalina no baja de ~6.7 Å
   de canal sin colapsar. Las superestructuras ganaron algo con H₂ a 77 K
   (molécula pequeña, bolsillos); con CO₂ a 298 K no hay ninguna que valga la pena.
+
+## Gas de combustión húmedo
+
+`humedad.py`: CO₂/N₂/H₂O con agua SPC/E en las rendijas de 6.6 Å, con el campo
+de adsorción (N con cargas DFT). 15 % CO₂ en base seca, 0.1 MPa, 298 K, y
+humedad relativa respecto a la presión de saturación real (3.17 kPa). Se parte
+de la celda vacía, con 300k pasos de equilibrado y 600k de producción. Valores
+en mol/kg; la columna "seco" es la mezcla CO₂/N₂ sin agua.
+
+| rendija | CO₂ seco | CO₂ HR 30 % | CO₂ HR 80 % | H₂O HR 30 % | H₂O HR 80 % | S HR 80 % |
+|---|---|---|---|---|---|---|
+| prístina | 5.92 | 5.70 | 5.64 | 0.006 | 0.02 | 126 ± 5 |
+| N 5 % | 7.14 | 5.94 | 5.30 | 5.02 | 6.55 | 389* |
+| COOH | 5.64 | 5.59 | 5.32 | 0.13 | 1.32 | 177 ± 5 |
+
+\* menos de una molécula de N₂ por celda: no se cita.
+
+- **La rendija prístina ignora el agua**: con HR 80 % retiene el 95 % de su CO₂.
+  Es el carbono hidrófobo de siempre.
+- **El N grafítico es hidrófilo en este modelo y pierde su ventaja.** Adsorbe
+  5–6.5 mol/kg de agua, más o menos una molécula por cada N, y su CO₂ cae un 17 %
+  con HR 30 % y un 26 % con HR 80 %. Con HR 80 % queda por debajo de la prístina
+  (5.30 frente a 5.64).
+- **El COOH aguanta mejor por celda** porque hay pocos grupos (3 por lámina
+  frente a 48 N), aunque por sitio atrae el agua de forma parecida.
+- **Lo que hay que mirar con cautela**:
+  - La cantidad de agua en el N depende de su pozo LJ, que sigue siendo
+    representativo (85 K) y que ya explicaba parte de su ventaja en seco.
+  - SPC/E no tiene la presión de vapor del agua real.
+  - Partir de la celda vacía puede quedarse corto, aunque en N 5 % el agua
+    sí entró y su error de bloque es del 4 %.
+  - Ninguna de las tres cosas invierte la tendencia entre HR 30 % y 80 %.
+
+**Veredicto con humedad**: la ventaja del N es real **solo en gas seco**. En un
+gas de combustión húmedo sin secado previo, la rendija prístina, hidrófoba, es
+la más robusta. Coincide con lo que señalan Liu y Wilcox (2012): el agua
+compite primero en los sitios polares. Para capturar con N hace falta secar el gas.

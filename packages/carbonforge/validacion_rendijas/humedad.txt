@@ -1,0 +1,7 @@
+variante    HR %     CO2      N2     H2O     S CO2/N2  (mol/kg)
+COOH          30   5.590   0.185   0.132     171 ±   6  avisos 1
+COOH          80   5.319   0.170   1.322     177 ±   5  avisos 1
+N5            30   5.937   0.105   5.023     320 ±  12  avisos 1
+N5            80   5.303   0.077   6.552     389 ±  15  avisos 1
+pristina      30   5.701   0.254   0.006     127 ±   3  avisos 0
+pristina      80   5.641   0.255   0.022     126 ±   5  avisos 0
