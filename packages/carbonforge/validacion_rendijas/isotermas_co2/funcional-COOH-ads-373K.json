@@ -2,5 +2,24 @@
  "vacio_helio": 0.6981823795517828,
  "formula": "C972H12O24",
  "carga_neta_corregida": -1.1102230246251565e-15,
- "puntos": []
+ "puntos": [
+  {
+   "temperature": 373.0,
+   "pressure_mpa": 0.015,
+   "mean_count": 9.91199,
+   "count_error": 0.3705051539452589,
+   "mol_per_kg": 0.8211568049876545,
+   "excess_mol_per_kg": 0.818359625994241,
+   "bulk_count": 0.033764087495251165,
+   "acceptance": {
+    "insert": 0.03476891877468247,
+    "delete": 0.03453461446328285,
+    "move": 0.21496327415276348,
+    "rotate": 0.17818607559570535
+   },
+   "energy_drift_k": 3.2741809263825417e-10,
+   "warnings": [],
+   "segundos": 332.13408160209656
+  }
+ ]
 }

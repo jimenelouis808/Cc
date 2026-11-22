@@ -2,5 +2,24 @@
  "vacio_helio": 0.7864737632589983,
  "formula": "C960",
  "carga_neta_corregida": 0.0,
- "puntos": []
+ "puntos": [
+  {
+   "temperature": 373.0,
+   "pressure_mpa": 0.015,
+   "mean_count": 8.54656,
+   "count_error": 0.2629521076799601,
+   "mol_per_kg": 0.7412094468959011,
+   "excess_mol_per_kg": 0.7379109204370138,
+   "bulk_count": 0.03803385724578684,
+   "acceptance": {
+    "insert": 0.04505466632847856,
+    "delete": 0.04487358895419349,
+    "move": 0.2530208861265971,
+    "rotate": 0.22607884922749066
+   },
+   "energy_drift_k": 3.637978807091713e-11,
+   "warnings": [],
+   "segundos": 273.9983637332916
+  }
+ ]
 }
