@@ -17,6 +17,7 @@ Neither needs a network connection or an API key.
 
 from __future__ import annotations
 
+import re
 from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -34,6 +35,11 @@ __all__ = [
     "cohens_kappa",
     "score_agreement",
     "GOLD_TEMPLATE_COLUMNS",
+    "read_bibtex",
+    "read_ris",
+    "read_reference_export",
+    "merge_gold",
+    "write_gold_standard",
 ]
 
 #: Columns of the gold-standard file. ``doi`` is preferred; ``title`` + ``year``
@@ -350,3 +356,137 @@ def score_agreement(
         ">0.80 casi perfecta (Landis y Koch). Reporta el valor, el n y quién codificó."
     )
     return results
+
+
+# --------------------------------------------------------------------------
+# Building the gold standard from what you already have.
+#
+# Typing 60 DOIs by hand is the reason known-item testing gets skipped. Nobody
+# starts from nothing: the papers are already in a reference manager, in the
+# bibliography of a previous review, or one Scopus search away. These readers
+# turn any of those into the gold-standard skeleton, leaving only the part that
+# needs a human — saying *why* each entry belongs, and verifying it.
+# --------------------------------------------------------------------------
+
+_BIBTEX_ENTRY = re.compile(r"@\w+\s*\{(.*?)\n\}", re.DOTALL)
+_BIBTEX_FIELD = re.compile(r"(\w+)\s*=\s*[{\"](.+?)[}\"]\s*,?\s*$", re.MULTILINE | re.DOTALL)
+_BRACES = re.compile(r"[{}]")
+
+
+def _clean(value: str) -> str:
+    """Strip BibTeX braces and collapse whitespace."""
+    return re.sub(r"\s+", " ", _BRACES.sub("", value)).strip()
+
+
+def read_bibtex(path: str | Path) -> list[GoldItem]:
+    """Read DOI, title and year out of a BibTeX export.
+
+    Deliberately minimal: a full BibTeX parser is a dependency this package
+    does not need, and the gold standard only uses three fields. Entries
+    without a title and without a DOI are skipped, since nothing could match
+    them.
+    """
+    text = Path(path).read_text(encoding="utf-8", errors="replace")
+    items: list[GoldItem] = []
+    for body in _BIBTEX_ENTRY.findall(text):
+        fields = {k.lower(): _clean(v) for k, v in _BIBTEX_FIELD.findall(body)}
+        title, doi = fields.get("title", ""), fields.get("doi", "")
+        if not title and not doi:
+            continue
+        year_raw = re.sub(r"\D", "", fields.get("year", ""))[:4]
+        items.append(GoldItem(
+            doi=doi, title=title,
+            year=int(year_raw) if year_raw else None,
+            why="", verified=False,
+        ))
+    return items
+
+
+def read_ris(path: str | Path) -> list[GoldItem]:
+    """Read DOI, title and year out of an RIS export.
+
+    RIS is what Zotero, Mendeley and EndNote all export, so this is usually the
+    quickest route from an existing library to a gold standard.
+    """
+    text = Path(path).read_text(encoding="utf-8-sig", errors="replace")
+    items: list[GoldItem] = []
+    current: dict[str, str] = {}
+    for line in text.splitlines():
+        match = re.match(r"^([A-Z][A-Z0-9])  - (.*)$", line)
+        if match:
+            tag, value = match.group(1), match.group(2).strip()
+            if tag == "ER":
+                title = current.get("TI") or current.get("T1", "")
+                doi = current.get("DO", "")
+                if title or doi:
+                    year_raw = re.sub(r"\D", "", current.get("PY", current.get("Y1", "")))[:4]
+                    items.append(GoldItem(
+                        doi=doi, title=title,
+                        year=int(year_raw) if year_raw else None,
+                        why="", verified=False,
+                    ))
+                current = {}
+            else:
+                current.setdefault(tag, value)
+    return items
+
+
+def read_reference_export(path: str | Path) -> list[GoldItem]:
+    """Read candidate gold-standard entries from whatever format ``path`` is.
+
+    Accepts BibTeX and RIS from a reference manager, and the Scopus CSV or WoS
+    exports the pipeline already parses — so a Scopus search for the seminal
+    papers can seed the gold standard directly.
+    """
+    path = Path(path)
+    head = path.read_text(encoding="utf-8-sig", errors="replace")[:4000]
+    if head.lstrip().startswith("@") or re.search(r"^@\w+\s*\{", head, re.MULTILINE):
+        return read_bibtex(path)
+    if re.search(r"^(TY|T1|TI)  - ", head, re.MULTILINE):
+        return read_ris(path)
+
+    from .loaders import load_any  # local import: avoids a cycle at module load
+    return [
+        GoldItem(doi=r.doi, title=r.title, year=r.year, why="", verified=False)
+        for r in load_any(path)
+        if r.title or r.doi
+    ]
+
+
+def merge_gold(existing: list[GoldItem], incoming: list[GoldItem]) -> tuple[list[GoldItem], int]:
+    """Merge ``incoming`` into ``existing``, returning the list and how many were new.
+
+    Matching is by normalised DOI, then by normalised title. Entries already
+    present keep their ``why`` and ``verified`` — the human-added half is never
+    overwritten by a re-import, so harvesting from several sources across
+    several sittings is safe.
+    """
+    by_doi = {item.doi_key: item for item in existing if item.doi_key}
+    by_title = {item.title_key: item for item in existing if item.title_key}
+    merged = list(existing)
+    added = 0
+    for item in incoming:
+        if (item.doi_key and item.doi_key in by_doi) or (item.title_key and item.title_key in by_title):
+            continue
+        merged.append(item)
+        added += 1
+        if item.doi_key:
+            by_doi[item.doi_key] = item
+        if item.title_key:
+            by_title[item.title_key] = item
+    return merged, added
+
+
+def write_gold_standard(items: list[GoldItem], path: str | Path) -> Path:
+    """Write gold-standard entries to CSV in :data:`GOLD_TEMPLATE_COLUMNS` order."""
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    frame = pd.DataFrame([{
+        "doi": item.doi,
+        "title": item.title,
+        "year": item.year if item.year else "",
+        "why": item.why,
+        "verified": "TRUE" if item.verified else "FALSE",
+    } for item in items], columns=list(GOLD_TEMPLATE_COLUMNS))
+    frame.to_csv(path, index=False, encoding="utf-8")
+    return path

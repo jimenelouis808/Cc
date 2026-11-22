@@ -178,9 +178,16 @@ Una consulta no se valida leyéndola. Se valida comprobando que recupera los
 artículos que **sabes** que tiene que recuperar — un *test de elemento conocido*.
 
 ```bash
-cp queries/gold_standard_template.csv queries/gold_standard.csv   # y complétala
+# Siémbralo desde lo que ya tienes: Zotero/Mendeley (RIS, BibTeX),
+# o una exportación de Scopus o WoS. Fusiona, no sobrescribe.
+python -m nanocarbon_biblio.cli gold-from ~/Downloads/mi_biblioteca.ris
+python -m nanocarbon_biblio.cli gold-from ~/Downloads/refs_de_una_review.csv
+
+# Y mídelo
 python -m nanocarbon_biblio.cli recall --raw data/raw --gold queries/gold_standard.csv
 ```
+
+El plan en bloques de 20 minutos está en `queries/GOLD_STANDARD.md`.
 
 ### ¿La consulta puede recuperar lo que el clasificador etiqueta?
 
@@ -257,14 +264,14 @@ clasificador opaco:
 pytest nanocarbon_biblio/tests -q
 ```
 
-80 tests. Cubren el parseo de ambos formatos, la conservación literal de `CR` en
+88 tests. Cubren el parseo de ambos formatos, la conservación literal de `CR` en
 el viaje de ida y vuelta, la deduplicación entre bases puntuada **contra la
 verdad conocida** del corpus sintético, los guardas de desambiguación, la
 protección contra re-ingerir la propia salida, y el arranque de la GUI.
 
 ## Estado de verificación
 
-- **Python**: probado y ejecutado en este entorno; los 80 tests pasan.
+- **Python**: probado y ejecutado en este entorno; los 88 tests pasan.
 - **GUI**: recorrida de principio a fin (cargar → deduplicar → clasificar →
   cribar → exportar) contra el corpus de demostración, y capturada en imágenes.
   Los botones de R se activan solos cuando `Rscript` está en el PATH.

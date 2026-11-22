@@ -80,3 +80,28 @@ def test_prisma_subcommand_fails_loudly_on_bad_arithmetic(tmp_path: Path, capsys
     code = main(["prisma", "--manifest", str(manifest), "--out", str(tmp_path / "f.svg")])
     assert code == 1
     assert "INCONSISTENTE" in capsys.readouterr().err
+
+
+def test_gold_from_seeds_and_then_merges(tmp_path: Path, capsys) -> None:
+    """Two short sittings must accumulate, not overwrite."""
+    bib = tmp_path / "lib.bib"
+    bib.write_text(
+        "@article{a,\n  title = {First paper},\n  year = {1991},\n"
+        "  doi = {10.1/aaa}\n}\n", encoding="utf-8")
+    ris = tmp_path / "zotero.ris"
+    ris.write_text("TY  - JOUR\nTI  - Second paper\nPY  - 2009\nDO  - 10.1/bbb\nER  - \n",
+                   encoding="utf-8")
+    out = tmp_path / "gold.csv"
+
+    assert main(["gold-from", str(bib), "--out", str(out)]) == 0
+    assert main(["gold-from", str(ris), "--out", str(out)]) == 0
+    text = out.read_text(encoding="utf-8")
+    assert "10.1/aaa" in text and "10.1/bbb" in text
+    assert text.count("FALSE") == 2
+    assert "ya tiene 1 entradas" in capsys.readouterr().out
+
+
+def test_gold_from_skips_unreadable_sources(tmp_path: Path, capsys) -> None:
+    out = tmp_path / "gold.csv"
+    assert main(["gold-from", str(tmp_path / "missing.bib"), "--out", str(out)]) == 0
+    assert "no existe" in capsys.readouterr().err

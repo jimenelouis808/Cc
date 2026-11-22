@@ -23,7 +23,10 @@ from .exporters import export_bundle
 from .indicators import combined_share_trend, dopant_lag_table, gap_matrix, annotate_records
 from .loaders import load_directory
 from .prisma import counts_from_manifest, write_svg
-from .validation import load_gold_standard, score_agreement, score_recall
+from .validation import (
+    load_gold_standard, merge_gold, read_reference_export, score_agreement,
+    score_recall, write_gold_standard,
+)
 from .vocabulary import coverage_report, write_dictionary
 from .thesaurus import suggest_synonyms, write_thesaurus
 
@@ -230,6 +233,44 @@ def _cmd_vocab(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_gold_from(args: argparse.Namespace) -> int:
+    """Seed or extend the gold standard from reference-manager exports."""
+    existing: list = []
+    out = Path(args.out)
+    if out.exists():
+        existing = load_gold_standard(out)
+        print(f"{out} ya tiene {len(existing)} entradas; se fusionará.")
+
+    total_new = 0
+    for source in args.sources:
+        path = Path(source)
+        if not path.exists():
+            print(f"SKIP {source}: no existe", file=sys.stderr)
+            continue
+        try:
+            incoming = read_reference_export(path)
+        except Exception as exc:  # noqa: BLE001 - report and continue
+            print(f"SKIP {path.name}: {exc}", file=sys.stderr)
+            continue
+        existing, added = merge_gold(existing, incoming)
+        total_new += added
+        print(f"  {path.name}: {len(incoming)} leídas, {added} nuevas")
+
+    write_gold_standard(existing, out)
+    without_doi = sum(1 for item in existing if not item.doi_key)
+    without_why = sum(1 for item in existing if not item.why.strip())
+    print(f"\nEscrito {out}: {len(existing)} entradas (+{total_new}).")
+    if without_doi:
+        print(f"  {without_doi} sin DOI — se emparejarán solo por título, que es más frágil.")
+    if without_why:
+        print(f"  {without_why} sin la columna 'why'. Rellénala: obliga a construir el")
+        print("  conjunto a propósito en vez de a golpe de memoria, y es lo que hace")
+        print("  revisable la selección.")
+    print("  Todas quedan verified=FALSE. Marca TRUE solo lo que hayas comprobado.")
+    print(f"\nSiguiente:  python -m nanocarbon_biblio.cli recall --raw data/raw --gold {out}")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     """Build the argument parser (exposed so tests can invoke subcommands)."""
     parser = argparse.ArgumentParser(
@@ -301,6 +342,16 @@ def build_parser() -> argparse.ArgumentParser:
                        help="directory holding scopus.md and wos.md")
     vocab.add_argument("--out", default="queries/DICCIONARIO.md")
     vocab.set_defaults(func=_cmd_vocab)
+
+    gold = sub.add_parser(
+        "gold-from",
+        help="seed the gold standard from BibTeX, RIS, Scopus or WoS exports",
+    )
+    gold.add_argument("sources", nargs="+",
+                      help="one or more .bib / .ris / Scopus CSV / WoS txt files")
+    gold.add_argument("--out", default="queries/gold_standard.csv",
+                      help="merged into if it already exists; 'why' and 'verified' are kept")
+    gold.set_defaults(func=_cmd_gold_from)
     return parser
 
 
