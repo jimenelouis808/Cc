@@ -1153,3 +1153,33 @@ casi llena y los grupos ocupan volumen: COOH, OH y NH₂ quedan por debajo de la
 prístina, y solo N (sustitucional, sin volumen) la iguala. Para captura a
 presión atmosférica, el dopaje N es la única modificación que no cuesta;
 para CO₂ diluido (aire, ~40 Pa), COOH es la mejor.
+
+## Validación externa del CO₂: una superficie de grafito
+
+`valida_co2_grafito.py` compara con Bottani, Bojan, Steele e Ismail, *Langmuir*
+**10** (1994) 3805: CO₂ a baja cobertura sobre negros de carbono grafitizados
+(Sterling MT-FF, 173–233 K; Graphon, GCC y V3G, 278–298 K). La superficie es
+grafito AB atomístico de 5 capas con el mismo LJ que la GCMC, sin cargas en la
+pared y sin ajustar nada.
+
+| magnitud | modelo | experimento |
+|---|---|---|
+| q_st(0), 203 K | 15.3 kJ/mol (dos semillas: 15.23 / 15.30) | 14.4 kJ/mol |
+| pendiente de ln B_AS frente a 1/T | 1663 K | 1546 ± 95 K |
+| B_AS/A, 203 K | 1630 ± 25 Å | 2730 Å (área BET 7.7 m²/g) |
+| B_AS/A, 298 K | 136 Å | 159–200 Å (Graphon, GCC, V3G), 270 Å (Sterling extrapolado) |
+
+- **El calor está un 6 % alto** y la pendiente un 7.5 %, en el límite del error
+  experimental (±6 %). El sentido es el esperado: los parámetros TraPPE con
+  Lorentz-Berthelot dan pozos de 30–48 K contra el grafito, frente a los
+  25–28 K (C) que ajusta Steele. El cuadrupolo propio del grafito, que el
+  artículo también omite, no está incluido.
+- **B_AS/A queda entre 0.5 y 0.85 del valor normalizado con el área BET.** Esta
+  comparación vale un factor ~3, no un porcentaje. El propio artículo, con su
+  potencial ajustado, obtiene un área de 25 m²/g para la muestra de 7.7 m²/g, y
+  atribuye la diferencia a la dispersión de los datos a baja cobertura.
+- **Consecuencia para los resultados anteriores**: la atracción CO₂–pared del
+  modelo está bien dentro de un 10 %. Las cargas de rendijas y jaulas pueden
+  estar algo altas a baja presión. El orden entre estructuras no cambia, porque
+  todas usan la misma pared. La validación cubre la pared prístina; las cargas
+  de los grupos funcionales siguen sin contrastar.

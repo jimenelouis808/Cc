@@ -1,0 +1,6 @@
+grafito 1200 C, celda [24.6  25.57 70.  ]
+T  173 K   B_AS/A    6951.9 A   ln(B/A [cm])  -9.574   q_st(0) 15.59 kJ/mol
+T  203 K   B_AS/A    1638.5 A   ln(B/A [cm]) -11.019   q_st(0) 15.27 kJ/mol
+T  233 K   B_AS/A     584.9 A   ln(B/A [cm]) -12.049   q_st(0) 14.93 kJ/mol
+T  278 K   B_AS/A     195.8 A   ln(B/A [cm]) -13.144   q_st(0) 14.33 kJ/mol
+T  298 K   B_AS/A     136.2 A   ln(B/A [cm]) -13.507   q_st(0) 14.03 kJ/mol
