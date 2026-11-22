@@ -1,0 +1,6 @@
+warning: The `UV_NATIVE_TLS` environment variable is deprecated and will be removed in a future release. Use `UV_SYSTEM_CERTS` instead.
+N5 0.001 MPa: 1.590 mol/kg
+N5 0.01 MPa: 6.791 mol/kg
+N5 0.03 MPa: 8.384 mol/kg
+N5 0.1 MPa: 8.915 mol/kg
+N5 1.0 MPa: 9.795 mol/kg

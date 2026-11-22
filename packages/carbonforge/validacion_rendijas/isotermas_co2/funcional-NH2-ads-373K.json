@@ -1,0 +1,43 @@
+{
+ "vacio_helio": 0.7225285445471324,
+ "formula": "C960H32N16",
+ "carga_neta_corregida": -1.744000000000001,
+ "puntos": [
+  {
+   "temperature": 373.0,
+   "pressure_mpa": 0.015,
+   "mean_count": 9.119615,
+   "count_error": 0.3661934318127207,
+   "mol_per_kg": 0.7737058375176299,
+   "excess_mol_per_kg": 0.7707414122150633,
+   "bulk_count": 0.03494146760273043,
+   "acceptance": {
+    "insert": 0.03816549924095134,
+    "delete": 0.03811506586059175,
+    "move": 0.22937089051601114,
+    "rotate": 0.19370366419542376
+   },
+   "energy_drift_k": 2.546585164964199e-10,
+   "warnings": [],
+   "segundos": 438.74550557136536
+  },
+  {
+   "temperature": 373.0,
+   "pressure_mpa": 0.1,
+   "mean_count": 40.295295,
+   "count_error": 1.5791214282077868,
+   "mol_per_kg": 3.4186426692349365,
+   "excess_mol_per_kg": 3.398835046477832,
+   "bulk_count": 0.2334710232891558,
+   "acceptance": {
+    "insert": 0.01908366427676644,
+    "delete": 0.018403848198150313,
+    "move": 0.1945369219044563,
+    "rotate": 0.15871744557019477
+   },
+   "energy_drift_k": 1.8044374883174896e-09,
+   "warnings": [],
+   "segundos": 471.82816886901855
+  }
+ ]
+}

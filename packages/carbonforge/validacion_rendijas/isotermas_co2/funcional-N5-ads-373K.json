@@ -2,5 +2,42 @@
  "vacio_helio": 0.7864737632589983,
  "formula": "C912N48",
  "carga_neta_corregida": 11.643999999999998,
- "puntos": []
+ "puntos": [
+  {
+   "temperature": 373.0,
+   "pressure_mpa": 0.015,
+   "mean_count": 16.60514,
+   "count_error": 0.3667609618751094,
+   "mol_per_kg": 1.4282310692384759,
+   "excess_mol_per_kg": 1.4249597245463255,
+   "bulk_count": 0.03803385724578684,
+   "acceptance": {
+    "insert": 0.035820495646349634,
+    "delete": 0.035401882597291934,
+    "move": 0.2351016811098797,
+    "rotate": 0.16334439283344393
+   },
+   "energy_drift_k": 1.673470251262188e-10,
+   "warnings": [],
+   "segundos": 434.7852988243103
+  },
+  {
+   "temperature": 373.0,
+   "pressure_mpa": 0.1,
+   "mean_count": 57.56895,
+   "count_error": 1.1107030763840033,
+   "mol_per_kg": 4.951585052184827,
+   "excess_mol_per_kg": 4.9297266631357015,
+   "bulk_count": 0.2541336749723023,
+   "acceptance": {
+    "insert": 0.013383304759246708,
+    "delete": 0.012684173399172135,
+    "move": 0.18621909073860743,
+    "rotate": 0.1290516206482593
+   },
+   "energy_drift_k": 5.2677933126688e-09,
+   "warnings": [],
+   "segundos": 464.1620819568634
+  }
+ ]
 }

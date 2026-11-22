@@ -1,0 +1,43 @@
+{
+ "vacio_helio": 0.7418052540005741,
+ "formula": "C960H16O16",
+ "carga_neta_corregida": 0.0,
+ "puntos": [
+  {
+   "temperature": 373.0,
+   "pressure_mpa": 0.015,
+   "mean_count": 8.9979,
+   "count_error": 0.35159078810142025,
+   "mol_per_kg": 0.7623612687025446,
+   "excess_mol_per_kg": 0.759321813829098,
+   "bulk_count": 0.035873688930092455,
+   "acceptance": {
+    "insert": 0.03867818250093879,
+    "delete": 0.03812060261557419,
+    "move": 0.230929821744018,
+    "rotate": 0.19601015403835675
+   },
+   "energy_drift_k": 2.9831426218152046e-10,
+   "warnings": [],
+   "segundos": 330.96685123443604
+  },
+  {
+   "temperature": 373.0,
+   "pressure_mpa": 0.1,
+   "mean_count": 42.639425,
+   "count_error": 1.5446738411977317,
+   "mol_per_kg": 3.6126925326739574,
+   "excess_mol_per_kg": 3.5923835792088963,
+   "bulk_count": 0.2396999164113834,
+   "acceptance": {
+    "insert": 0.018899107023857123,
+    "delete": 0.018260419843785226,
+    "move": 0.18765306532125317,
+    "rotate": 0.15625751623506776
+   },
+   "energy_drift_k": 1.3096723705530167e-09,
+   "warnings": [],
+   "segundos": 349.00778102874756
+  }
+ ]
+}

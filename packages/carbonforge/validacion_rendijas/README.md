@@ -1420,3 +1420,28 @@ en mol/kg; la columna "seco" es la mezcla CO₂/N₂ sin agua.
 gas de combustión húmedo sin secado previo, la rendija prístina, hidrófoba, es
 la más robusta. Coincide con lo que señalan Liu y Wilcox (2012): el agua
 compite primero en los sitios polares. Para capturar con N hace falta secar el gas.
+
+## Ciclo por temperatura (298 → 373 K)
+
+`ciclo_temperatura.py`, con isotermas a 373 K (0.015 y 0.1 MPa) en el campo de
+adsorción. N 5 % se repitió a 298 K en ese mismo campo, con sus cargas DFT, para
+que los dos extremos del ciclo usen las mismas cargas. Adsorción a 298 K y
+15 kPa de CO₂; desorción a 373 K con una purga que mantiene 15 kPa de CO₂, o bajo
+CO₂ puro a 0.1 MPa. Estimación de un solo componente; mol/kg.
+
+| rendija | 298 K, 15 kPa | 373 K, 15 kPa | 373 K, 100 kPa | TSA con purga | TSA con CO₂ puro |
+|---|---|---|---|---|---|
+| prístina | 5.72 | 0.74 | 3.59 | 4.98 | 2.13 |
+| **N 5 %** | **7.38** | 1.43 | 4.95 | **5.95** | 2.43 |
+| OH | 5.99 | 0.76 | 3.61 | 5.23 | 2.38 |
+| COOH | 5.75 | 0.82 | 3.53 | 4.92 | 2.21 |
+| NH₂ | 5.93 | 0.77 | 3.42 | 5.16 | 2.52 |
+
+- **Calentar sí aprovecha el sitio fuerte del N.** Al contrario que el ciclo de
+  vacío, donde el N retenía CO₂ al regenerar, a 373 K suelta casi todo:
+  5.95 mol/kg con purga frente a 4.98 de la prístina, un 20 % más.
+- **Regenerar bajo CO₂ puro reduce todas las capacidades a la mitad**: a 373 K y
+  0.1 MPa la rendija sigue medio llena. Las diferencias entre rendijas quedan
+  entonces en el ruido (2.1–2.5).
+- **Sigue siendo gas seco.** Con humedad, el agua ocupa los sitios del N
+  (sección anterior), y esa ventaja se pierde también aquí.
