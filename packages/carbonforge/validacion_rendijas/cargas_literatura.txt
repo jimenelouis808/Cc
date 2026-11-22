@@ -1,0 +1,3 @@
+COOH  Tenney 2006  carga neta -0.00 e -> 0  K_H    700.4 (623-778)  q_st 33.65
+OH    Tenney 2006  carga neta +0.00 e -> 0  K_H    502.6 (500-505)  q_st 30.55
+NH2   Chen 2026    carga neta -1.74 e -> 0  K_H    531.9 (529-535)  q_st 31.02

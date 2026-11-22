@@ -1183,3 +1183,37 @@ pared y sin ajustar nada.
   estar algo altas a baja presión. El orden entre estructuras no cambia, porque
   todas usan la misma pared. La validación cubre la pared prístina; las cargas
   de los grupos funcionales siguen sin contrastar.
+
+## Las cargas de los grupos contra la literatura
+
+`cargas_literatura.py` repite el Henry de CO₂ del paso 3 (rendija de 6.6 Å, 298 K)
+con cargas publicadas en lugar de las representativas de `forcefields.parameters`:
+COOH y OH de Tenney y Lastoskie, *Environ. Prog.* **25** (2006) 343, Tabla 3 (al
+extraer el texto se perdieron los signos; se restauraron de forma que cada grupo
+quede neutro), y NH₂ de Chen et al., *PCCP* (2026), SI Tabla S1 (DFT).
+
+| grupo | K_H, cargas representativas | K_H, cargas publicadas | q_st (kJ/mol) |
+|---|---|---|---|
+| prístina | 552 | — | 29.7 |
+| COOH | 2108 | **700** | 40.8 → 33.7 |
+| OH | 577 | 503 | 31.3 → 30.6 |
+| NH₂ | 570 | 532 | 31.4 → 31.0 |
+
+- **El COOH estaba inflado por un error de tipado.** El carbono del carboxilo
+  recibe el tipo `C_O` (+0.15 e), pensado para el carbono de un fenol, en vez de
+  ~+0.75. Así cada grupo queda con −0.53 e netos, como si fuera un carboxilato.
+  Neutro, su K_H baja de 3.8 a 1.3 veces el de la prístina.
+- **OH y NH₂ no cambian el resultado**: con cualquiera de los dos juegos de cargas
+  quedan dentro de ±10 % de la prístina. Lo poco que ganan por electrostática lo
+  pierden por el volumen que ocupan.
+- **El N sustitucional sigue siendo el que más mejora** (K_H 1305, 2.4 veces la
+  prístina). En el experimento (Nanomaterials 2019, carbón nitrurado con NH₃) el
+  calor sube +3.3 kJ/mol y aquí sube +5.3, así que su efecto probablemente está
+  algo exagerado.
+
+**Veredicto del paso 3, revisado**: con cargas publicadas, ningún grupo oxigenado
+o amino mejora claramente una rendija grafítica de 6.6 Å para CO₂. Coincide con
+Tenney y Lastoskie, que no encuentran ningún poro con grupos que supere al
+grafítico plano. El dopaje con N es la única modificación que ayuda a baja presión
+y no cuesta nada a 0.1 MPa. Las isotermas COOH del paso 3 usan las cargas
+infladas y sobrestiman la carga a baja presión.
