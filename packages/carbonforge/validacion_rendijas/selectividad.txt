@@ -1,0 +1,9 @@
+estructura               CO2 mol/kg  N2 mol/kg  x_CO2       S CO2/N2
+rendija-6.6                   5.758      0.252  0.958   129.3 ±  4.1  avisos 0
+super-cube                    0.372      0.210  0.639    10.0 ±  0.2  avisos 0
+super-tetrahedron             0.540      0.195  0.735    15.7 ±  0.5  avisos 1
+funcional-pristina            5.921      0.253  0.959   132.7 ±  4.3  avisos 0
+funcional-N5                  6.654      0.204  0.970   184.6 ±  6.8  avisos 0
+funcional-OH                  5.915      0.222  0.964   151.0 ±  5.4  avisos 0
+funcional-COOH                5.637      0.189  0.968   169.4 ±  6.7  avisos 0
+funcional-NH2                 5.648      0.218  0.963   146.6 ±  5.6  avisos 0

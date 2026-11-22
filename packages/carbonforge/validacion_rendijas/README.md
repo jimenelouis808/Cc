@@ -1245,3 +1245,64 @@ Tenney y Lastoskie. **El N sustitucional es la única modificación que mejora**
 (K_H ×2.4, el doble de carga a 1 kPa, igual a 0.1 MPa), aunque probablemente
 exagera algo el efecto: el calor sube 5.3 kJ/mol aquí y 3.3 en el experimento.
 Sus cargas siguen siendo las representativas.
+
+## Selectividad CO₂/N₂ y capacidad de trabajo
+
+**Mezcla.** `selectividad.py` usa `carbonforge.adsorption.mixture`: TraPPE N₂ (3
+sitios: N, una carga sin LJ en el centro de masas, N), un reservorio Peng-Robinson
+de mezcla e intercambios de identidad. Gas de combustión seco, 15 % CO₂ en N₂, a
+0.1 MPa y 298 K, con 200k pasos de equilibrado y 600k de producción. Las rendijas
+funcionalizadas usan el campo de adsorción; la rendija de 6.6 Å y las jaulas, la
+pared Steele neutra del estudio de CO₂ puro.
+
+| estructura | CO₂ (mol/kg) | N₂ (mol/kg) | x_CO₂ adsorbido | S CO₂/N₂ |
+|---|---|---|---|---|
+| rendija 6.6 (Steele) | 5.76 | 0.25 | 0.958 | 129 ± 4 |
+| super-cube | 0.37 | 0.21 | 0.639 | 10.0 ± 0.2 |
+| super-tetrahedron | 0.54 | 0.20 | 0.735 | 16 ± 1 (solo 1.9 N₂ por celda) |
+| prístina | 5.92 | 0.25 | 0.959 | 133 ± 4 |
+| N 5 % | 6.65 | 0.20 | 0.970 | 185 ± 7 |
+| OH | 5.92 | 0.22 | 0.964 | 151 ± 5 |
+| COOH | 5.64 | 0.19 | 0.968 | 169 ± 7 |
+| NH₂ | 5.65 | 0.22 | 0.963 | 147 ± 6 |
+
+- **Comprobación interna.** El CO₂ de la mezcla coincide con la isoterma pura a
+  su presión parcial (rendija 6.6: 5.76 frente a 5.81 mol/kg a 15 kPa). A esta
+  presión el N₂ apenas compite.
+- **La selectividad es lo que separa a los grupos, no la carga.** La carga de CO₂
+  apenas cambia entre rendijas, pero la selectividad sí: N +39 %, COOH +28 %, OH
+  +14 %, NH₂ +10 % sobre la prístina. Las cargas de la pared atraen al CO₂, cuyo
+  cuadrupolo es tres veces mayor, y los grupos quitan sitio a un N₂ que ya era
+  minoritario.
+- **Las jaulas no sirven para separar.** Con S de 10–16 adsorben casi tanto N₂
+  como CO₂.
+- **Cautela con las barras de error.** Salen de 10 bloques con 2–3 moléculas de
+  N₂ por celda, y los bloques correlacionados las subestiman. Las diferencias del
+  10 % (OH, NH₂) están en el límite. N y COOH sí destacan con claridad. Los
+  valores absolutos de S en el rango 100–200 son típicos de simulaciones de
+  rendijas ultramicroporosas; los carbones reales, con poros más anchos, miden
+  10–30.
+
+**Capacidad de trabajo** (`capacidad_trabajo.py`, desde las isotermas de CO₂
+puro; interpolación en log P; mol/kg):
+
+| estructura | VSA 100→10 kPa | gas 15→1 kPa |
+|---|---|---|
+| rendija 6.6 | 3.82 | 5.25 |
+| super-cube / super-tetrahedron | 1.43 / 1.25 | 0.29 / 0.40 |
+| prístina | 4.49 | 5.09 |
+| N 5 % | 3.35 | 5.31 |
+| OH | 3.17 | 5.28 |
+| COOH | 2.76 | 4.93 |
+| NH₂ | 3.68 | 5.21 |
+
+En un ciclo de vacío con CO₂ puro, los grupos y el N **reducen** la capacidad de
+trabajo, porque retienen más CO₂ al regenerar. En el ciclo de gas de combustión
+todas las rendijas quedan entre 4.9 y 5.3. No se calculó el ciclo por temperatura.
+
+**Veredicto de captura**: la rendija N-dopada es la mejor opción para gas de
+combustión (selectividad +39 %, la misma capacidad de trabajo a 15→1 kPa). Para
+CO₂ puro por vacío conviene la rendija sin modificar. Las jaulas quedan
+descartadas para CO₂. La cifra del N sigue dependiendo de cargas
+representativas, cuyo efecto sobre el calor ya parecía exagerado frente al
+experimento.
