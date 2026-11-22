@@ -1,0 +1,287 @@
+<title>Captura de CO₂ en carbono</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Space+Grotesk:wght@500;600;700&display=swap">
+<style>
+/* Layout: one reading column of about 70ch, with figures allowed to run a little wider. */
+:root {
+  --bg: #f6f7f8;
+  --panel: #ffffff;
+  --fg: #1b2127;
+  --muted: #5b6672;
+  --rule: #d9dee3;
+  --accent: #0f6b74;
+  --s-pri: #1b2127;
+  --s-n: #0f6b74;
+  --s-oh: #c07a12;
+  --s-cooh: #b2412f;
+  --s-nh2: #6c4bb5;
+  --s-cage: #8a949e;
+  --good: #1f7a4a;
+  --bad: #b2412f;
+  --font-display: "Space Grotesk", "Segoe UI", system-ui, sans-serif;
+  --font-body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #12171b; --panel: #192026; --fg: #e3e8ec; --muted: #9aa6b1; --rule: #2c353d;
+    --accent: #4fb8c1; --s-pri: #e3e8ec; --s-n: #4fb8c1; --s-oh: #e0a53e; --s-cooh: #e2735f;
+    --s-nh2: #a58ce6; --s-cage: #6f7a84; --good: #5cc28b; --bad: #e2735f; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #12171b; --panel: #192026; --fg: #e3e8ec; --muted: #9aa6b1; --rule: #2c353d;
+  --accent: #4fb8c1; --s-pri: #e3e8ec; --s-n: #4fb8c1; --s-oh: #e0a53e; --s-cooh: #e2735f;
+  --s-nh2: #a58ce6; --s-cage: #6f7a84; --good: #5cc28b; --bad: #e2735f; color-scheme: dark;
+}
+body {
+  background: var(--bg); color: var(--fg); font-family: var(--font-body);
+  font-size: 16px; line-height: 1.6;
+}
+.wrap {
+  max-width: 980px; margin: 0 auto;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 40px 72px;
+  display: grid; gap: 56px;
+}
+.prose { max-width: 70ch; }
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; line-height: 1.15; margin: 0; }
+h1 { font-size: clamp(2rem, 4.5vw, 2.9rem); letter-spacing: -0.01em; }
+h2 { font-size: 1.55rem; }
+h3 { font-size: 1.1rem; }
+p { margin: 0; }
+section { display: grid; gap: 18px; }
+.eyebrow {
+  font-family: var(--font-mono); font-size: 0.78rem; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--muted);
+}
+.lede { font-size: 1.15rem; color: var(--fg); max-width: 62ch; }
+.conds { font-family: var(--font-mono); font-size: 0.85rem; color: var(--muted); }
+.verdicts { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; }
+.verdict {
+  background: var(--panel); border: 1px solid var(--rule); border-radius: 6px;
+  padding: 16px 18px; display: grid; gap: 6px; align-content: start; min-width: 0;
+}
+.verdict .tag { font-family: var(--font-mono); font-size: 0.75rem; letter-spacing: 0.06em; text-transform: uppercase; }
+.verdict .tag.yes { color: var(--good); }
+.verdict .tag.no { color: var(--bad); }
+.verdict strong { font-family: var(--font-display); font-size: 1.1rem; font-weight: 600; }
+.verdict p { color: var(--muted); font-size: 0.93rem; }
+figure { margin: 0; display: grid; gap: 10px; min-width: 0; }
+figcaption { color: var(--muted); font-size: 0.9rem; max-width: 75ch; }
+.chart { background: var(--panel); border: 1px solid var(--rule); border-radius: 6px; padding: 12px; overflow-x: auto; }
+.chart svg { display: block; width: 100%; height: auto; min-width: 520px; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 0.85rem; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend i { width: 14px; height: 3px; border-radius: 2px; display: inline-block; }
+.tablewrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 0.92rem; }
+th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--rule); white-space: nowrap; }
+th { font-weight: 600; color: var(--muted); font-size: 0.8rem; letter-spacing: 0.04em; text-transform: uppercase; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; font-family: var(--font-mono); font-size: 0.88rem; }
+tr.hl td { color: var(--accent); font-weight: 600; }
+ul { margin: 0; padding-left: 1.2em; display: grid; gap: 6px; max-width: 72ch; }
+.two { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 24px; }
+.two > * { min-width: 0; }
+code { font-family: var(--font-mono); font-size: 0.88em; }
+footer { color: var(--muted); font-size: 0.88rem; border-top: 1px solid var(--rule); padding-top: 18px; display: grid; gap: 6px; }
+</style>
+
+<div class="wrap">
+  <header style="display:grid;gap:14px">
+    <div class="eyebrow">carbonforge · validacion_rendijas · GCMC</div>
+    <h1>Captura de CO₂ en carbono nanoporoso</h1>
+    <p class="lede">Qué geometría y qué química de pared capturan mejor el CO₂ de un gas de combustión, simulado por Monte Carlo gran canónico con un modelo validado contra datos experimentales.</p>
+    <p class="conds">TraPPE CO₂ y N₂, agua SPC/E, Ewald · pared grafítica Steele o tipada · 298 K salvo indicación · 15 % CO₂ en N₂ a 0.1 MPa</p>
+  </header>
+
+  <section>
+    <h2>Conclusiones</h2>
+    <div class="verdicts">
+      <div class="verdict"><span class="tag yes">funciona</span><strong>Rendija grafítica de 6.6 Å</strong><p>La mejor geometría: 5.8 mol/kg de CO₂ en mezcla y selectividad CO₂/N₂ de 130. Casi no adsorbe agua.</p></div>
+      <div class="verdict"><span class="tag yes">funciona en seco</span><strong>Dopaje con N grafítico</strong><p>Constante de Henry ×2, selectividad 221 y +20 % en ciclo por temperatura. Con humedad del 80 % pierde la ventaja.</p></div>
+      <div class="verdict"><span class="tag no">no compensa</span><strong>Grupos OH, COOH, NH₂</strong><p>Con cargas publicadas apenas suben la pendiente inicial, y quitan entre un 4 % y un 14 % de capacidad a 0.1 MPa.</p></div>
+      <div class="verdict"><span class="tag no">descartadas</span><strong>Jaulas y superestructuras</strong><p>Poros demasiado anchos: 3.6 a 25 veces menos CO₂ en mezcla y selectividades de 5 a 29.</p></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Isotermas de CO₂ puro</h2>
+    <figure>
+      <div class="chart"><svg id="iso" viewBox="0 0 760 380" role="img" aria-label="Isotermas de CO2 a 298 K"></svg></div>
+      <div class="legend" id="iso-legend"></div>
+      <figcaption>Carga absoluta a 298 K frente a presión (escala logarítmica). Rendijas de 6.6 Å con el campo de adsorción: el N con cargas DFT y los grupos con cargas publicadas. Las jaulas solo alcanzan a las rendijas a 1 MPa.</figcaption>
+    </figure>
+  </section>
+
+  <section>
+    <h2>Selectividad en gas de combustión</h2>
+    <figure>
+      <div class="chart"><svg id="sel" viewBox="0 0 760 430" role="img" aria-label="Selectividad CO2/N2 por estructura"></svg></div>
+      <figcaption>Selectividad CO₂/N₂, (x<sub>CO₂</sub>/x<sub>N₂</sub>)/(y<sub>CO₂</sub>/y<sub>N₂</sub>), con 15 % CO₂ a 0.1 MPa. Las barras de error salen de 10 bloques con 2 o 3 moléculas de N₂ por celda y probablemente están subestimadas. Los carbones reales, con poros más anchos, miden entre 10 y 30.</figcaption>
+    </figure>
+  </section>
+
+  <section>
+    <h2>Ciclos de regeneración y humedad</h2>
+    <div class="two">
+      <div style="display:grid;gap:10px">
+        <h3>Capacidad de trabajo, mol/kg</h3>
+        <div class="tablewrap"><table>
+          <thead><tr><th>rendija</th><th class="num">vacío 15→1 kPa</th><th class="num">temp. 298→373 K</th></tr></thead>
+          <tbody>
+            <tr><td>prístina</td><td class="num">5.09</td><td class="num">4.98</td></tr>
+            <tr class="hl"><td>N 5 %</td><td class="num">5.31</td><td class="num">5.95</td></tr>
+            <tr><td>OH</td><td class="num">5.28</td><td class="num">5.23</td></tr>
+            <tr><td>COOH</td><td class="num">4.93</td><td class="num">4.92</td></tr>
+            <tr><td>NH₂</td><td class="num">5.21</td><td class="num">5.16</td></tr>
+            <tr><td>jaulas</td><td class="num">0.29–0.40</td><td class="num">—</td></tr>
+          </tbody>
+        </table></div>
+        <p class="conds">Componente único. Ciclo por temperatura con purga a 15 kPa de CO₂; bajo CO₂ puro a 0.1 MPa todas quedan entre 2.1 y 2.5.</p>
+      </div>
+      <figure>
+        <h3>CO₂ adsorbido con humedad</h3>
+        <div class="chart"><svg id="hum" viewBox="0 0 420 260" role="img" aria-label="CO2 adsorbido frente a humedad relativa"></svg></div>
+        <figcaption>Mezcla CO₂/N₂/H₂O a 0.1 MPa. Con el 80 % de humedad, la rendija N 5 % adsorbe 6.5 mol/kg de agua y queda por debajo de la prístina.</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section>
+    <h2>Por qué creerse los números</h2>
+    <div class="tablewrap"><table>
+      <thead><tr><th>comprobación</th><th class="num">modelo</th><th class="num">referencia</th><th>fuente</th></tr></thead>
+      <tbody>
+        <tr><td>q<sub>st</sub>(0) del CO₂ sobre grafito, 203 K</td><td class="num">15.3 kJ/mol</td><td class="num">14.4 kJ/mol</td><td>Bottani et al., <i>Langmuir</i> 10 (1994) 3805</td></tr>
+        <tr><td>pendiente de ln B<sub>AS</sub> frente a 1/T</td><td class="num">1663 K</td><td class="num">1546 ± 95 K</td><td>ídem</td></tr>
+        <tr><td>subida de q<sub>st</sub> con N grafítico</td><td class="num">+3.3 kJ/mol</td><td class="num">+3.3 kJ/mol</td><td><i>Nanomaterials</i> 9 (2019) 1776</td></tr>
+        <tr><td>caja vacía frente a gas real (0.5–4 MPa)</td><td class="num">0.98–0.92</td><td class="num">Peng-Robinson</td><td>prueba interna</td></tr>
+        <tr><td>CO₂ en mezcla frente a isoterma pura a 15 kPa</td><td class="num">5.76</td><td class="num">5.81 mol/kg</td><td>coherencia interna</td></tr>
+      </tbody>
+    </table></div>
+    <ul>
+      <li>Las cargas de COOH y OH son las de Tenney y Lastoskie (2006), y las de NH₂ las de Chen et al. (2026). Las de la tabla de electrodos convertían el COOH en un carboxilato y cuadruplicaban su constante de Henry.</li>
+      <li>Las cargas del N grafítico se calcularon aquí con DFT (PBE/def2-SVP, IAO, copo C₃₆NH₁₅). El N queda casi neutro, no como un N⁻ de −0.45 e.</li>
+      <li>Todo sigue en duda en tres puntos: el pozo de Lennard-Jones del N (85 K), la presión de vapor del agua SPC/E y el uso de poros únicos en lugar de una distribución real de tamaños.</li>
+    </ul>
+  </section>
+
+  <footer>
+    <div>Código y datos: <code>packages/carbonforge/validacion_rendijas</code> (README, isotermas_co2/, selectividad/, humedad/) y <code>carbonforge/adsorption</code> (co2.py, mixture.py) · campo de adsorción en <code>carbonforge/forcefields/adsorption.py</code>.</div>
+  </footer>
+</div>
+
+<script>
+(function () {
+  const NS = "http://www.w3.org/2000/svg";
+  const css = (v) => `var(${v})`;
+  function el(tag, attrs, parent, text) {
+    const e = document.createElementNS(NS, tag);
+    for (const k in attrs) e.setAttribute(k, attrs[k]);
+    if (text !== undefined) e.textContent = text;
+    if (parent) parent.appendChild(e);
+    return e;
+  }
+
+  // Isotherms, mol/kg absolute at 298 K (isotermas_co2/*.json).
+  const iso = [
+    ["prístina", "--s-pri", [[0.001,0.624],[0.01,4.614],[0.03,7.604],[0.1,9.102],[1.0,9.955]]],
+    ["N 5 % (cargas DFT)", "--s-n", [[0.001,1.59],[0.01,6.791],[0.03,8.384],[0.1,8.915],[1.0,9.795]]],
+    ["OH", "--s-oh", [[0.001,0.716],[0.01,5.245],[0.03,7.271],[0.1,8.415],[1.0,9.381]]],
+    ["COOH", "--s-cooh", [[0.001,0.818],[0.01,5.057],[0.03,6.923],[0.1,7.821],[1.0,8.634]]],
+    ["NH₂", "--s-nh2", [[0.001,0.726],[0.01,5.038],[0.03,7.467],[0.1,8.722],[1.0,9.026]]],
+    ["super-cube", "--s-cage", [[0.001,0.045],[0.003,0.111],[0.01,0.23],[0.03,0.515],[0.1,1.662],[0.3,4.237],[1.0,9.21]], true],
+    ["super-tetrahedron", "--s-cage", [[0.001,0.183],[0.003,0.356],[0.01,0.438],[0.03,0.83],[0.1,1.691],[0.3,3.715],[1.0,9.562]], true],
+  ];
+  (function drawIso() {
+    const svg = document.getElementById("iso");
+    const L = 64, R = 20, T = 16, B = 52, W = 760, H = 380;
+    const x = (p) => L + (Math.log10(p) + 3) / 3 * (W - L - R);
+    const y = (n) => H - B - n / 10 * (H - T - B);
+    for (let n = 0; n <= 10; n += 2) {
+      el("line", {x1: L, x2: W - R, y1: y(n), y2: y(n), stroke: css("--rule"), "stroke-width": 1}, svg);
+      el("text", {x: L - 10, y: y(n) + 4, "text-anchor": "end", fill: css("--muted"), "font-size": 12, "font-family": "IBM Plex Mono, monospace"}, svg, n);
+    }
+    [[0.001,"1 kPa"],[0.01,"10 kPa"],[0.1,"100 kPa"],[1,"1 MPa"]].forEach(([p, lab]) => {
+      el("line", {x1: x(p), x2: x(p), y1: T, y2: H - B, stroke: css("--rule"), "stroke-width": 1}, svg);
+      el("text", {x: x(p), y: H - B + 20, "text-anchor": p === 0.001 ? "start" : (p === 1 ? "end" : "middle"), fill: css("--muted"), "font-size": 12, "font-family": "IBM Plex Mono, monospace"}, svg, lab);
+    });
+    el("line", {x1: x(0.015), x2: x(0.015), y1: T, y2: H - B, stroke: css("--accent"), "stroke-width": 1, "stroke-dasharray": "4 4"}, svg);
+    el("text", {x: x(0.015) + 6, y: T + 12, fill: css("--accent"), "font-size": 12}, svg, "15 kPa: presión parcial en gas de combustión");
+    el("text", {x: 16, y: (H - B + T) / 2, transform: `rotate(-90 16 ${(H - B + T) / 2})`, "text-anchor": "middle", fill: css("--muted"), "font-size": 12}, svg, "CO₂ adsorbido (mol/kg)");
+    el("text", {x: (L + W - R) / 2, y: H - 10, "text-anchor": "middle", fill: css("--muted"), "font-size": 12}, svg, "presión de CO₂");
+    const legend = document.getElementById("iso-legend");
+    iso.forEach(([name, color, pts, dashed]) => {
+      const d = pts.map(([p, n], i) => (i ? "L" : "M") + x(p).toFixed(1) + " " + y(n).toFixed(1)).join(" ");
+      el("path", {d, fill: "none", stroke: css(color), "stroke-width": name.startsWith("N 5") ? 3 : 2, "stroke-dasharray": dashed ? "6 4" : "none"}, svg);
+      pts.forEach(([p, n]) => el("circle", {cx: x(p), cy: y(n), r: 3, fill: css(color)}, svg));
+      const s = document.createElement("span");
+      s.innerHTML = `<i style="background:${css(color)}"></i>${name}`;
+      legend.appendChild(s);
+    });
+  })();
+
+  // Selectivity CO2/N2 (selectividad/*.json, n_dft.json).
+  const sel = [
+    ["rendija N 5 % (cargas DFT)", 220.7, 8.1, "--s-n"],
+    ["rendija COOH", 169.4, 6.7, "--s-cooh"],
+    ["rendija OH", 151.0, 5.4, "--s-oh"],
+    ["rendija NH₂", 146.6, 5.6, "--s-nh2"],
+    ["rendija prístina", 132.7, 4.3, "--s-pri"],
+    ["súper-cuadrado (cristalina)", 28.9, 0.5, "--s-cage"],
+    ["schwarzita D (cristalina)", 27.0, 0.5, "--s-cage"],
+    ["súper-grafeno (cristalina)", 16.6, 0.2, "--s-cage"],
+    ["super-tetrahedron (jaula)", 15.7, 0.5, "--s-cage"],
+    ["super-cube (jaula)", 10.0, 0.2, "--s-cage"],
+    ["schwarzita P (cristalina)", 6.7, 0.1, "--s-cage"],
+    ["giroide (cristalina)", 5.0, 0.05, "--s-cage"],
+  ];
+  (function drawSel() {
+    const svg = document.getElementById("sel");
+    const L = 220, R = 60, T = 10, W = 760, row = 34;
+    const x = (v) => L + v / 240 * (W - L - R);
+    const H = T + sel.length * row + 30;
+    [0, 50, 100, 150, 200].forEach((v) => {
+      el("line", {x1: x(v), x2: x(v), y1: T, y2: T + sel.length * row, stroke: css("--rule"), "stroke-width": 1}, svg);
+      el("text", {x: x(v), y: T + sel.length * row + 18, "text-anchor": "middle", fill: css("--muted"), "font-size": 12, "font-family": "IBM Plex Mono, monospace"}, svg, v);
+    });
+    sel.forEach(([name, s, err, color], i) => {
+      const cy = T + i * row + row / 2;
+      el("text", {x: L - 10, y: cy + 4, "text-anchor": "end", fill: css("--fg"), "font-size": 13}, svg, name);
+      el("rect", {x: L, y: cy - 9, width: Math.max(1, x(s) - L), height: 18, rx: 2, fill: css(color), opacity: color === "--s-cage" ? 0.7 : 1}, svg);
+      el("line", {x1: x(s - err), x2: x(s + err), y1: cy, y2: cy, stroke: css("--fg"), "stroke-width": 1.5}, svg);
+      el("text", {x: x(s + err) + 8, y: cy + 4, fill: css("--muted"), "font-size": 12, "font-family": "IBM Plex Mono, monospace"}, svg, s.toFixed(0));
+    });
+    svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  })();
+
+  // Humidity (humedad/*.json; dry from the mixture runs), mol/kg CO2.
+  const hum = [
+    ["prístina", "--s-pri", [5.92, 5.70, 5.64]],
+    ["N 5 %", "--s-n", [7.14, 5.94, 5.30]],
+    ["COOH", "--s-cooh", [5.64, 5.59, 5.32]],
+  ];
+  (function drawHum() {
+    const svg = document.getElementById("hum");
+    const L = 46, R = 76, T = 14, B = 40, W = 420, H = 260;
+    const rh = [0, 30, 80];
+    const x = (v) => L + v / 80 * (W - L - R);
+    const y = (n) => H - B - (n - 5) / 2.5 * (H - T - B);
+    [5, 5.5, 6, 6.5, 7, 7.5].forEach((n) => {
+      el("line", {x1: L, x2: W - R, y1: y(n), y2: y(n), stroke: css("--rule"), "stroke-width": 1}, svg);
+      el("text", {x: L - 8, y: y(n) + 4, "text-anchor": "end", fill: css("--muted"), "font-size": 11, "font-family": "IBM Plex Mono, monospace"}, svg, n.toFixed(1));
+    });
+    rh.forEach((v) => el("text", {x: x(v), y: H - B + 18, "text-anchor": "middle", fill: css("--muted"), "font-size": 11, "font-family": "IBM Plex Mono, monospace"}, svg, v === 0 ? "seco" : v + " % HR"));
+    hum.forEach(([name, color, vals]) => {
+      const d = vals.map((n, i) => (i ? "L" : "M") + x(rh[i]).toFixed(1) + " " + y(n).toFixed(1)).join(" ");
+      el("path", {d, fill: "none", stroke: css(color), "stroke-width": 2.5}, svg);
+      vals.forEach((n, i) => el("circle", {cx: x(rh[i]), cy: y(n), r: 3.5, fill: css(color)}, svg));
+      const off = name === "COOH" ? 10 : (name === "N 5 %" ? -4 : -8);
+      el("text", {x: x(80) + 8, y: y(vals[2]) + 4 + off, fill: css(color), "font-size": 12}, svg, name);
+    });
+  })();
+})();
+</script>
