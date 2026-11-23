@@ -17,3 +17,19 @@ slit H=8 | 40 K                          | K_H(H2)   1.247e+06 | K_H(D2)   1.419
 slit H=10 | 77 K                         | K_H(H2)       135.6 | K_H(D2)       148.9 | S   1.098 (1.097-1.098) | q_st H2   4.16 D2   4.23 kJ/mol
 slit H=10 | 40 K                         | K_H(H2)   3.905e+04 | K_H(D2)   5.296e+04 | S   1.356 (1.355-1.357) | q_st H2   3.99 D2   4.10 kJ/mol
 SWCNT bundle gap=3.4 | 77 K              | K_H(H2)       522.4 | K_H(D2)       807.5 | S   1.546 (1.541-1.550) | q_st H2   6.41 D2   7.10 kJ/mol
+SWCNT bundle gap=3.4 | 40 K              | K_H(H2)   1.735e+06 | K_H(D2)   1.618e+07 | S   9.324 (9.267-9.381) | q_st H2   6.01 D2   7.78 kJ/mol
+SWCNT bundle gap=4 | 77 K                | K_H(H2)        4260 | K_H(D2)        5510 | S   1.293 (1.293-1.293) | q_st H2   8.79 D2   8.92 kJ/mol
+SWCNT bundle gap=4 | 40 K                | K_H(H2)    8.59e+08 | K_H(D2)   1.805e+09 | S   2.102 (2.099-2.105) | q_st H2   8.81 D2   8.99 kJ/mol
+SWCNT bundle gap=6 | 77 K                | K_H(H2)       779.6 | K_H(D2)       942.2 | S   1.209 (1.208-1.209) | q_st H2   5.93 D2   6.07 kJ/mol
+SWCNT bundle gap=6 | 40 K                | K_H(H2)   2.514e+06 | K_H(D2)   4.579e+06 | S   1.821 (1.820-1.822) | q_st H2   5.84 D2   6.07 kJ/mol
+schwarzite-P | 77 K                      | K_H(H2)       353.4 | K_H(D2)       414.7 | S   1.173 (1.171-1.175) | q_st H2   5.90 D2   6.04 kJ/mol
+schwarzite-P | 40 K                      | K_H(H2)   1.826e+06 | K_H(D2)   3.174e+06 | S   1.737 (1.716-1.758) | q_st H2   6.29 D2   6.50 kJ/mol
+schwarzite-D | 77 K                      | K_H(H2)   1.269e+04 | K_H(D2)   1.523e+04 | S   1.200 (1.199-1.201) | q_st H2   9.76 D2   9.83 kJ/mol
+schwarzite-D | 40 K                      | K_H(H2)   1.591e+10 | K_H(D2)   2.568e+10 | S   1.614 (1.598-1.630) | q_st H2  10.07 D2  10.18 kJ/mol
+gyroid | 77 K                            | K_H(H2)         153 | K_H(D2)       172.6 | S   1.128 (1.127-1.128) | q_st H2   4.64 D2   4.73 kJ/mol
+gyroid | 40 K                            | K_H(H2)   1.127e+05 | K_H(D2)   1.688e+05 | S   1.497 (1.496-1.499) | q_st H2   4.84 D2   4.99 kJ/mol
+knee-super-graphene | 77 K               | K_H(H2)        9478 | K_H(D2)   1.068e+04 | S   1.127 (1.127-1.128) | q_st H2   9.79 D2   9.81 kJ/mol
+knee-super-graphene | 40 K               | K_H(H2)   1.254e+10 | K_H(D2)   1.533e+10 | S   1.222 (1.212-1.232) | q_st H2   9.88 D2   9.90 kJ/mol
+knee-super-square | 77 K                 | K_H(H2)        4460 | K_H(D2)        5021 | S   1.126 (1.125-1.126) | q_st H2   7.89 D2   7.95 kJ/mol
+knee-super-square | 40 K                 | K_H(H2)   3.161e+08 | K_H(D2)   4.357e+08 | S   1.378 (1.376-1.381) | q_st H2   7.89 D2   7.99 kJ/mol
+super-cubic | 77 K                       | K_H(H2)        4908 | K_H(D2)        5996 | S   1.222 (1.220-1.223) | q_st H2   8.92 D2   9.08 kJ/mol
