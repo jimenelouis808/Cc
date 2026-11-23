@@ -261,6 +261,22 @@ N2_N2 = PairParameters(
     critical_temperature=126.19,
 )
 
+#: Mass of D2, in amu.
+MASS_D2: float = 4.02820
+
+#: D2 against a wall: the SAME Lennard-Jones well and diameter as H2 --
+#: isotopes share their electrons, so the Born-Oppenheimer surface is
+#: the same -- with twice the mass. Everything that separates the two
+#: is therefore the Feynman-Hibbs term, which scales as 1/(m T): this is
+#: the entry for quantum sieving. The second-order FH expansion is only
+#: trustworthy while that term is a correction, so read selectivities
+#: from very narrow pores or below ~40 K as upper bounds, not values.
+D2_SELF = PairParameters(
+    epsilon=H2_H2.epsilon, sigma=H2_H2.sigma, reduced_mass=MASS_D2,
+    source="H2 Lennard-Jones (Levesque 2002) with the D2 mass",
+    critical_temperature=38.35,
+)
+
 #: The adsorbates this module offers against carbon, by name.
 #:
 #: **CO2 is deliberately absent.** It is linear and strongly
@@ -272,6 +288,7 @@ N2_N2 = PairParameters(
 #: a :class:`PairParameters` by hand if you want to try one anyway.
 ADSORBATES: dict[str, PairParameters] = {
     "H2": H2_SELF,
+    "D2": D2_SELF,
     "Ne": NE_NE,
     "Ar": AR_AR,
     "CH4": CH4_CH4,
