@@ -33,3 +33,7 @@ knee-super-graphene | 40 K               | K_H(H2)   1.254e+10 | K_H(D2)   1.533
 knee-super-square | 77 K                 | K_H(H2)        4460 | K_H(D2)        5021 | S   1.126 (1.125-1.126) | q_st H2   7.89 D2   7.95 kJ/mol
 knee-super-square | 40 K                 | K_H(H2)   3.161e+08 | K_H(D2)   4.357e+08 | S   1.378 (1.376-1.381) | q_st H2   7.89 D2   7.99 kJ/mol
 super-cubic | 77 K                       | K_H(H2)        4908 | K_H(D2)        5996 | S   1.222 (1.220-1.223) | q_st H2   8.92 D2   9.08 kJ/mol
+super-cubic | 40 K                       | K_H(H2)   2.049e+09 | K_H(D2)   4.012e+09 | S   1.955 (1.924-1.985) | q_st H2   9.45 D2   9.71 kJ/mol
+super-diamond | 77 K                     | K_H(H2)        4750 | K_H(D2)        5714 | S   1.203 (1.201-1.204) | q_st H2   8.85 D2   8.96 kJ/mol
+super-diamond | 40 K                     | K_H(H2)   1.724e+09 | K_H(D2)    2.96e+09 | S   1.717 (1.708-1.726) | q_st H2   9.31 D2   9.49 kJ/mol
+super-fcc | 77 K                         | K_H(H2)       648.7 | K_H(D2)       814.5 | S   1.256 (1.242-1.269) | q_st H2   7.40 D2   7.65 kJ/mol
