@@ -85,21 +85,21 @@ def draw(data: dict[float, list[dict]], out: Path) -> None:
         top.plot([row[0] for row in published],
                  [row[1] for row in published], "-o",
                  color=COLOUR[temperature], lw=1.4, ms=12, mfc="#fcfcfb",
-                 mew=1.8, zorder=3, label=f"{temperature:g} K  publicado")
+                 mew=1.8, zorder=3, label=f"{temperature:g} K  published")
         rows = data[temperature]
         if rows:
             top.plot([r["presion_mpa"] for r in rows],
                      [r["rho_calculado"] for r in rows], "s",
                      color=COLOUR[temperature], ms=6, mew=0.0, zorder=4,
-                     label=f"{temperature:g} K  este código")
+                     label=f"{temperature:g} K  this work")
 
     top.set_xscale("log")
     top.set_yscale("log")
-    top.set_ylabel(r"$\rho_o$ de H$_2$ adsorbido  (g cm$^{-3}$)", color=INK2)
+    top.set_ylabel(r"adsorbed H$_2$ $\rho_o$  (g cm$^{-3}$)", color=INK2)
     top.legend(frameon=False, loc="lower right", fontsize=8.5,
                labelcolor=INK2, ncol=2, columnspacing=1.2)
     top.set_title(
-        "Haz de SWNT de Levesque: D = 13.3 Å, d = 6 Å, tubos abiertos",
+        "Levesque SWCNT bundle: D = 13.3 Å, d = 6 Å, open tubes",
         color=INK, fontsize=10.5, loc="left", pad=8)
 
     # --- (b) the residual, where the agreement is actually readable ---
@@ -114,8 +114,8 @@ def draw(data: dict[float, list[dict]], out: Path) -> None:
                     color=COLOUR[temperature], lw=1.8, ms=7, mew=1.6,
                     mec="#fcfcfb", zorder=3, label=f"{temperature:g} K")
     bottom.set_xscale("log")
-    bottom.set_xlabel("Presión del reservorio  (MPa)", color=INK2)
-    bottom.set_ylabel("diferencia  (%)", color=INK2)
+    bottom.set_xlabel("Reservoir pressure  (MPa)", color=INK2)
+    bottom.set_ylabel("difference  (%)", color=INK2)
     bottom.set_ylim(-12, 12)
     bottom.legend(frameon=False, loc="upper left", fontsize=8.5,
                   labelcolor=INK2, ncol=2)

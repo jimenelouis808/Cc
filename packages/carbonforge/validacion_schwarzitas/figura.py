@@ -71,12 +71,12 @@ def draw(values: dict[str, float], out: pathlib.Path) -> None:
 
     span = np.array([1300.0, 2850.0])
     axis.plot(span, span / CHAHINE, "--", color=MUTED, lw=1.3, zorder=1)
-    axis.annotate("regla de Chahine:\n1 wt% por 500 m²/g",
+    axis.annotate("Chahine's rule:\n1 wt% per 500 m²/g",
                   xy=(1340, 1340 / CHAHINE + 0.12), color=MUTED, fontsize=8,
                   ha="left", va="bottom")
 
     axis.axhline(3.0, color=GRID, lw=7, zorder=0)
-    axis.annotate("Kowalczyk: ~3 wt% para P, D y G, leído de una figura",
+    axis.annotate("Kowalczyk: ~3 wt% for P, D and G, read from a figure",
                   xy=(2830, 2.72), color=MUTED, fontsize=8, ha="right",
                   va="center")
 
@@ -89,24 +89,24 @@ def draw(values: dict[str, float], out: pathlib.Path) -> None:
                                                      pair[0][1]),
         arrowprops=dict(arrowstyle="<->", color=MUTED, lw=1.1,
                         shrinkA=9, shrinkB=9), zorder=2)
-    axis.annotate("misma área,\n+42 %", xy=(2600, 5.45), color=MUTED,
+    axis.annotate("same area,\n+42 %", xy=(2600, 5.45), color=MUTED,
                   fontsize=8, ha="left", va="center")
 
     for name, wt in values.items():
         axis.plot([AREA[name]], [wt], "o", color=BLUE, ms=11,
                   mec="#fcfcfb", mew=1.8, zorder=4)
-        mark = "\n(interpolado)" if name == "haz SWNT" else ""
+        mark = "\n(interpolated)" if name == "haz SWNT" else ""
         offset = LABEL_OFFSET[name]
-        axis.annotate(f"{name}  {wt:.2f} wt%{mark}", xy=(AREA[name], wt),
+        axis.annotate(f"{name.replace('haz SWNT', 'SWCNT bundle')}  {wt:.2f} wt%{mark}", xy=(AREA[name], wt),
                       xytext=offset, textcoords="offset points",
                       ha="center" if offset[0] == 0 else "right",
                       va="center", color=INK2, fontsize=8.5, zorder=5)
 
-    axis.set_xlabel("área accesible geométrica  (m² g⁻¹)", color=INK2)
-    axis.set_ylabel("H₂ absoluto a 3.8 MPa y 77 K  (wt%, masa total)",
+    axis.set_xlabel("geometric accessible area  (m² g⁻¹)", color=INK2)
+    axis.set_ylabel("absolute H₂ at 3.8 MPa and 77 K  (wt%, total mass)",
                     color=INK2)
-    axis.set_title("Captación contra área accesible: el área ordena, "
-                   "y no basta",
+    axis.set_title("Uptake vs accessible area: area orders the materials, "
+                   "but is not enough",
                    color=INK, fontsize=11, loc="left", pad=10)
     axis.set_xlim(1300, 2850)
     axis.set_ylim(2.4, 7.3)

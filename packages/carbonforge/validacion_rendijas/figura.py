@@ -156,9 +156,9 @@ def main() -> int:
 
         axis.set_title(f"{pressure:g} MPa", color=INK, fontsize=11,
                        fontweight="bold", loc="left")
-        axis.set_xlabel("ancho de canal libre (Å)", color=INK2, fontsize=9)
+        axis.set_xlabel("free channel width (Å)", color=INK2, fontsize=9)
 
-    axes[0].set_ylabel("exceso adsorbido (wt %)", color=INK2, fontsize=9)
+    axes[0].set_ylabel("excess uptake (wt %)", color=INK2, fontsize=9)
 
     # The layer marks are labelled once, in the first panel, and LOW:
     # the top of that panel holds the title and the peak's value, and
@@ -177,29 +177,29 @@ def main() -> int:
         # Low and left, in the empty corner: the band between 3 and
         # 11 A now carries the slit's own dip, the schwarzite label and
         # two shrunken super-graphenes.
-        axes[0].annotate("rendija de grafeno", xy=first[1.0],
+        axes[0].annotate("graphene slit", xy=first[1.0],
                          xytext=(0, -48), textcoords="offset points",
                          color=SLIT, fontsize=9, fontweight="bold")
     if 1.0 in schwarzites["Schwarz D"]:
         # Below its dot, not beside it: the shrunken super-graphenes
         # landed at 9-10 A and the label used to run straight over them.
-        axes[0].annotate("schwarzitas", xy=schwarzites["Schwarz D"][1.0],
+        axes[0].annotate("schwarzites", xy=schwarzites["Schwarz D"][1.0],
                          xytext=(0, -20), textcoords="offset points",
                          ha="center", color=SCHWARZITE, fontsize=9,
                          fontweight="bold")
     if 1.0 in supers["supertubo"]:
-        axes[0].annotate("superestructuras", xy=supers["supertubo"][1.0],
+        axes[0].annotate("superstructures", xy=supers["supertubo"][1.0],
                          xytext=(-10, -20), textcoords="offset points",
                          color=SUPER, fontsize=9, fontweight="bold",
                          ha="right")
 
     handles = [
         Line2D([], [], color=SLIT, linewidth=2.0, marker="o", markersize=5.5,
-               markeredgecolor=SURFACE, label="rendija de grafeno"),
+               markeredgecolor=SURFACE, label="graphene slit"),
         Line2D([], [], color=SCHWARZITE, linestyle="none", marker="o",
-               markersize=7, markeredgecolor=SURFACE, label="schwarzitas"),
+               markersize=7, markeredgecolor=SURFACE, label="schwarzites"),
         Line2D([], [], color=SUPER, linestyle="none", marker="o",
-               markersize=7, markeredgecolor=SURFACE, label="superestructuras"),
+               markersize=7, markeredgecolor=SURFACE, label="superstructures"),
     ]
     legend = fig.legend(handles=handles, loc="upper right", ncols=3,
                         frameon=False, fontsize=9,
@@ -207,16 +207,15 @@ def main() -> int:
     for text in legend.get_texts():
         text.set_color(INK2)
 
-    fig.suptitle("Hidrógeno a 77 K: lo que decide la captación es el ancho "
-                 "del poro", color=INK, fontsize=13, fontweight="bold",
+    fig.suptitle("Hydrogen at 77 K: pore width decides the uptake", color=INK, fontsize=13, fontweight="bold",
                  x=0.012, ha="left", y=0.98)
     fig.text(0.012, 0.045,
-             "La rendija es un barrido controlado: su área es constante "
-             "(2670 m²/g) en toda la serie, así que sólo se mueve el ancho.",
+             "The slit is a controlled sweep: its area is constant "
+             "(2670 m²/g) across the series, so only the width changes.",
              color=MUTED, fontsize=8.5, ha="left")
     fig.text(0.012, 0.012,
-             "Las marcas nσ son múltiplos del diámetro del H₂ (2.958 Å), "
-             "es decir el ancho mínimo que admite n capas de hidrógeno.",
+             "The nσ marks are multiples of the H₂ diameter (2.958 Å): "
+             "the narrowest channel that admits n layers of hydrogen.",
              color=MUTED, fontsize=8.5, ha="left")
     fig.tight_layout(rect=(0, 0.08, 1, 0.94))
     for suffix in ("png", "pdf"):
