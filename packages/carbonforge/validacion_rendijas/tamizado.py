@@ -48,7 +48,10 @@ def structures():
 
 
 def main(samples: int) -> None:
-    done = OUT.read_text() if OUT.exists() else ""
+    # Exact keys, not substrings: "super-graphene | 77 K" is inside
+    # "knee-super-graphene | 77 K", and a substring test skipped it.
+    done = ({line.split(" | K_H")[0].strip() for line in OUT.read_text().splitlines()}
+            if OUT.exists() else set())
     for name, build in structures():
         for t in TEMPERATURES:
             key = f"{name} | {t:g} K"
