@@ -3,6 +3,6 @@
 # (structure, temperature) row is in tamizado.txt.
 cd "$(dirname "$0")"
 total=$(OMP_NUM_THREADS=1 uv run python -c "import tamizado; print(2*len(list(tamizado.structures())))" 2>/dev/null)
-exec ./vigia.sh tamizado "python tamizado.py" \
+exec ./vigia.sh tamizado "^[^ ]*python[0-9.]* tamizado.py" \
   "[ \$(wc -l < tamizado.txt) -ge $total ]" \
   "OMP_NUM_THREADS=1 nice -n 5 uv run python tamizado.py 500000"
