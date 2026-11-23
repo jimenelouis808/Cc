@@ -419,7 +419,7 @@ def gallery() -> tuple[str, dict]:
     header = "".join(f'<div class="gh">{GAS_LABEL[g]}</div>' for g in GASES)
     for name, (_src, style) in STRUCTURES.items():
         row = [f'<div class="gname">{name}<span class="sub">'
-               f'{"slab 8 Å" if style == "slab" else ("down the tube axis" if style == "top" else "whole cage")}'
+               f'{ {"slab": "8 Å slab", "net": "slab, 40 % of cell", "axis": "down the tube axis"}.get(style, "whole cell")}'
                "</span></div>"]
         for g in GASES:
             png = HERE / "galeria" / f"{name}__{g}.png"

@@ -29,17 +29,17 @@ FOLDER = HERE / "galeria"
 
 #: name -> (file relative to HERE or "bundle", drawing style)
 STRUCTURES = {
-    "swcnt-bundle": ("bundle", "top"),
+    "swcnt-bundle": ("bundle", "axis"),
     "schwarzite-P": ("cristalinas/knee-schwarzite-primitive.extxyz", "slab"),
     "schwarzite-D": ("cristalinas/knee-schwarzite-diamond.extxyz", "slab"),
     "gyroid": ("cristalinas/knee-schwarzite-gyroid.extxyz", "slab"),
     "knee-super-graphene": ("cristalinas/knee-super-graphene_k22.extxyz", "slab"),
     "knee-super-square": ("cristalinas/knee-super-square_k12_n7.extxyz", "slab"),
-    "super-cubic": ("superestructuras/super-cubic.extxyz", "slab"),
-    "super-diamond": ("superestructuras/super-diamond.extxyz", "slab"),
-    "super-fcc": ("superestructuras/super-fcc.extxyz", "slab"),
-    "super-graphene": ("superestructuras/super-graphene.extxyz", "slab"),
-    "super-square": ("superestructuras/super-square.extxyz", "slab"),
+    "super-cubic": ("superestructuras/super-cubic.extxyz", "cage"),
+    "super-diamond": ("superestructuras/super-diamond.extxyz", "net"),
+    "super-fcc": ("superestructuras/super-fcc.extxyz", "net"),
+    "super-graphene": ("superestructuras/super-graphene.extxyz", "net"),
+    "super-square": ("superestructuras/super-square.extxyz", "net"),
     "super-cube": ("jaulas/super-cube.extxyz", "cage"),
     "super-tetrahedron": ("jaulas/super-tetrahedron.extxyz", "cage"),
     "super-hypercube": ("superestructuras/super-hypercube.extxyz", "cage"),
@@ -91,13 +91,16 @@ def simulate(name: str, gas: str) -> Atoms:
 def draw(path: Path) -> Path:
     atoms = read(str(path))
     style = STRUCTURES[path.stem.split("__")[0]][1]
-    if style == "slab":
+    if style in ("slab", "net"):
+        # A meshed net is mostly vacuum: an 8 A cut can miss every strut,
+        # so it gets 40 % of the cell instead.
         cell = np.diag(atoms.cell)
+        width = SLAB if style == "slab" else 0.4 * cell[1]
         y = atoms.positions[:, 1] % cell[1]
-        atoms = atoms[np.abs(y - cell[1] / 2) < SLAB / 2]
+        atoms = atoms[np.abs(y - cell[1] / 2) < width / 2]
         rotation = "-90x"
-    elif style == "top":
-        rotation = "0x"
+    elif style == "axis":
+        rotation = "-90x"           # the bundle's tubes run along y
     else:
         rotation = "-30x,20y"
     tags = atoms.get_tags()
