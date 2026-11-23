@@ -44,3 +44,7 @@ super-tetrahedron | 77 K                 | K_H(H2)   3.372e+04 | K_H(D2)   4.347
 super-tetrahedron | 40 K                 | K_H(H2)   2.705e+11 | K_H(D2)   5.736e+11 | S   2.110 (2.025-2.195) | q_st H2  11.37 D2  11.64 kJ/mol
 super-hypercube | 77 K                   | K_H(H2)   1.404e+04 | K_H(D2)   2.263e+04 | S   1.612 (1.605-1.619) | q_st H2  11.83 D2  12.16 kJ/mol
 super-hypercube | 40 K                   | K_H(H2)   3.073e+11 | K_H(D2)   1.185e+12 | S   3.887 (3.514-4.261) | q_st H2  12.51 D2  12.87 kJ/mol
+super-graphene | 77 K                    | K_H(H2)        4087 | K_H(D2)        4893 | S   1.197 (1.197-1.198) | q_st H2   8.58 D2   8.71 kJ/mol
+super-graphene | 40 K                    | K_H(H2)   1.257e+09 | K_H(D2)   2.208e+09 | S   1.757 (1.736-1.779) | q_st H2   9.31 D2   9.51 kJ/mol
+super-square | 77 K                      | K_H(H2)        4233 | K_H(D2)        5074 | S   1.199 (1.197-1.200) | q_st H2   8.46 D2   8.60 kJ/mol
+super-square | 40 K                      | K_H(H2)   8.025e+08 | K_H(D2)   1.509e+09 | S   1.877 (1.810-1.944) | q_st H2   8.84 D2   9.13 kJ/mol

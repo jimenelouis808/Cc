@@ -48,3 +48,7 @@ warning: The `UV_NATIVE_TLS` environment variable is deprecated and will be remo
 warning: The `UV_NATIVE_TLS` environment variable is deprecated and will be removed in a future release. Use `UV_SYSTEM_CERTS` instead.
 warning: The `UV_NATIVE_TLS` environment variable is deprecated and will be removed in a future release. Use `UV_SYSTEM_CERTS` instead.
 warning: The `UV_NATIVE_TLS` environment variable is deprecated and will be removed in a future release. Use `UV_SYSTEM_CERTS` instead.
+super-graphene | 77 K                    | K_H(H2)        4087 | K_H(D2)        4893 | S   1.197 (1.197-1.198) | q_st H2   8.58 D2   8.71 kJ/mol
+super-graphene | 40 K                    | K_H(H2)   1.257e+09 | K_H(D2)   2.208e+09 | S   1.757 (1.736-1.779) | q_st H2   9.31 D2   9.51 kJ/mol
+super-square | 77 K                      | K_H(H2)        4233 | K_H(D2)        5074 | S   1.199 (1.197-1.200) | q_st H2   8.46 D2   8.60 kJ/mol
+super-square | 40 K                      | K_H(H2)   8.025e+08 | K_H(D2)   1.509e+09 | S   1.877 (1.810-1.944) | q_st H2   8.84 D2   9.13 kJ/mol

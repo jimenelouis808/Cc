@@ -1451,3 +1451,53 @@ isoterma con cargas representativas. Con el campo de adsorción (cargas DFT,
 `funcional-N5-ads.json`) da 2.12 mol/kg en el ciclo de vacío 100→10 kPa y 5.79
 en el de 15→1 kPa (`capacidad_trabajo.txt`). El N retiene más al regenerar por
 vacío, pero gana a 15→1 kPa y en el ciclo por temperatura.
+
+## Tamizado cuántico H₂/D₂
+
+`tamizado.py`: selectividad a cobertura cero, S = K_H(D₂)/K_H(H₂), en 25
+estructuras a 77 y 40 K. D₂ comparte el Lennard-Jones del H₂ y tiene el doble de
+masa (`potentials.D2_SELF`), así que la diferencia sale solo del término de
+Feynman-Hibbs. Se usan los mismos puntos de inserción para los dos isótopos, con
+5×10⁵ puntos × 2 semillas; la dispersión entre semillas sale en `tamizado.txt`.
+
+**Criterio de validez.** El FH de segundo orden es una corrección, no una
+integral de camino. El desplazamiento cuántico del H₂ es aproximadamente 2Δq
+(el doble del Δq_st entre isótopos, porque escala como 1/m). Un valor se acepta
+si 2Δq < 10 % de q_st(H₂). Si no, se da como **cota superior**.
+
+| estructura | S a 77 K | S a 40 K | validez |
+|---|---|---|---|
+| rendija H = 5.6 Å | (5.9) | (477) | cota: canal 2.6 Å ≈ longitud de onda térmica |
+| rendija H = 5.8 Å | (3.3) | (56) | cota |
+| rendija H = 6.0 Å | (2.2) | (14) | cota |
+| **rendija H = 6.2 Å** | **1.68** | (5.6) | válida a 77 K |
+| rendija H = 6.4 Å | 1.40 | **3.00** | válida |
+| rendija H = 6.6 Å | 1.24 | 1.97 | válida |
+| rendija H = 7 / 8 / 10 Å | 1.11 / 1.06 / 1.10 | 1.28 / 1.14 / 1.36 | válida |
+| haz SWCNT, hueco 3.4 Å | (1.55) | (9.3) | cota |
+| haz SWCNT, hueco 4 / 6 Å | 1.29 / 1.21 | 2.10 / 1.82 | válida |
+| **super-hypercube** | **1.61** | **3.89** | válida |
+| super-cube / super-tetrahedron | 1.34 / 1.29 | 2.06 / 2.11 | válida |
+| super-fcc | 1.26 | (2.70) | cota a 40 K |
+| super-cubic / super-diamond | 1.22 / 1.20 | 1.96 / 1.72 | válida |
+| super-graphene / super-square (mallados) | 1.20 / 1.20 | 1.76 / 1.88 | válida |
+| schwarzitas P / D / giroide | 1.17 / 1.20 / 1.13 | 1.74 / 1.61 / 1.50 | válida |
+| súper-grafeno / súper-cuadrado (cristalinas) | 1.13 / 1.13 | 1.22 / 1.38 | válida |
+
+- **El tamizado lo decide el confinamiento, no la profundidad del pozo.** Las
+  jaulas tienen los pozos más profundos del estudio (q_st 11–12 kJ/mol) y tamizan
+  menos que una rendija de 6.2 Å, cuyo pozo es de 7.5 kJ/mol. Lo que separa los
+  isótopos es la curvatura del potencial, es decir, lo estrecho del sitio: el
+  término FH va como U″. Un bolsillo profundo y ancho no basta.
+- **La mejor superestructura es el super-hypercube**: S = 1.61 a 77 K y 3.9 a
+  40 K, a la par de la mejor rendija válida y la única superestructura que llega
+  ahí. Sus vértices, donde se cruzan cuatro tubos, son más cerrados que los de
+  las jaulas de tres tubos. A 40 K la separación entre semillas es de ±10 %, así
+  que es un resultado claro pero no preciso.
+- **Las cifras espectaculares de los poros más estrechos no son fiables.** Con
+  canales de 2.6–3 Å, del orden de la longitud de onda térmica del H₂ (1.4 Å a
+  77 K, 2 Å a 40 K), el FH de segundo orden deja de ser una corrección. Hace
+  falta integral de camino (PIMC) para dar un número.
+- **Lo que no mide**: es el límite de cobertura cero, y con carga la
+  selectividad suele bajar. Tampoco mide el tamizado cinético (difusión). Ni el
+  modelo ni el criterio se han contrastado con un dato externo.
