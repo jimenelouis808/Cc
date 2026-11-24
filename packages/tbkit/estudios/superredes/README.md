@@ -91,7 +91,7 @@ un estado escalonado.
 |---|---|---|---|
 | grafeno (control) | 0 | 0 | 0.21 μB/sitio |
 | súper-cuadrado | 0 | 0 | 0.18 μB/sitio de media, máx. 0.26, M = 0 |
-| súper-grafeno (cristalina) | 0 | SUPERGRAPHENE_20 | SUPERGRAPHENE_25 |
+| súper-grafeno (cristalina) | 0 | 0.007 μB/sitio de media, máx. 0.036, M = 0 | SUPERGRAPHENE_25 |
 
 (entradas: ⟨|m|⟩ por átomo.)
 
@@ -104,6 +104,12 @@ un estado escalonado.
   1-2 enlaces (132) y 0.20 a 3-5 enlaces (136). Es la inestabilidad
   antiferro del panal, algo más fuerte lejos de los nodos, no un magnetismo de
   banda plana localizado en ellos.
+- **El súper-grafeno sí adelanta el umbral, débilmente.** A 2.0 |t|, donde el
+  grafeno aún no tiene momentos, ya tiene un estado escalonado (M = 0, máximo
+  0.036 μB) localizado en los nodos: el 44 % de Σ|m| está en los 168 átomos de
+  heptágono y el 39 % a 1-2 enlaces de ellos; a ≥ 6 enlaces no hay momento.
+  Es lo esperable de la banda casi plana pegada al cruce, que vive en los nodos.
+  Lo tarda: 690 iteraciones (2.8 h), el frenado típico junto a un umbral.
 - **U > 2|t| no es físico para el carbono**: el U local efectivo del grafeno,
   descontando las repulsiones no locales, es ~1.6 |t| (Schüler et al., PRL 111,
   036601, 2013). El barrido mide la
