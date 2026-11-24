@@ -1,0 +1,71 @@
+{
+"graphene (control) | U=1.5|t|": {
+"structure": "graphene (control)",
+"guess": "antiferro",
+"U_over_t": 1.5,
+"U_eV": 4.050000000000001,
+"energy_eV": -34.010786362997585,
+"magnetization_muB": 0.0,
+"abs_moment_sum_muB": 7.278404168864494e-05,
+"max_local_moment_muB": 9.098005211594096e-06,
+"converged": true,
+"iterations": 155,
+"seconds": 29.307318925857544,
+"moments": [
+1e-05,
+-1e-05,
+1e-05,
+-1e-05,
+1e-05,
+-1e-05,
+1e-05,
+-1e-05
+]
+},
+"graphene (control) | U=2.0|t|": {
+"structure": "graphene (control)",
+"guess": "antiferro",
+"U_over_t": 2.0,
+"U_eV": 5.4,
+"energy_eV": -34.010840171445565,
+"magnetization_muB": 2.6645352591003757e-15,
+"abs_moment_sum_muB": 0.04920223221460862,
+"max_local_moment_muB": 0.006150279026826855,
+"converged": true,
+"iterations": 268,
+"seconds": 51.40162134170532,
+"moments": [
+0.00615,
+-0.00615,
+0.00615,
+-0.00615,
+0.00615,
+-0.00615,
+0.00615,
+-0.00615
+]
+},
+"graphene (control) | U=2.5|t|": {
+"structure": "graphene (control)",
+"guess": "antiferro",
+"U_over_t": 2.5,
+"U_eV": 6.75,
+"energy_eV": -34.03533694347173,
+"magnetization_muB": 8.881784197001252e-16,
+"abs_moment_sum_muB": 1.690122886150173,
+"max_local_moment_muB": 0.211265360768772,
+"converged": true,
+"iterations": 229,
+"seconds": 42.4905366897583,
+"moments": [
+0.21127,
+-0.21127,
+0.21127,
+-0.21127,
+0.21127,
+-0.21127,
+0.21127,
+-0.21127
+]
+}
+}

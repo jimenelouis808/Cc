@@ -1,2 +1,9 @@
 warning: The `UV_NATIVE_TLS` environment variable is deprecated and will be removed in a future release. Use `UV_SYSTEM_CERTS` instead.
 warning: The `UV_NATIVE_TLS` environment variable is deprecated and will be removed in a future release. Use `UV_SYSTEM_CERTS` instead.
+knee-super-square | paramagnetic         E   -1574.185002 eV  M   +0.000  Σ|m|   0.000  max 0.000  conv True (26 it, 157 s)
+knee-super-square | ferro                E   -1574.184999 eV  M   +0.000  Σ|m|   0.000  max 0.000  conv True (45 it, 277 s)
+knee-super-square | random               E   -1574.184999 eV  M   +0.000  Σ|m|   0.000  max 0.000  conv True (56 it, 323 s)
+knee-super-graphene | paramagnetic       E   -3901.478191 eV  M   +0.000  Σ|m|   0.000  max 0.000  conv True (23 it, 407 s)
+knee-super-graphene | ferro              E   -3901.478187 eV  M   +0.000  Σ|m|   0.000  max 0.000  conv True (38 it, 669 s)
+knee-super-graphene | random             E   -3901.478187 eV  M   +0.000  Σ|m|   0.000  max 0.000  conv True (55 it, 824 s)
+schwarzite-D | paramagnetic              E   -6089.331667 eV  M   +0.000  Σ|m|   0.000  max 0.000  conv True (21 it, 610 s)
