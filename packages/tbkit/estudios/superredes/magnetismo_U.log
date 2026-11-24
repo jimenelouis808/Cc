@@ -4,3 +4,4 @@ graphene (control) | U=2.0|t|            M   +0.000  Σ|m|   0.049 max 0.006 con
 graphene (control) | U=2.5|t|            M   +0.000  Σ|m|   1.690 max 0.211 conv True (42 s)
 knee-super-square | U=1.5|t|             M   +0.000  Σ|m|   0.000 max 0.000 conv True (493 s)
 knee-super-square | U=2.0|t|             M   +0.000  Σ|m|   0.002 max 0.000 conv True (1222 s)
+knee-super-square | U=2.5|t|             M   +0.000  Σ|m|  66.373 max 0.263 conv True (3157 s)

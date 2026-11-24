@@ -1,0 +1,23 @@
+{
+ "knee-super-square | U=2.5|t|": {
+  "heptagon_atoms": 104,
+  "max_graph_distance": 5,
+  "shells": {
+   "heptagon atoms": {
+    "atoms": 104,
+    "mean_abs_m": 0.1690792307692308,
+    "share_of_sum": 0.2649313378578762
+   },
+   "1-2 bonds away": {
+    "atoms": 132,
+    "mean_abs_m": 0.168909696969697,
+    "share_of_sum": 0.33592184270609576
+   },
+   "3-5 bonds away": {
+    "atoms": 136,
+    "mean_abs_m": 0.19479779411764706,
+    "share_of_sum": 0.39914681943602826
+   }
+  }
+ }
+}
