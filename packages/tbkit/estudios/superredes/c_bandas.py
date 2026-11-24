@@ -6,6 +6,10 @@ Validity of c_bandas: C-C 1.37-1.48 Å and ±3 eV of E_F. The knee
 structures reach 1.35-1.49 Å at their nodes, slightly outside: stated.
 
     python c_bandas.py [name ...]   -> resultados_c_bandas.json
+
+Resumable per k point: each k's eigenvalues go to cache_c_bandas/<name>/
+the moment they are computed, and a rerun skips them (Schwarz D needs
+~90 diagonalisations of 5760 x 5760 and outlived a 2 h task once).
 """
 from __future__ import annotations
 
@@ -16,16 +20,33 @@ from pathlib import Path
 
 import numpy as np
 
-from tbkit.analysis import bands
 from tbkit.hamiltonian import System
 from tbkit.kpoints import band_path, mesh
 from tbkit.params import load_parameters
+from tbkit.solver import diagonalise
 
 from electronica import STRUCTURES, load
 
 HERE = Path(__file__).resolve().parent
 OUT = HERE / "resultados_c_bandas.json"
+CACHE = HERE / "cache_c_bandas"
 CASES = {"schwarzite-D": 3, "knee-super-square": 6, "knee-super-graphene": 4}
+
+
+def eigenvalues(system, kpts, folder: Path, tag: str) -> np.ndarray:
+    """``[k, band]`` eigenvalues, one cached file per k point."""
+    folder.mkdir(parents=True, exist_ok=True)
+    rows = []
+    for i, k in enumerate(np.asarray(kpts)):
+        f = folder / f"{tag}_{i:03d}.npy"
+        if not f.exists():
+            t0 = time.time()
+            e = diagonalise(system, np.array([k]), None, vectors_too=False)[0][0]
+            np.save(f, e)
+            print(f"  {folder.name} {tag} {i + 1}/{len(kpts)} ({time.time() - t0:.0f} s)",
+                  flush=True)
+        rows.append(np.load(f))
+    return np.array(rows)
 
 
 def main(names) -> None:
@@ -41,7 +62,7 @@ def main(names) -> None:
         # whole k mesh ~14 GB for Schwarz D, which killed the first run.
         # Neutral carbon fills 2 bands per atom (4 electrons, spin pairs).
         kpts, weights = mesh(system, CASES[name])
-        em = bands(system, kpts)[0]                       # [k, band]
+        em = eigenvalues(system, kpts, CACHE / name, "mesh")   # [k, band]
         nocc = 2 * len(atoms)
         vbm, cbm = float(em[:, nocc - 1].max()), float(em[:, nocc].min())
         ef = 0.5 * (vbm + cbm)
@@ -52,7 +73,7 @@ def main(names) -> None:
                                      ).sum(axis=1) / (0.03 * np.sqrt(2 * np.pi))
         bp = band_path(atoms, STRUCTURES[name][1], 60)
         x, sx, labels = bp.get_linear_kpoint_axis()
-        ep = bands(system, bp)[0]
+        ep = eigenvalues(system, bp.kpts, CACHE / name, "path")
         vbm = max(vbm, float(ep[:, nocc - 1].max()))
         cbm = min(cbm, float(ep[:, nocc].min()))
         ef = 0.5 * (vbm + cbm)
