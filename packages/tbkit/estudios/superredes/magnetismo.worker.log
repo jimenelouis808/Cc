@@ -7,3 +7,5 @@ knee-super-graphene | paramagnetic       E   -3901.478191 eV  M   +0.000  Σ|m| 
 knee-super-graphene | ferro              E   -3901.478187 eV  M   +0.000  Σ|m|   0.000  max 0.000  conv True (38 it, 669 s)
 knee-super-graphene | random             E   -3901.478187 eV  M   +0.000  Σ|m|   0.000  max 0.000  conv True (55 it, 824 s)
 schwarzite-D | paramagnetic              E   -6089.331667 eV  M   +0.000  Σ|m|   0.000  max 0.000  conv True (21 it, 610 s)
+schwarzite-D | ferro                     E   -6089.331650 eV  M   +0.000  Σ|m|   0.000  max 0.000  conv True (35 it, 1016 s)
+schwarzite-D | random                    E   -6089.331650 eV  M   +0.000  Σ|m|   0.000  max 0.000  conv True (53 it, 1283 s)
