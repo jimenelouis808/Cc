@@ -109,7 +109,7 @@ un estado escalonado.
   0.036 μB) localizado en los nodos: el 44 % de Σ|m| está en los 168 átomos de
   heptágono y el 39 % a 1-2 enlaces de ellos; a ≥ 6 enlaces no hay momento.
   Es lo esperable de la banda casi plana pegada al cruce, que vive en los nodos.
-  Lo tarda: 690 iteraciones (2.8 h), el frenado típico junto a un umbral.
+  Converge lento: 690 iteraciones (2.8 h), el frenado típico junto a un umbral.
 - **U > 2|t| no es físico para el carbono**: el U local efectivo del grafeno,
   descontando las repulsiones no locales, es ~1.6 |t| (Schüler et al., PRL 111,
   036601, 2013). El barrido mide la
