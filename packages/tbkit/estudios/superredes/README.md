@@ -13,7 +13,7 @@ importa ningún otro paquete. `figuras.py` dibuja `figuras/bandas.png` y
 | súper-grafeno (cristalina) | 920 | semimetal | cruce lineal en E_F sobre Γ–X (~0.6 de Γ a X) más una banda casi plana 0.05 eV por debajo |
 | súper-cuadrado (cristalina) | 372 | semimetal | cono en M justo en E_F y una banda casi plana en E_F |
 | Schwarz P | 968 | metal/semimetal | muchos cruces cerca de E_F |
-| **Schwarz D** | 1440 | **semiconductor, gap 1.25 eV** | bandas de conducción muy planas a +0.3 eV |
+| **Schwarz D** | 1440 | **semiconductor, gap 1.25 eV** | bordes de banda muy planos, a ±0.63 eV del centro del gap |
 | giroide | 1744 | metal | DOS(E_F) 0.041 /eV/átomo |
 | súper-grafeno (mallada) | 1180 | bandas planas | sin cono: los pares 5-7 dispersos localizan los estados |
 | super-cube (jaula) | 1748 | molécula | HOMO-LUMO 0.043 eV |
