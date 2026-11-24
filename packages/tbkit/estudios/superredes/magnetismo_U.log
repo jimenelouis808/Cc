@@ -6,3 +6,4 @@ knee-super-square | U=1.5|t|             M   +0.000  Σ|m|   0.000 max 0.000 con
 knee-super-square | U=2.0|t|             M   +0.000  Σ|m|   0.002 max 0.000 conv True (1222 s)
 knee-super-square | U=2.5|t|             M   +0.000  Σ|m|  66.373 max 0.263 conv True (3157 s)
 knee-super-graphene | U=1.5|t|           M   +0.000  Σ|m|   0.001 max 0.000 conv True (1540 s)
+knee-super-graphene | U=2.0|t|           M   -0.000  Σ|m|   6.549 max 0.036 conv True (10102 s)

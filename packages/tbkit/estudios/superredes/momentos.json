@@ -19,5 +19,31 @@
     "share_of_sum": 0.39914681943602826
    }
   }
+ },
+ "knee-super-graphene | U=2.0|t|": {
+  "heptagon_atoms": 168,
+  "max_graph_distance": 8,
+  "shells": {
+   "heptagon atoms": {
+    "atoms": 168,
+    "mean_abs_m": 0.017318571428571426,
+    "share_of_sum": 0.4442747811852947
+   },
+   "1-2 bonds away": {
+    "atoms": 264,
+    "mean_abs_m": 0.00977,
+    "share_of_sum": 0.3938481459538367
+   },
+   "3-5 bonds away": {
+    "atoms": 360,
+    "mean_abs_m": 0.002848555555555556,
+    "share_of_sum": 0.1565876510936155
+   },
+   ">= 6 bonds away": {
+    "atoms": 128,
+    "mean_abs_m": 0.00027062500000000003,
+    "share_of_sum": 0.005289421767253228
+   }
+  }
  }
 }
