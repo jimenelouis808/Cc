@@ -1,0 +1,74 @@
+{
+"graphene (control) | paramagnetic": {
+"structure": "graphene (control)",
+"guess": "paramagnetic",
+"atoms": 8,
+"kmesh": 24,
+"U_eV": 2.7,
+"energy_eV": -34.01078636268506,
+"magnetization_muB": 0.0,
+"abs_moment_sum_muB": 0.0,
+"max_local_moment_muB": 0.0,
+"converged": true,
+"iterations": 1,
+"seconds": 0.20472097396850586,
+"moments": [
+0.0,
+0.0,
+0.0,
+0.0,
+0.0,
+0.0,
+0.0,
+0.0
+]
+},
+"graphene (control) | ferro": {
+"structure": "graphene (control)",
+"guess": "ferro",
+"atoms": 8,
+"kmesh": 24,
+"U_eV": 2.7,
+"energy_eV": -34.01078636269112,
+"magnetization_muB": 2.0820164441381905e-06,
+"abs_moment_sum_muB": 2.0820164440271682e-06,
+"max_local_moment_muB": 2.602520560168742e-07,
+"converged": true,
+"iterations": 38,
+"seconds": 7.828054428100586,
+"moments": [
+0.0,
+0.0,
+0.0,
+0.0,
+0.0,
+0.0,
+0.0,
+0.0
+]
+},
+"graphene (control) | random": {
+"structure": "graphene (control)",
+"guess": "random",
+"atoms": 8,
+"kmesh": 24,
+"U_eV": 2.7,
+"energy_eV": -34.010786362717745,
+"magnetization_muB": 6.357492310371526e-11,
+"abs_moment_sum_muB": 1.7895743002982467e-05,
+"max_local_moment_muB": 2.2440099382015077e-06,
+"converged": true,
+"iterations": 56,
+"seconds": 10.885050058364868,
+"moments": [
+0.0,
+-0.0,
+0.0,
+-0.0,
+0.0,
+-0.0,
+0.0,
+-0.0
+]
+}
+}
