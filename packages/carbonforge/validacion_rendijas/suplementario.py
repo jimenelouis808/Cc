@@ -412,6 +412,39 @@ GAS_LABEL = {"h2": "H₂, 77 K, 10 MPa", "co2": "CO₂, 298 K, 0.1 MPa",
              "mezcla": "15 % CO₂ in N₂, 0.1 MPa", "humeda": "humid flue gas, 80 % RH"}
 
 
+def molecule_count(path: Path) -> str:
+    """Molecules per cell in a gallery snapshot, by species (whole cell,
+    not only the slab drawn)."""
+    from ase.io import read
+    from ase.neighborlist import neighbor_list
+    import numpy as np
+    atoms = read(str(path))
+    tags = atoms.get_tags()
+    sym = np.array(atoms.get_chemical_symbols())
+    if (tags == 2).any():
+        return f"{int((tags == 2).sum())} H₂"
+    ads = np.flatnonzero(tags > 0)
+    sub = atoms[ads]
+    i, j = neighbor_list("ij", sub, 1.25)
+    parent = list(range(len(sub)))
+
+    def find(a):
+        while parent[a] != a:
+            parent[a] = parent[parent[a]]
+            a = parent[a]
+        return a
+    for a, b in zip(i, j):
+        parent[find(a)] = find(b)
+    groups = {}
+    for k in range(len(sub)):
+        groups.setdefault(find(k), []).append(sym[ads][k])
+    counts = {"CO₂": 0, "N₂": 0, "H₂O": 0}
+    for members in groups.values():
+        m = sorted(members)
+        counts["CO₂" if "C" in m else "H₂O" if "H" in m else "N₂"] += 1
+    return " · ".join(f"{v} {k}" for k, v in counts.items() if v) or "0"
+
+
 def gallery() -> tuple[str, dict]:
     from galeria import GASES, STRUCTURES
     files = {}
@@ -427,7 +460,8 @@ def gallery() -> tuple[str, dict]:
                 key = f"fig/gal/{png.name}"
                 files[key] = str(png)
                 row.append(f'<div class="gcell"><img src="{key}" loading="lazy" '
-                           f'alt="{name} with {GAS_LABEL[g]}"></div>')
+                           f'alt="{name} with {GAS_LABEL[g]}"><span class="gcount">'
+                           f'{molecule_count(png.with_suffix(".extxyz"))}</span></div>')
             else:
                 row.append('<div class="gcell missing">not run</div>')
         cells.append("".join(row))
@@ -438,6 +472,9 @@ def gallery() -> tuple[str, dict]:
             "bundle with each gas: final configurations of short, illustrative GCMC "
             "runs (neutral walls). Colours: carbon wall grey; H₂ pink (one centre per "
             "molecule); CO₂ C dark grey, O red; N₂ blue; water O amber, H white. "
+            "The count under each image is molecules per WHOLE cell, not per slab: "
+            "with CO₂ at 0.1 MPa and 298 K these wide-pored structures adsorb little "
+            "(0.2–1.6 mol/kg against 5.8 for the 6.6 Å slit), so the emptiness is real. "
             "3D-periodic cells are drawn as an 8 Å slab through the cell centre.</figcaption>"
             "</figure>")
     return grid, files

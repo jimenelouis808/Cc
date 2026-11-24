@@ -33,7 +33,11 @@ FIG = HERE / "figuras"
 
 #: name -> (file, band path or None, k mesh)
 STRUCTURES = {
-    "knee-super-graphene": ("knee-super-graphene_k22.extxyz", "GMKG", 24),
+    # Rectangular cell (2 nodes of the honeycomb each way): its nodes are
+    # not exactly related by the centring translation (each arm's ring
+    # phase), so it does not reduce to the hexagonal primitive cell. The
+    # honeycomb's K folds onto G-Y at 2/3.
+    "knee-super-graphene": ("knee-super-graphene_k22.extxyz", "GXSYG", 16),
     "knee-super-square": ("knee-super-square_k12_n7.extxyz", "GXMG", 24),
     "schwarzite-P": ("knee-schwarzite-primitive.extxyz", "GXMGRX", 6),
     "schwarzite-D": ("knee-schwarzite-diamond.extxyz", "GXMGRX", 5),
@@ -73,8 +77,6 @@ def _mic(d, cell):
 
 def load(name: str) -> Atoms:
     atoms = read(str(HERE / "estructuras" / STRUCTURES[name][0]))
-    if name == "knee-super-graphene":
-        atoms = hexagonal_primitive(atoms)
     if not atoms.pbc.any():
         atoms.pbc = False
     return atoms
