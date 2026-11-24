@@ -1,14 +1,14 @@
 """Critical U of the flat-band superstructures in mean field.
 
 At U = |t| (magnetismo.py) every structure stays non-magnetic. This scan
-raises U from a symmetry-breaking start (antiferro on bipartite
-graphene; random on the non-bipartite nets, whose ferro start keeps the
-uniform symmetry and cannot reach a staggered state) and records where a moment first appears,
-against graphene's mean-field threshold (~2.23|t|, Sorella-Tosatti /
-Hirsch), the closed-form check. Mean-field moments are an order
-parameter, not a correlated ground state; U above ~2|t| is far beyond
-the screened U of carbon (Wehling 2011: ~1.6|t| on-site, less in mean
-field) and is a measure of how close to an instability the net is.
+raises U from a symmetry-breaking start (antiferro on bipartite graphene;
+random on the non-bipartite nets, whose ferro start keeps the uniform
+symmetry and cannot reach a staggered state) and records where a moment
+first appears. Graphene is the control: its mean-field threshold is
+~2.23|t|. Mean-field moments are an order parameter, not a correlated
+ground state. U above ~2|t| is beyond the effective local U of carbon
+(Schüler et al. 2013: ~1.6|t|); the scan measures how close to an
+instability a net is, it does not predict magnetism.
 
     python magnetismo_U.py [name ...]   -> magnetismo_U.json (resumable)
 """
