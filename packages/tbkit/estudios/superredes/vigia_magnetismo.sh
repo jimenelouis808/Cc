@@ -4,4 +4,4 @@
 cd "$(dirname "$0")"
 exec ./vigia.sh magnetismo "^[^ ]*python[0-9.]* magnetismo.py" \
   "python3 -c 'import json,sys; sys.exit(len(json.load(open(\"magnetismo.json\")))<12)'" \
-  "OMP_NUM_THREADS=4 uv run python magnetismo.py"
+  "OMP_NUM_THREADS=1 uv run python magnetismo.py"
