@@ -409,6 +409,7 @@ def s_settings() -> str:
 # --------------------------------------------------------------------------
 
 GAS_LABEL = {"h2": "H₂, 77 K, 10 MPa", "co2": "CO₂, 298 K, 0.1 MPa",
+             "co2_1mpa": "CO₂, 298 K, 1 MPa",
              "mezcla": "15 % CO₂ in N₂, 0.1 MPa", "humeda": "humid flue gas, 80 % RH"}
 
 
@@ -474,7 +475,8 @@ def gallery() -> tuple[str, dict]:
             "molecule); CO₂ C dark grey, O red; N₂ blue; water O amber, H white. "
             "The count under each image is molecules per WHOLE cell, not per slab: "
             "with CO₂ at 0.1 MPa and 298 K these wide-pored structures adsorb little "
-            "(0.2–1.6 mol/kg against 5.8 for the 6.6 Å slit), so the emptiness is real. "
+            "(0.2–1.6 mol/kg against 5.8 for the 6.6 Å slit), so the emptiness is real; "
+            "the 1 MPa column holds 2–7 times more. "
             "3D-periodic cells are drawn as an 8 Å slab through the cell centre.</figcaption>"
             "</figure>")
     return grid, files

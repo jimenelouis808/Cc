@@ -4,6 +4,7 @@ equilibrium snapshots for the report's supplementary gallery.
 Short illustrative runs, not production averages. Gases:
   h2      H2, 77 K, 10 MPa (Feynman-Hibbs)
   co2     CO2, 298 K, 0.1 MPa
+  co2_1mpa  CO2, 298 K, 1 MPa (the 0.1 MPa cells look empty: few molecules)
   mezcla  15 % CO2 in N2, 298 K, 0.1 MPa
   humeda  the same flue gas at 80 % relative humidity (SPC/E water)
 Walls are neutral Steele carbon. Each (structure, gas) is one extxyz in
@@ -44,7 +45,7 @@ STRUCTURES = {
     "super-tetrahedron": ("jaulas/super-tetrahedron.extxyz", "cage"),
     "super-hypercube": ("superestructuras/super-hypercube.extxyz", "cage"),
 }
-GASES = ("h2", "co2", "mezcla", "humeda")
+GASES = ("h2", "co2", "co2_1mpa", "mezcla", "humeda")
 SLAB = 8.0          # A, thickness of the cut drawn for 3D-periodic cells
 
 
@@ -71,9 +72,10 @@ def simulate(name: str, gas: str) -> Atoms:
         out += Atoms("H" * len(r.snapshots[-1]), positions=r.snapshots[-1],
                      tags=[2] * len(r.snapshots[-1]))
         return out
-    if gas == "co2":
-        r = run_co2_gcmc(atoms, 298.0, 0.1, equilibration=60_000,
-                         production=2_000, keep_configuration=True)
+    if gas in ("co2", "co2_1mpa"):
+        r = run_co2_gcmc(atoms, 298.0, 0.1 if gas == "co2" else 1.0,
+                         equilibration=60_000, production=2_000,
+                         keep_configuration=True)
     elif gas == "mezcla":
         r = run_mixture_gcmc(atoms, 298.0, 0.1, (0.15, 0.85),
                              equilibration=80_000, production=2_000,

@@ -1,0 +1,488 @@
+{
+ "Schwarz P (crystalline)": {
+  "atoms": 968,
+  "pbc": [
+   true,
+   true,
+   true
+  ],
+  "cell_A": [
+   31.88,
+   31.88,
+   31.88
+  ],
+  "coordination": {
+   "3": 968
+  },
+  "rings": {
+   "6": 456,
+   "7": 24
+  },
+  "sum_6_minus_n": -24,
+  "touching_5_5": 0,
+  "touching_7_7": 24,
+  "touching_5_7": 0,
+  "bond_mean": 1.4386983376732578,
+  "bond_std": 0.01930038930221771,
+  "bond_min": 1.4167346526064672,
+  "bond_max": 1.540492353070062,
+  "angle_min": 114.15677285999381,
+  "angle_max": 122.38405830058907,
+  "n_close_contacts": 0,
+  "sp2_verdict": "strained",
+  "sp2_reason": "bonds and angles are inside the sp2 range but near its edge \u2014 intact and fine for artwork, visibly strained as physics.",
+  "angle_sum_min": 354.59522472244333,
+  "sp3_fraction": 0.0,
+  "collapsed_wall": false
+ },
+ "Schwarz D (crystalline)": {
+  "atoms": 1440,
+  "pbc": [
+   true,
+   true,
+   true
+  ],
+  "cell_A": [
+   29.99,
+   29.99,
+   29.99
+  ],
+  "coordination": {
+   "3": 1440
+  },
+  "rings": {
+   "6": 608,
+   "7": 96
+  },
+  "sum_6_minus_n": -96,
+  "touching_5_5": 0,
+  "touching_7_7": 0,
+  "touching_5_7": 0,
+  "bond_mean": 1.4046377701828983,
+  "bond_std": 0.01816721330286827,
+  "bond_min": 1.352690161132787,
+  "bond_max": 1.4514441821909772,
+  "angle_min": 109.12893771486799,
+  "angle_max": 123.2951155635041,
+  "n_close_contacts": 0,
+  "sp2_verdict": "clean",
+  "sp2_reason": "bonds, angles and spacings are all in the sp2 range.",
+  "angle_sum_min": 342.23584386722854,
+  "sp3_fraction": 0.011111111111111112,
+  "collapsed_wall": false
+ },
+ "gyroid (crystalline)": {
+  "atoms": 1744,
+  "pbc": [
+   true,
+   true,
+   true
+  ],
+  "cell_A": [
+   39.04,
+   39.04,
+   39.04
+  ],
+  "coordination": {
+   "3": 1744
+  },
+  "rings": {
+   "6": 816,
+   "7": 48
+  },
+  "sum_6_minus_n": -48,
+  "touching_5_5": 0,
+  "touching_7_7": 0,
+  "touching_5_7": 0,
+  "bond_mean": 1.440912275880919,
+  "bond_std": 0.026007123417164053,
+  "bond_min": 1.3953734837160456,
+  "bond_max": 1.5075330561631979,
+  "angle_min": 114.71030131019128,
+  "angle_max": 125.34290477364132,
+  "n_close_contacts": 0,
+  "sp2_verdict": "clean",
+  "sp2_reason": "bonds, angles and spacings are all in the sp2 range.",
+  "angle_sum_min": 356.81655485085514,
+  "sp3_fraction": 0.0,
+  "collapsed_wall": false
+ },
+ "super-graphene (crystalline)": {
+  "atoms": 920,
+  "pbc": [
+   true,
+   true,
+   false
+  ],
+  "cell_A": [
+   24.09,
+   41.73,
+   45.57
+  ],
+  "coordination": {
+   "3": 920
+  },
+  "rings": {
+   "6": 432,
+   "7": 24
+  },
+  "sum_6_minus_n": -24,
+  "touching_5_5": 0,
+  "touching_7_7": 0,
+  "touching_5_7": 0,
+  "bond_mean": 1.4194198712506583,
+  "bond_std": 0.0035741562404873954,
+  "bond_min": 1.4078430063176377,
+  "bond_max": 1.4356040814365316,
+  "angle_min": 117.55644994449044,
+  "angle_max": 121.5962269067018,
+  "n_close_contacts": 0,
+  "sp2_verdict": "clean",
+  "sp2_reason": "bonds, angles and spacings are all in the sp2 range.",
+  "angle_sum_min": 353.4290828726236,
+  "sp3_fraction": 0.0,
+  "collapsed_wall": false
+ },
+ "super-square (crystalline)": {
+  "atoms": 372,
+  "pbc": [
+   true,
+   true,
+   false
+  ],
+  "cell_A": [
+   23.69,
+   23.69,
+   39.17
+  ],
+  "coordination": {
+   "3": 372
+  },
+  "rings": {
+   "5": 4,
+   "6": 164,
+   "7": 16
+  },
+  "sum_6_minus_n": -12,
+  "touching_5_5": 0,
+  "touching_7_7": 4,
+  "touching_5_7": 4,
+  "bond_mean": 1.4462068548778502,
+  "bond_std": 0.03028826408084264,
+  "bond_min": 1.337277287398145,
+  "bond_max": 1.5235884667543356,
+  "angle_min": 103.83599771392659,
+  "angle_max": 127.49139968380605,
+  "n_close_contacts": 0,
+  "sp2_verdict": "strained",
+  "sp2_reason": "bonds and angles are inside the sp2 range but near its edge \u2014 intact and fine for artwork, visibly strained as physics.",
+  "angle_sum_min": 344.999913887493,
+  "sp3_fraction": 0.0,
+  "collapsed_wall": false
+ },
+ "super-cubic (meshed)": {
+  "atoms": 836,
+  "pbc": [
+   true,
+   true,
+   true
+  ],
+  "cell_A": [
+   32.62,
+   32.62,
+   32.62
+  ],
+  "coordination": {
+   "3": 836
+  },
+  "rings": {
+   "5": 33,
+   "6": 326,
+   "7": 53,
+   "8": 3
+  },
+  "sum_6_minus_n": -26,
+  "touching_5_5": 2,
+  "touching_7_7": 13,
+  "touching_5_7": 36,
+  "bond_mean": 1.4200000000043036,
+  "bond_std": 0.031677005313465886,
+  "bond_min": 1.2950989608928858,
+  "bond_max": 1.5456911563053402,
+  "angle_min": 102.95427622508508,
+  "angle_max": 131.80571329231452,
+  "n_close_contacts": 0,
+  "sp2_verdict": "broken",
+  "sp2_reason": "bond 1.30 \u00c5 is outside the sp2 range 1.30\u20131.55 \u00c5 \u2014 lower the strain (wider coil, gentler shape, or a thinner tube).",
+  "angle_sum_min": 330.56348779719,
+  "sp3_fraction": 0.06220095693779904,
+  "collapsed_wall": false
+ },
+ "super-diamond (meshed)": {
+  "atoms": 3752,
+  "pbc": [
+   true,
+   true,
+   true
+  ],
+  "cell_A": [
+   57.24,
+   57.24,
+   57.24
+  ],
+  "coordination": {
+   "3": 3752
+  },
+  "rings": {
+   "5": 133,
+   "6": 1504,
+   "7": 217,
+   "8": 6
+  },
+  "sum_6_minus_n": -96,
+  "touching_5_5": 1,
+  "touching_7_7": 22,
+  "touching_5_7": 170,
+  "bond_mean": 1.420000000008996,
+  "bond_std": 0.022664965915769955,
+  "bond_min": 1.3117279537770221,
+  "bond_max": 1.5333874560713365,
+  "angle_min": 102.98764925861119,
+  "angle_max": 130.80831854243493,
+  "n_close_contacts": 0,
+  "sp2_verdict": "strained",
+  "sp2_reason": "bonds and angles are inside the sp2 range but near its edge \u2014 intact and fine for artwork, visibly strained as physics.",
+  "angle_sum_min": 331.7764096010465,
+  "sp3_fraction": 0.03571428571428571,
+  "collapsed_wall": false
+ },
+ "super-fcc (meshed)": {
+  "atoms": 2982,
+  "pbc": [
+   true,
+   true,
+   true
+  ],
+  "cell_A": [
+   39.98,
+   39.98,
+   39.98
+  ],
+  "coordination": {
+   "3": 2982
+  },
+  "rings": {
+   "5": 84,
+   "6": 1089,
+   "7": 234,
+   "8": 43,
+   "9": 2
+  },
+  "sum_6_minus_n": -242,
+  "touching_5_5": 1,
+  "touching_7_7": 129,
+  "touching_5_7": 86,
+  "bond_mean": 1.419999999984397,
+  "bond_std": 0.031765145214443104,
+  "bond_min": 1.301160071753676,
+  "bond_max": 1.5748159781159452,
+  "angle_min": 102.54476374450205,
+  "angle_max": 132.99956400117756,
+  "n_close_contacts": 0,
+  "sp2_verdict": "broken",
+  "sp2_reason": "bond 1.57 \u00c5 is outside the sp2 range 1.30\u20131.55 \u00c5 \u2014 lower the strain (wider coil, gentler shape, or a thinner tube).",
+  "angle_sum_min": 333.96151970799207,
+  "sp3_fraction": 0.06606304493628437,
+  "collapsed_wall": false
+ },
+ "super-graphene (meshed)": {
+  "atoms": 1180,
+  "pbc": [
+   true,
+   true,
+   false
+  ],
+  "cell_A": [
+   32.92,
+   57.02,
+   32.92
+  ],
+  "coordination": {
+   "3": 1180
+  },
+  "rings": {
+   "5": 42,
+   "6": 480,
+   "7": 62,
+   "8": 2
+  },
+  "sum_6_minus_n": -24,
+  "touching_5_5": 0,
+  "touching_7_7": 8,
+  "touching_5_7": 49,
+  "bond_mean": 1.4199999999646329,
+  "bond_std": 0.024224388438587957,
+  "bond_min": 1.3442691409135445,
+  "bond_max": 1.5437671807530822,
+  "angle_min": 104.17870725046309,
+  "angle_max": 131.78859143459482,
+  "n_close_contacts": 0,
+  "sp2_verdict": "strained",
+  "sp2_reason": "bonds and angles are inside the sp2 range but near its edge \u2014 intact and fine for artwork, visibly strained as physics.",
+  "angle_sum_min": 335.1344527194625,
+  "sp3_fraction": 0.03135593220338983,
+  "collapsed_wall": false
+ },
+ "super-square (meshed)": {
+  "atoms": 664,
+  "pbc": [
+   true,
+   true,
+   false
+  ],
+  "cell_A": [
+   32.82,
+   32.82,
+   32.82
+  ],
+  "coordination": {
+   "3": 664
+  },
+  "rings": {
+   "5": 28,
+   "6": 263,
+   "7": 38,
+   "8": 1
+  },
+  "sum_6_minus_n": -12,
+  "touching_5_5": 0,
+  "touching_7_7": 5,
+  "touching_5_7": 31,
+  "bond_mean": 1.419999999999906,
+  "bond_std": 0.0280440692193453,
+  "bond_min": 1.34332835877194,
+  "bond_max": 1.5701145878714975,
+  "angle_min": 102.8228883633082,
+  "angle_max": 130.0852901911147,
+  "n_close_contacts": 0,
+  "sp2_verdict": "broken",
+  "sp2_reason": "bond 1.57 \u00c5 is outside the sp2 range 1.30\u20131.55 \u00c5 \u2014 lower the strain (wider coil, gentler shape, or a thinner tube).",
+  "angle_sum_min": 331.63348467472497,
+  "sp3_fraction": 0.045180722891566265,
+  "collapsed_wall": false
+ },
+ "super-hypercube (meshed cage)": {
+  "atoms": 6494,
+  "pbc": [
+   false,
+   false,
+   false
+  ],
+  "cell_A": [
+   68.1,
+   67.79,
+   66.55
+  ],
+  "coordination": {
+   "3": 6494
+  },
+  "rings": {
+   "5": 254,
+   "6": 2539,
+   "7": 398,
+   "8": 24
+  },
+  "sum_6_minus_n": -192,
+  "touching_5_5": 1,
+  "touching_7_7": 87,
+  "touching_5_7": 282,
+  "bond_mean": 1.4195456918244824,
+  "bond_std": 0.025428857346950405,
+  "bond_min": 1.3159862637073558,
+  "bond_max": 1.5745499762682356,
+  "angle_min": 101.23572978290251,
+  "angle_max": 132.0910012286251,
+  "n_close_contacts": 0,
+  "sp2_verdict": "broken",
+  "sp2_reason": "bond 1.57 \u00c5 is outside the sp2 range 1.30\u20131.55 \u00c5 \u2014 lower the strain (wider coil, gentler shape, or a thinner tube).",
+  "angle_sum_min": 329.2800337308177,
+  "sp3_fraction": 0.05435786880197105,
+  "collapsed_wall": false
+ },
+ "super-cube (meshed cage)": {
+  "atoms": 1748,
+  "pbc": [
+   false,
+   false,
+   false
+  ],
+  "cell_A": [
+   44.11,
+   44.5,
+   43.21
+  ],
+  "coordination": {
+   "3": 1748
+  },
+  "rings": {
+   "5": 66,
+   "6": 690,
+   "7": 106,
+   "8": 4
+  },
+  "sum_6_minus_n": -48,
+  "touching_5_5": 2,
+  "touching_7_7": 34,
+  "touching_5_7": 55,
+  "bond_mean": 1.4195000390544186,
+  "bond_std": 0.026640104046468268,
+  "bond_min": 1.3291140172010263,
+  "bond_max": 1.5162022665955694,
+  "angle_min": 101.61196631125692,
+  "angle_max": 130.05964490091574,
+  "n_close_contacts": 0,
+  "sp2_verdict": "strained",
+  "sp2_reason": "bonds and angles are inside the sp2 range but near its edge \u2014 intact and fine for artwork, visibly strained as physics.",
+  "angle_sum_min": 331.248179753954,
+  "sp3_fraction": 0.06750572082379863,
+  "collapsed_wall": false
+ },
+ "super-tetrahedron (meshed cage)": {
+  "atoms": 812,
+  "pbc": [
+   false,
+   false,
+   false
+  ],
+  "cell_A": [
+   35.55,
+   35.58,
+   34.78
+  ],
+  "coordination": {
+   "3": 812
+  },
+  "rings": {
+   "5": 38,
+   "6": 310,
+   "7": 46,
+   "8": 8
+  },
+  "sum_6_minus_n": -24,
+  "touching_5_5": 4,
+  "touching_7_7": 21,
+  "touching_5_7": 24,
+  "bond_mean": 1.4193406444750312,
+  "bond_std": 0.0305916336211207,
+  "bond_min": 1.3181174327369,
+  "bond_max": 1.5313295616736382,
+  "angle_min": 102.65320915853276,
+  "angle_max": 130.35942318992912,
+  "n_close_contacts": 0,
+  "sp2_verdict": "strained",
+  "sp2_reason": "bonds and angles are inside the sp2 range but near its edge \u2014 intact and fine for artwork, visibly strained as physics.",
+  "angle_sum_min": 332.2928998511728,
+  "sp3_fraction": 0.0960591133004926,
+  "collapsed_wall": false
+ }
+}

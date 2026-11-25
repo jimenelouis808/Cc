@@ -1,0 +1,10 @@
+warning: The `UV_NATIVE_TLS` environment variable is deprecated and will be removed in a future release. Use `UV_SYSTEM_CERTS` instead.
+graphene (control) | q=-1 | ferro                E -32.49438 M +0.000 max 0.000 conv True (6 s)
+graphene (control) | q=-1 | random               E -32.49438 M +0.000 max 0.000 conv True (6 s)
+graphene (control) | q=-1 | paramagnetic         E -32.49440 M +0.000 max 0.000 conv True (4 s)
+graphene (control) | q=+1 | ferro                E -32.49438 M +0.000 max 0.000 conv True (6 s)
+graphene (control) | q=+1 | random               E -32.49438 M +0.000 max 0.000 conv True (5 s)
+graphene (control) | q=+1 | paramagnetic         E -32.49436 M +0.000 max 0.000 conv True (4 s)
+knee-super-square | q=-1 | ferro                 E -1573.92613 M +0.000 max 0.000 conv True (199 s)
+knee-super-square | q=-1 | random                E -1573.92613 M -0.000 max 0.000 conv True (212 s)
+knee-super-square | q=-1 | paramagnetic          E -1573.92626 M +0.000 max 0.000 conv True (108 s)
