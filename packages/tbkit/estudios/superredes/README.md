@@ -128,3 +128,27 @@ un estado escalonado.
   036601, 2013). El barrido mide la
   distancia a la inestabilidad; **no predice magnetismo**. Los momentos de
   campo medio son un parámetro de orden, no un estado fundamental correlacionado.
+
+## El gap de Schwarz D escala como 1/L
+
+`escala_D.py` (π, malla 2×2×2): celdas D de k = 18 con brazos de 5, 7 y 9 filas,
+construidas en `nanocarbon_lab/estudio_construccion/escala_D.py` y copiadas en
+`estructuras/`. Resultados en `escala_D.json`.
+
+| filas | átomos | celda (Å) | gap (eV) | gap × celda (eV·Å) |
+|---|---|---|---|---|
+| 5 | 1440 | 30.0 | 1.26 | 37.8 |
+| 7 | 3744 | 52.8 | 0.75 | 39.5 |
+| 9 | 6048 | 73.4 | 0.52 | 38.4 |
+
+Gap directo en Γ en los tres. Es un gap de confinamiento: un carbono poroso
+cristalino con gap elegido por el tamaño de celda. Los valores absolutos son del
+modelo π (s+p da 0.51 eV a 30 Å, no 1.26).
+
+## Dopaje rígido de la banda plana
+
+`dopaje_banda_plana.py`: un electrón o un hueco por celda, U = |t|, arranques
+ferro, aleatorio y paramagnético. El súper-cuadrado sigue sin magnetismo en los
+dos signos: la banda plana de una superred se reparte sobre cientos de átomos y
+la interacción efectiva en ella es pequeña. El súper-grafeno está en
+`dopaje_banda_plana.json` cuando termina.

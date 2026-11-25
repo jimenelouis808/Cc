@@ -1,0 +1,349 @@
+<title>Construcción de superestructuras de carbono</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&family=Source+Serif+4:opsz,wght@8..60,500;8..60,600;8..60,700&display=swap">
+<style>
+/* Layout: a single manuscript column (~72ch) with figures allowed wider; numbered sections because a paper's order is information. */
+:root {
+  --bg: #f7f7f5;
+  --panel: #ffffff;
+  --fg: #1c2126;
+  --muted: #5d6771;
+  --rule: #dcdfe2;
+  --accent: #0f6b74;
+  --s-pri: #1c2126;
+  --s-n: #0f6b74;
+  --s-oh: #c07a12;
+  --s-cooh: #b2412f;
+  --s-nh2: #6c4bb5;
+  --s-cage: #8a949e;
+  --good: #1f7a4a;
+  --bad: #b2412f;
+  --font-display: "Source Serif 4", Georgia, "Times New Roman", serif;
+  --font-body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #13181c; --panel: #1a2127; --fg: #e3e7ea; --muted: #9ba6b0; --rule: #2d363e;
+    --accent: #4fb8c1; --s-pri: #e3e7ea; --s-n: #4fb8c1; --s-oh: #e0a53e; --s-cooh: #e2735f;
+    --s-nh2: #a58ce6; --s-cage: #6f7a84; --good: #5cc28b; --bad: #e2735f; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #13181c; --panel: #1a2127; --fg: #e3e7ea; --muted: #9ba6b0; --rule: #2d363e;
+  --accent: #4fb8c1; --s-pri: #e3e7ea; --s-n: #4fb8c1; --s-oh: #e0a53e; --s-cooh: #e2735f;
+  --s-nh2: #a58ce6; --s-cage: #6f7a84; --good: #5cc28b; --bad: #e2735f; color-scheme: dark;
+}
+body { background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 16px; line-height: 1.62; }
+.wrap {
+  max-width: 1000px; margin: 0 auto;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 40px 80px;
+  display: grid; gap: 52px;
+}
+.col { max-width: 74ch; display: grid; gap: 14px; }
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; line-height: 1.18; margin: 0; font-weight: 600; }
+h1 { font-size: clamp(1.9rem, 4.2vw, 2.7rem); }
+h2 { font-size: 1.5rem; }
+h3 { font-size: 1.12rem; }
+h2 .n, h3 .n { color: var(--accent); font-family: var(--font-mono); font-size: 0.8em; margin-right: 0.5em; font-weight: 500; }
+p, ul, ol { margin: 0; }
+ul, ol { padding-left: 1.25em; display: grid; gap: 6px; }
+section { display: grid; gap: 20px; }
+.eyebrow { font-family: var(--font-mono); font-size: 0.78rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.abstract { background: var(--panel); border: 1px solid var(--rule); border-radius: 6px; padding: 18px 20px; display: grid; gap: 10px; max-width: 80ch; }
+.abstract .eyebrow { color: var(--accent); }
+.kw { font-size: 0.9rem; color: var(--muted); }
+nav.toc { font-size: 0.93rem; }
+nav.toc ol { gap: 2px; }
+nav.toc a { color: var(--fg); text-decoration: none; border-bottom: 1px solid var(--rule); }
+nav.toc a:hover, nav.toc a:focus-visible { border-color: var(--accent); color: var(--accent); }
+a { color: var(--accent); }
+a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+figure { margin: 0; display: grid; gap: 10px; min-width: 0; }
+figcaption { color: var(--muted); font-size: 0.9rem; max-width: 80ch; }
+figcaption b { color: var(--fg); }
+.chart { background: var(--panel); border: 1px solid var(--rule); border-radius: 6px; padding: 12px; overflow-x: auto; }
+.chart svg { display: block; width: 100%; height: auto; min-width: 520px; }
+.img { background: #ffffff; border: 1px solid var(--rule); border-radius: 6px; padding: 10px; display: grid; place-items: center; }
+.img img { max-width: 100%; height: auto; display: block; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+.grid3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; }
+.grid2 > *, .grid3 > * { min-width: 0; }
+.sub { font-family: var(--font-mono); font-size: 0.78rem; color: var(--muted); }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 0.85rem; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend i { width: 14px; height: 3px; border-radius: 2px; display: inline-block; }
+.tablewrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 0.9rem; }
+caption { text-align: left; color: var(--muted); font-size: 0.88rem; padding-bottom: 6px; caption-side: top; }
+th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--rule); white-space: nowrap; vertical-align: top; }
+th { font-weight: 600; color: var(--muted); font-size: 0.78rem; letter-spacing: 0.04em; text-transform: uppercase; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; font-family: var(--font-mono); font-size: 0.86rem; }
+td.wrap { white-space: normal; min-width: 16ch; }
+tr.hl td { color: var(--accent); font-weight: 600; }
+.mono, code { font-family: var(--font-mono); font-size: 0.88em; }
+.eq { font-family: var(--font-mono); font-size: 0.9rem; background: var(--panel); border: 1px solid var(--rule); border-radius: 4px; padding: 8px 12px; overflow-x: auto; white-space: nowrap; }
+.note { border-left: 3px solid var(--accent); padding: 2px 0 2px 14px; color: var(--fg); }
+.refs { font-size: 0.9rem; }
+.refs li { padding-left: 2px; }
+.sih { font-family: var(--font-display); font-size: 1.12rem; margin-top: 8px; }
+#si { gap: 18px; }
+.gallery { display: grid; grid-template-columns: minmax(120px, 0.7fr) repeat(5, minmax(140px, 1fr)); gap: 8px; align-items: center; min-width: 900px; }
+.gallery-wrap { overflow-x: auto; }
+.gh { font-family: var(--font-mono); font-size: 0.74rem; color: var(--muted); text-align: center; }
+.gname { font-size: 0.85rem; font-weight: 600; display: grid; gap: 2px; }
+.gcell { background: #ffffff; border: 1px solid var(--rule); border-radius: 4px; aspect-ratio: 1; display: grid; place-items: center; overflow: hidden; max-width: 100%; }
+.gcell img { max-width: 100%; max-height: 100%; }
+.gcell { position: relative; }
+.gcount { position: absolute; left: 4px; bottom: 3px; font-family: var(--font-mono); font-size: 0.68rem; color: #333; background: rgba(255,255,255,0.85); padding: 0 4px; border-radius: 3px; }
+.gcell.missing { color: var(--muted); font-size: 0.8rem; background: var(--panel); }
+footer { color: var(--muted); font-size: 0.88rem; border-top: 1px solid var(--rule); padding-top: 18px; }
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+<style>
+.gal { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 12px; }
+.gal figure .img { aspect-ratio: 1; padding: 6px; }
+.gal figure .img img { max-height: 100%; }
+.verdict { font-family: var(--font-mono); font-size: 0.8rem; }
+.v-clean { color: var(--good); } .v-strained { color: var(--s-oh); } .v-broken { color: var(--bad); }
+.opt { border: 1px solid var(--rule); border-radius: 6px; background: var(--panel); padding: 14px 16px; display: grid; gap: 8px; }
+.opt.rec { border-color: var(--accent); border-width: 2px; }
+.opt h4 { margin: 0; font-family: var(--font-display); font-size: 1.05rem; }
+.opts { display: grid; gap: 12px; }
+</style>
+
+<div class="wrap">
+  <header style="display:grid;gap:14px">
+    <div class="eyebrow">Informe técnico · nanocarbon_lab / estudio_construccion</div>
+    <h1>Construcción y control de calidad de las superestructuras de carbono, y qué paper vale la pena con ellas</h1>
+    <p class="kw">ruta mallada (campo implícito) · ruta cristalina (nodos de rodilla) · Gauss-Bonnet · censo de anillos · ventana sp² · pared colapsada · schwarzitas · superredes · jaulas</p>
+  </header>
+
+  <div class="abstract">
+    <div class="eyebrow">Resumen</div>
+    <p>Las trece superestructuras usadas en los estudios de adsorción y de estructura electrónica se construyeron con dos rutas de <code>nanocarbon_lab</code>. La ruta mallada deriva los anillos de una superficie implícita y da paredes sanas pero amorfas, con un 18–25 % de anillos no hexagonales en las ocho usadas aquí. La ruta cristalina ensambla nodos de brazos rectos y coloca solo los heptágonos (y en un caso cuatro pentágonos) que exige Gauss-Bonnet. Una misma auditoría, con las mismas reglas para todas, encuentra limpias tres de las cinco cristalinas y ninguna de las ocho malladas; cuatro malladas quedan fuera de la ventana sp². Cuatro de las cinco redes periódicas malladas tienen una gemela cristalina (super-cubic = Schwarz P, super-diamond = Schwarz D, súper-grafeno, súper-cuadrado). El super-fcc y las jaulas no la tienen: el nodo de 12 brazos nunca cierra limpio, y en una jaula finita los brazos de cada vértice no pueden sumar cero. Un barrido de formas da versiones perfectas de las dos cristalinas que salían tensionadas. Con lo medido hasta ahora, el paper con más fuerza es electrónico: el orden de la pared decide si una superred de nanotubos tiene conos de Dirac y bandas planas, y Schwarz D es un carbono poroso semiconductor cuyo gap escala con el tamaño de celda.</p>
+  </div>
+
+  <nav class="toc" aria-label="Contenido">
+    <ol>
+      <li><a href="#rutas">Las dos rutas de construcción</a></li>
+      <li><a href="#catalogo">Catálogo y auditoría</a></li>
+      <li><a href="#cristalina">¿Cuáles admiten la ruta cristalina?</a></li>
+      <li><a href="#perfectas">Versiones perfectas</a></li>
+      <li><a href="#paper">Qué paper vale la pena</a></li>
+      <li><a href="#conclusiones">Conclusiones</a></li>
+      <li><a href="#refs">Referencias</a></li>
+    </ol>
+  </nav>
+
+  <section id="rutas">
+    <h2><span class="n">1</span>Las dos rutas de construcción</h2>
+    <div class="col">
+      <h3><span class="n">1.1</span>Ruta mallada (campo implícito)</h3>
+      <p>El esqueleto de la superestructura es un grafo: un nodo en cada vértice y un tubo en cada arista. Se define una función de distancia con signo que une suavemente los tubos, se extrae su isosuperficie por marching cubes, se remalla de forma isótropa y se toma el dual: cada vértice de la malla es un anillo de carbono y su grado es el tamaño del anillo. Los átomos se relajan con un campo de fuerza de valencia (enlace, ángulo verdadero y repulsión no enlazante). La topología la decide el remallador, no el diseño, así que el número total de anillos cumple Gauss-Bonnet pero los defectos quedan repartidos.</p>
+      <p>El balance de anillos lo fija el grafo antes de mallar: la pared es la frontera de un grafo engrosado, con χ = 2(V − E), y por tanto Σ(6 − n) = 12(V − E).</p>
+
+      <h3><span class="n">1.2</span>Ruta cristalina (nodos de rodilla)</h3>
+      <p>Cada nodo se ensambla con brazos rectos de nanotubo, recortados por dominancia (cada punto se queda con el brazo sobre cuyo eje avanza más), con las costuras ingleteadas y soldadas. Los huecos triangulares donde se encuentran los brazos se cierran, y los dipolos 4-8 que dejan las costuras se eliminan por trepado (borrar el vértice de grado 4 y elegir la diagonal que devuelve el grado a los hexágonos). Las celdas periódicas se cierran pegando cada boca a la del nodo vecino. Un nodo de c brazos es una esfera con c agujeros, χ = 2 − c, y paga su balance 6(2 − c) solo con heptágonos, porque un nodo es una silla de montar. La única excepción es el cruce plano de cuatro brazos del súper-cuadrado, con cuatro pentágonos en sus polos, que sí tienen curvatura positiva.</p>
+      <p>Medido en <code>nanocarbon_lab</code>: un nodo sale puro exactamente cuando sus brazos suman cero (Y a 120°, tetraédrico, octaédrico). Un nodo desequilibrado paga igualmente su balance, pero con cuadrados, octágonos o eneágonos.</p>
+
+      <h3><span class="n">1.3</span>Auditoría común</h3>
+      <p>Para comparar las trece estructuras con las mismas reglas, <code>auditoria.py</code> lee los extxyz entregados a <code>carbonforge</code> y mide:</p>
+      <ul>
+        <li>enlaces C–C hasta 1.80 Å;</li>
+        <li>anillos: el más pequeño que pasa por cada ángulo de enlace;</li>
+        <li>defectos que se tocan (pentágono con pentágono, heptágono con heptágono);</li>
+        <li>longitudes y ángulos de enlace, y contactos no enlazados por debajo de 2 Å;</li>
+        <li>el veredicto sp² de <code>nanocarbon_lab</code>: limpio si todo está en 1.30–1.55 Å y 100–135°, tensionado si algo queda a menos de 0.03 Å o 5° del borde, roto si sale;</li>
+        <li>pared colapsada: algún átomo con suma de ángulos por debajo de 328.4°, que es más piramidal que un carbono sp³.</li>
+      </ul>
+      <p>La regla de anillos difiere en ±2 del balance exacto en dos celdas malladas (super-cubic y super-fcc), donde cuenta un octágono que el censo de caras del constructor reparte de otro modo; el censo del constructor cumple el balance exacto.</p>
+    </div>
+  </section>
+
+  <section id="catalogo">
+    <h2><span class="n">2</span>Catálogo y auditoría</h2>
+    <div class="tablewrap"><table>
+      <caption><b>Table 1.</b> The thirteen superstructures of the adsorption and electronic studies, audited with one rule set (<code>auditoria.json</code>).</caption>
+      <thead><tr><th>structure</th><th>route · builder parameters</th><th class="num">atoms</th><th>rings</th><th class="num">Σ(6−n)</th><th class="num">7–7 contacts</th><th>bonds (Å)</th><th>angles (°)</th><th class="num">min angle sum (°)</th><th>sp² verdict</th></tr></thead>
+      <tbody>
+        <tr><td>Schwarz P</td><td>knee schwarzite, k = 20, 9 rows</td><td class="num">968</td><td>6: 456, 7: 24</td><td class="num">−24</td><td class="num">24</td><td>1.417–1.540</td><td>114.2–122.4</td><td class="num">354.6</td><td class="verdict v-strained">strained</td></tr>
+        <tr><td>Schwarz D</td><td>knee schwarzite, k = 18, 5 rows</td><td class="num">1440</td><td>6: 608, 7: 96</td><td class="num">−96</td><td class="num">0</td><td>1.353–1.451</td><td>109.1–123.3</td><td class="num">342.2</td><td class="verdict v-clean">clean</td></tr>
+        <tr><td>gyroid</td><td>knee schwarzite, k = 20, 5 rows</td><td class="num">1744</td><td>6: 816, 7: 48</td><td class="num">−48</td><td class="num">0</td><td>1.395–1.508</td><td>114.7–125.3</td><td class="num">356.8</td><td class="verdict v-clean">clean</td></tr>
+        <tr><td>super-graphene</td><td>knee sheet, k = 22, 5 rows</td><td class="num">920</td><td>6: 432, 7: 24</td><td class="num">−24</td><td class="num">0</td><td>1.408–1.436</td><td>117.6–121.6</td><td class="num">353.4</td><td class="verdict v-clean">clean</td></tr>
+        <tr><td>super-square</td><td>knee sheet, k = 12, 7 rows</td><td class="num">372</td><td>5: 4, 6: 164, 7: 16</td><td class="num">−12</td><td class="num">4</td><td>1.337–1.524</td><td>103.8–127.5</td><td class="num">345.0</td><td class="verdict v-strained">strained</td></tr>
+        <tr><td>super-cubic</td><td>meshed net, scale 34, tube 5, blend 4</td><td class="num">836</td><td>5: 33, 6: 326, 7: 53, 8: 3</td><td class="num">−26</td><td class="num">13</td><td>1.295–1.546</td><td>103.0–131.8</td><td class="num">330.6</td><td class="verdict v-broken">broken</td></tr>
+        <tr><td>super-diamond</td><td>meshed net, scale 60, tube 5, blend 4</td><td class="num">3752</td><td>5: 133, 6: 1504, 7: 217, 8: 6</td><td class="num">−96</td><td class="num">22</td><td>1.312–1.533</td><td>103.0–130.8</td><td class="num">331.8</td><td class="verdict v-strained">strained</td></tr>
+        <tr><td>super-fcc</td><td>meshed net, scale 40, tube 3, blend 2</td><td class="num">2982</td><td>5: 84, 6: 1089, 7: 234, 8: 43, 9: 2</td><td class="num">−242</td><td class="num">129</td><td>1.301–1.575</td><td>102.5–133.0</td><td class="num">334.0</td><td class="verdict v-broken">broken</td></tr>
+        <tr><td>super-graphene</td><td>meshed net, scale 34, tube 5, blend 4</td><td class="num">1180</td><td>5: 42, 6: 480, 7: 62, 8: 2</td><td class="num">−24</td><td class="num">8</td><td>1.344–1.544</td><td>104.2–131.8</td><td class="num">335.1</td><td class="verdict v-strained">strained</td></tr>
+        <tr><td>super-square</td><td>meshed net, scale 34, tube 5, blend 4</td><td class="num">664</td><td>5: 28, 6: 263, 7: 38, 8: 1</td><td class="num">−12</td><td class="num">5</td><td>1.343–1.570</td><td>102.8–130.1</td><td class="num">331.6</td><td class="verdict v-broken">broken</td></tr>
+        <tr><td>super-hypercube</td><td>meshed cage (4-cube), strut 20, tube 3.5, blend 2.5</td><td class="num">6494</td><td>5: 254, 6: 2539, 7: 398, 8: 24</td><td class="num">−192</td><td class="num">87</td><td>1.316–1.575</td><td>101.2–132.1</td><td class="num">329.3</td><td class="verdict v-broken">broken</td></tr>
+        <tr><td>super-cube</td><td>meshed cage, strut 24, tube 3, blend 2</td><td class="num">1748</td><td>5: 66, 6: 690, 7: 106, 8: 4</td><td class="num">−48</td><td class="num">34</td><td>1.329–1.516</td><td>101.6–130.1</td><td class="num">331.2</td><td class="verdict v-strained">strained</td></tr>
+        <tr><td>super-tetrahedron</td><td>meshed cage, strut 24, tube 3, blend 2</td><td class="num">812</td><td>5: 38, 6: 310, 7: 46, 8: 8</td><td class="num">−24</td><td class="num">21</td><td>1.318–1.531</td><td>102.7–130.4</td><td class="num">332.3</td><td class="verdict v-strained">strained</td></tr>
+      </tbody>
+    </table></div>
+    <div class="col">
+      <ul>
+        <li><b>Ninguna pared colapsada</b> (todas por encima de 328.4°), pero el super-hypercube queda a solo 0.9° del límite.</li>
+        <li><b>Cuatro malladas quedan fuera de la ventana sp²</b> por unos pocos enlaces en los nodos: super-cubic (1.295 Å), super-fcc, super-square y super-hypercube (1.570–1.575 Å). Sus resultados de adsorción y de tamizado deben leerse con esa reserva: un enlace roto en un nodo puede crear un sitio de adsorción más profundo de lo real.</li>
+        <li><b>Las cristalinas no tienen pentágonos sobrantes ni pentágonos tocándose</b>, y en D, el giroide y el súper-grafeno ni siquiera heptágonos tocándose. En P y el súper-cuadrado los heptágonos van en pares por construcción del nodo.</li>
+        <li><b>Las malladas tienen entre 18 y 25 % de anillos no hexagonales</b>, con pentágonos en superficies que no tienen curvatura positiva y heptágonos agrupados.</li>
+      </ul>
+    </div>
+    <div class="col"><h3><span class="n">2.1</span>Las trece estructuras</h3><p>Átomos en pentágonos en rojo, en heptágonos en azul, en otros anillos no hexagonales en ámbar y el resto en gris. Las láminas 2D se muestran en 2×2 o 3×3 celdas.</p></div>
+    <div class="gal">
+      <figure><div class="img"><img src="fig/Schwarz-P_cristalina.png" alt="Schwarz P (crystalline)" loading="lazy"></div><figcaption>Schwarz P (crystalline)</figcaption></figure>
+      <figure><div class="img"><img src="fig/Schwarz-D_cristalina.png" alt="Schwarz D (crystalline)" loading="lazy"></div><figcaption>Schwarz D (crystalline)</figcaption></figure>
+      <figure><div class="img"><img src="fig/gyroid_cristalina.png" alt="gyroid (crystalline)" loading="lazy"></div><figcaption>gyroid (crystalline)</figcaption></figure>
+      <figure><div class="img"><img src="fig/super-graphene_cristalina.png" alt="super-graphene (crystalline)" loading="lazy"></div><figcaption>super-graphene (crystalline)</figcaption></figure>
+      <figure><div class="img"><img src="fig/super-square_cristalina.png" alt="super-square (crystalline)" loading="lazy"></div><figcaption>super-square (crystalline)</figcaption></figure>
+      <figure><div class="img"><img src="fig/super-cubic_mallada.png" alt="super-cubic (meshed)" loading="lazy"></div><figcaption>super-cubic (meshed)</figcaption></figure>
+      <figure><div class="img"><img src="fig/super-diamond_mallada.png" alt="super-diamond (meshed)" loading="lazy"></div><figcaption>super-diamond (meshed)</figcaption></figure>
+      <figure><div class="img"><img src="fig/super-fcc_mallada.png" alt="super-fcc (meshed)" loading="lazy"></div><figcaption>super-fcc (meshed)</figcaption></figure>
+      <figure><div class="img"><img src="fig/super-graphene_mallada.png" alt="super-graphene (meshed)" loading="lazy"></div><figcaption>super-graphene (meshed)</figcaption></figure>
+      <figure><div class="img"><img src="fig/super-square_mallada.png" alt="super-square (meshed)" loading="lazy"></div><figcaption>super-square (meshed)</figcaption></figure>
+      <figure><div class="img"><img src="fig/super-hypercube_mallada.png" alt="super-hypercube (meshed)" loading="lazy"></div><figcaption>super-hypercube (meshed)</figcaption></figure>
+      <figure><div class="img"><img src="fig/super-cube_mallada.png" alt="super-cube (meshed)" loading="lazy"></div><figcaption>super-cube (meshed)</figcaption></figure>
+      <figure><div class="img"><img src="fig/super-tetrahedron_mallada.png" alt="super-tetrahedron (meshed)" loading="lazy"></div><figcaption>super-tetrahedron (meshed)</figcaption></figure>
+    </div>
+  </section>
+
+  <section id="cristalina">
+    <h2><span class="n">3</span>¿Cuáles admiten la ruta cristalina?</h2>
+    <div class="col">
+      <p>La ruta cristalina necesita nodos cuyos brazos sumen cero. Cuatro de las redes periódicas malladas la cumplen y ya tienen gemela cristalina con otro nombre. El resto se probó construyendo, no razonando (<code>prueba_rutas.py</code>, <code>prueba_rutas.txt</code>): cada jaula pegando nodos de rodilla por sus aristas, y el nodo fcc de 12 brazos solo, en circunferencias de 8 a 24 y brazos de 5 a 11 filas.</p>
+    </div>
+    <div class="tablewrap"><table>
+      <caption><b>Table 2.</b> Meshed structures and their crystalline twins.</caption>
+      <thead><tr><th>meshed structure</th><th>V, E, arms per node</th><th class="num">Σ(6−n)</th><th>|Σ arm vectors|</th><th>crystalline route</th></tr></thead>
+      <tbody>
+        <tr><td>super-cubic</td><td>1, 3, 6</td><td class="num">−24</td><td>0</td><td class="wrap"><b>yes</b>: it is Schwarz P (one octahedral node per cell)</td></tr>
+        <tr><td>super-diamond</td><td>8, 16, 4</td><td class="num">−96</td><td>0</td><td class="wrap"><b>yes</b>: it is Schwarz D (eight tetrahedral nodes)</td></tr>
+        <tr><td>super-graphene</td><td>4, 6, 3</td><td class="num">−24</td><td>0</td><td class="wrap"><b>yes</b>: knee sheet of Y nodes</td></tr>
+        <tr><td>super-square</td><td>1, 2, 4</td><td class="num">−12</td><td>0</td><td class="wrap"><b>yes</b>: knee sheet of planar X nodes (4 pentagons at the poles)</td></tr>
+        <tr><td>super-fcc</td><td>4, 24, 12</td><td class="num">−240</td><td>0</td><td class="wrap"><b>no</b>: the 12-arm node never closes clean. Where it closes (k = 8, 12, 16, 20, 24) it carries 96–288 squares plus octagons or nonagons; elsewhere the arms collide (60° between neighbours leaves no room for a wall)</td></tr>
+        <tr><td>super-tetrahedron</td><td>4, 6, 3</td><td class="num">−24</td><td>2.45</td><td class="wrap"><b>no</b>: does not close at any shape (the trim eats the arms)</td></tr>
+        <tr><td>super-cube</td><td>8, 12, 3</td><td class="num">−48</td><td>1.73</td><td class="wrap"><b>no</b>: closes at the exact budget at k = 8, 12, 16, 20, but never pure. Best case k = 8: {6, 7: 24, 9: 8}, a nonagon at every corner</td></tr>
+        <tr><td>super-octahedron</td><td>6, 12, 4</td><td class="num">−72</td><td>2.83</td><td class="wrap"><b>no</b>: does not close</td></tr>
+        <tr><td>super-hypercube</td><td>16, 32, 4</td><td class="num">−192</td><td>&gt; 0</td><td class="wrap"><b>no</b>: a finite cage, same argument</td></tr>
+      </tbody>
+    </table></div>
+    <div class="col">
+      <p><b>Por qué ninguna jaula puede ser cristalina.</b> El vértice de un poliedro convexo está en su propia envolvente, así que todas sus aristas apuntan hacia el semiespacio interior y su suma no puede ser cero. Todo grafo finito tiene algún vértice en su envolvente convexa. Es un hecho geométrico, no una limitación del constructor: las jaulas de tubos solo existen con paredes amorfas o con defectos mayores (eneágonos en el cubo). Coincide con lo que ya registra <code>nanocarbon_lab</code>.</p>
+    </div>
+  </section>
+
+  <section id="perfectas">
+    <h2><span class="n">4</span>Versiones perfectas</h2>
+    <div class="col">
+      <p>Schwarz P y el súper-cuadrado salían tensionados con las formas usadas en los estudios. <code>barrido_perfectas.py</code> construye y relaja cada forma cuyo censo de malla es exacto y la juzga con el mismo veredicto sp².</p>
+    </div>
+    <div class="tablewrap"><table>
+      <caption><b>Table 3.</b> Shape sweep of the two strained crystalline cells (<code>barrido_perfectas.jsonl</code>).</caption>
+      <thead><tr><th>net</th><th class="num">k</th><th class="num">rows</th><th class="num">atoms</th><th>rings</th><th>bonds (Å)</th><th>angles (°)</th><th>verdict</th></tr></thead>
+      <tbody>
+        <tr class="hl"><td>Schwarz P</td><td class="num">20</td><td class="num">7</td><td class="num">488</td><td>6: 216, 7: 24</td><td>1.396–1.454</td><td>115.4–121.4</td><td class="verdict v-clean">clean</td></tr>
+        <tr><td>Schwarz P</td><td class="num">20</td><td class="num">9</td><td class="num">968</td><td>6: 456, 7: 24</td><td>1.417–1.540</td><td>114.2–122.4</td><td class="verdict v-strained">strained</td></tr>
+        <tr><td>Schwarz P</td><td class="num">20</td><td class="num">11</td><td class="num">1448</td><td>6: 696, 7: 24</td><td>1.417–1.561</td><td>113.7–122.6</td><td class="verdict v-broken">broken</td></tr>
+        <tr class="hl"><td>super-square</td><td class="num">12</td><td class="num">5</td><td class="num">180</td><td>5: 4, 6: 68, 7: 16</td><td>1.374–1.505</td><td>106.1–129.7</td><td class="verdict v-clean">clean</td></tr>
+        <tr><td>super-square</td><td class="num">12</td><td class="num">7, 9, 11</td><td class="num">372–756</td><td>5: 4, 6: N, 7: 16</td><td>1.337–1.533</td><td>103.8–129.6</td><td class="verdict v-strained">strained</td></tr>
+        <tr><td>super-square</td><td class="num">20</td><td class="num">7, 9, 11</td><td class="num">460–1100</td><td>5: 4, 6: N, 7: 16</td><td>1.390–1.588</td><td>106.1–131.9</td><td class="verdict v-broken">broken</td></tr>
+      </tbody>
+    </table></div>
+    <div class="col">
+      <p>Las únicas formas de P cuyo censo es exacto tienen k = 20, y la limpia es la de brazos más cortos: alargar el brazo de P acumula tensión en el nodo octaédrico. Lo mismo pasa con el súper-cuadrado. Las cinco cristalinas limpias se guardaron en <code>perfectas/</code>:</p>
+      <ul>
+        <li>Schwarz P, k20 n7 (488 átomos);</li>
+        <li>Schwarz D, k18 n5 (1440);</li>
+        <li>giroide, k20 n5 (1744);</li>
+        <li>súper-grafeno, k22 n5 (920);</li>
+        <li>súper-cuadrado, k12 n5 (180).</li>
+      </ul>
+      <p>El precio de limpiar es poro más pequeño: el P limpio tiene un canal de 9.2 Å frente a 14.6 Å, lo que para H₂ es mejor.</p>
+    </div>
+    <div class="gal">
+      <figure><div class="img"><img src="fig/perfecta_schwarzite-P_k20_n7.png" alt="Schwarz P limpia" loading="lazy"></div><figcaption>Schwarz P, k20 n7, clean</figcaption></figure>
+      <figure><div class="img"><img src="fig/perfecta_schwarzite-D_k18_n5.png" alt="Schwarz D limpia" loading="lazy"></div><figcaption>Schwarz D, k18 n5, clean</figcaption></figure>
+      <figure><div class="img"><img src="fig/perfecta_gyroid_k20_n5.png" alt="Giroide limpio" loading="lazy"></div><figcaption>gyroid, k20 n5, clean</figcaption></figure>
+      <figure><div class="img"><img src="fig/perfecta_super-graphene_k22_n5.png" alt="Súper-grafeno limpio" loading="lazy"></div><figcaption>super-graphene, k22 n5, clean</figcaption></figure>
+      <figure><div class="img"><img src="fig/perfecta_super-square_k12_n5.png" alt="Súper-cuadrado limpio" loading="lazy"></div><figcaption>super-square, k12 n5, clean</figcaption></figure>
+    </div>
+  </section>
+
+  <section id="paper">
+    <h2><span class="n">5</span>Qué paper vale la pena</h2>
+    <div class="col">
+      <p>La pregunta es qué uso de estas estructuras es a la vez nuevo, defendible con los datos y capaz de provocar. Se evaluaron las opciones contra lo que ya está medido en los dos estudios, y en dos casos con una prueba nueva hecha para esta decisión.</p>
+    </div>
+    <div class="opts">
+      <div class="opt">
+        <h4>Adsorción con grupos funcionales (N, O, S, Se) en superestructuras</h4>
+        <p><b>Lo medido:</b> para CO₂ ninguna superestructura supera a una rendija de 6.6 Å (selectividad 5–29 frente a 133). Los grupos OH, COOH y NH₂ dan ganancias pequeñas y quitan capacidad. El N grafítico es el único que ayuda, y con un 80 % de humedad pierde la ventaja.</p>
+        <p><b>Veredicto: no como paper principal.</b> El resultado sería incremental, y los datos ya dicen que la superestructura es el soporte equivocado para CO₂. Hay un hallazgo negativo publicable dentro de un paper mayor: la forma de la pared importa más que su química.</p>
+      </div>
+      <div class="opt">
+        <h4>Tamizado cuántico H₂/D₂</h4>
+        <p><b>Lo medido:</b> el super-hypercube iguala a la mejor rendija (S = 1.61 a 77 K y 3.9 a 40 K), pero es justo una de las mallas fuera de la ventana sp², y el Feynman-Hibbs es aproximado.</p>
+        <p><b>Veredicto: secundario.</b> Necesitaría integrales de camino (PIMC) y una jaula sana. Es interesante y nada provocador.</p>
+      </div>
+      <div class="opt">
+        <h4>Magnetismo de banda plana con dopaje N o B</h4>
+        <p><b>Lo medido:</b> sin dopar, nada es magnético con U = |t|. Se probó el límite más favorable: un electrón o un hueco por celda en banda rígida (<code>dopaje_banda_plana.py</code>). El súper-cuadrado sigue sin magnetismo en los dos signos; el súper-grafeno, con dos nodos-Y por celda, sigue en cálculo. La banda plana de una superred se reparte sobre cientos de átomos, así que la interacción efectiva en ella es pequeña.</p>
+        <p><b>Veredicto: débil.</b> Lo único que sobrevive es el estado débil del súper-grafeno en sus nodos a U = 2|t|, que está por encima del U del carbono.</p>
+      </div>
+      <div class="opt">
+        <h4>S o Se con espín-órbita: bandas planas topológicas</h4>
+        <p><b>La idea:</b> una red de Lieb con espín-órbita es un aislante topológico (Weeks y Franz 2010), y el súper-cuadrado tiene la banda plana y el cono de Lieb.</p>
+        <p><b>Veredicto: arriesgado.</b> <code>tbkit</code> no tiene espín-órbita, así que hace falta DFT. El acoplamiento del Se es de meV en un sistema de cientos de átomos, y un gap de ese tamaño sería difícil de defender. Es el más provocador y el menos probable.</p>
+      </div>
+      <div class="opt rec">
+        <h4>Recomendado: el orden de la pared decide la electrónica, y Schwarz D es un semiconductor poroso diseñable</h4>
+        <p><b>La tesis:</b> las superredes de nanotubos se estudian casi siempre con paredes desordenadas o remalladas. Con paredes cristalinas, las bandas de la superred reproducen las de su grafo:</p>
+        <ul>
+          <li>el súper-cuadrado tiene un cono de Dirac con banda plana, como una red de Lieb;</li>
+          <li>el súper-grafeno tiene un cruce lineal con banda casi plana en sus nodos;</li>
+          <li>Schwarz D es la única schwarzita semiconductora.</li>
+        </ul>
+        <p>Con la pared amorfa el cono desaparece. La parte provocadora es la implicación: lo que se ha predicho para superredes con paredes desordenadas puede estar dominado por el desorden del modelo, no por la red.</p>
+        <p><b>La prueba hecha para decidir:</b> el gap de Schwarz D escala con el tamaño de la celda (π, <code>escala_D.py</code>): con brazos de 5, 7 y 9 filas (celdas de 30.0, 52.8 y 73.4 Å; 1440, 3744 y 6048 átomos) el gap es 1.26, 0.75 y 0.52 eV, y gap × celda vale 37.8, 39.5 y 38.4 eV·Å. Es un escalado 1/L limpio, de confinamiento, y el gap se puede elegir con el tamaño de celda. Un carbono cristalino, poroso (canal de 6.7 Å, la mejor constante de Henry de H₂ entre las cristalinas) y semiconductor con gap ajustable es un material que no existe en la literatura de carbono poroso. Lo hace útil para sensores quimiorresistivos y electrodos.</p>
+        <p><b>Qué falta para que sea un paper:</b></p>
+        <ol>
+          <li>relajar las celdas con un tight binding con energía (Xu) y repetir las bandas;</li>
+          <li>el gap de D a dos o tres tamaños con DFT, preparado como solicitud <code>nanocarbon-dft/1</code> para un clúster;</li>
+          <li>un modelo efectivo nodo–tubo que explique el escalado y la banda plana;</li>
+          <li>N y B en los sitios de heptágono, que <code>nanocarbon_lab</code> ya sabe dopar, como perilla para el nivel de Fermi y el gap;</li>
+          <li>una revisión bibliográfica de redes de Lieb en carbono y de gaps de schwarzitas, que aquí no se ha hecho.</li>
+        </ol>
+      </div>
+    </div>
+  </section>
+
+  <section id="conclusiones">
+    <h2><span class="n">6</span>Conclusiones</h2>
+    <div class="col">
+      <ol>
+        <li>Con una auditoría común, tres de las cinco cristalinas son limpias y ninguna de las ocho malladas; cuatro malladas quedan fuera de la ventana sp² por enlaces en los nodos.</li>
+        <li>Super-cubic, super-diamond, súper-grafeno y súper-cuadrado tienen gemela cristalina (P, D y las dos láminas de rodilla). El super-fcc y todas las jaulas no la pueden tener.</li>
+        <li>Hay versiones perfectas de P (488 átomos) y del súper-cuadrado (180 átomos), con brazos más cortos que las usadas en los estudios.</li>
+        <li>El uso más prometedor y menos reportado es electrónico: superredes de pared cristalina como redes de Lieb y de panal a escala de superred, y Schwarz D como semiconductor poroso de gap ajustable por tamaño.</li>
+      </ol>
+    </div>
+  </section>
+
+  <section id="refs">
+    <h2><span class="n">7</span>Referencias</h2>
+    <ol class="refs">
+      <li>A. L. Mackay, H. Terrones, <i>Nature</i> <b>352</b> (1991) 762.</li>
+      <li>T. Lenosky, X. Gonze, M. Teter, V. Elser, <i>Nature</i> <b>355</b> (1992) 333.</li>
+      <li>B. I. Dunlap, <i>Phys. Rev. B</i> <b>46</b> (1992) 1933.</li>
+      <li>J. M. Romo-Herrera, M. Terrones, H. Terrones, S. Dag, V. Meunier, <i>Nano Lett.</i> <b>7</b> (2007) 570.</li>
+      <li>E. H. Lieb, <i>Phys. Rev. Lett.</i> <b>62</b> (1989) 1201.</li>
+      <li>C. Weeks, M. Franz, <i>Phys. Rev. B</i> <b>82</b> (2010) 085310.</li>
+    </ol>
+  </section>
+
+  <footer>Generado a partir de <code>packages/nanocarbon_lab/estudio_construccion</code> (<code>auditoria.py</code>, <code>prueba_rutas.py</code>, <code>barrido_perfectas.py</code>, <code>figuras_construccion.py</code>). Tablas y figuras en inglés; texto en español.</footer>
+</div>

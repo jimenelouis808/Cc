@@ -1,0 +1,368 @@
+<title>Electrónica de superredes de carbono</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&family=Source+Serif+4:opsz,wght@8..60,500;8..60,600;8..60,700&display=swap">
+<style>
+/* Layout: a single manuscript column (~72ch) with figures allowed wider; numbered sections because a paper's order is information. */
+:root {
+  --bg: #f7f7f5;
+  --panel: #ffffff;
+  --fg: #1c2126;
+  --muted: #5d6771;
+  --rule: #dcdfe2;
+  --accent: #0f6b74;
+  --s-pri: #1c2126;
+  --s-n: #0f6b74;
+  --s-oh: #c07a12;
+  --s-cooh: #b2412f;
+  --s-nh2: #6c4bb5;
+  --s-cage: #8a949e;
+  --good: #1f7a4a;
+  --bad: #b2412f;
+  --font-display: "Source Serif 4", Georgia, "Times New Roman", serif;
+  --font-body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #13181c; --panel: #1a2127; --fg: #e3e7ea; --muted: #9ba6b0; --rule: #2d363e;
+    --accent: #4fb8c1; --s-pri: #e3e7ea; --s-n: #4fb8c1; --s-oh: #e0a53e; --s-cooh: #e2735f;
+    --s-nh2: #a58ce6; --s-cage: #6f7a84; --good: #5cc28b; --bad: #e2735f; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #13181c; --panel: #1a2127; --fg: #e3e7ea; --muted: #9ba6b0; --rule: #2d363e;
+  --accent: #4fb8c1; --s-pri: #e3e7ea; --s-n: #4fb8c1; --s-oh: #e0a53e; --s-cooh: #e2735f;
+  --s-nh2: #a58ce6; --s-cage: #6f7a84; --good: #5cc28b; --bad: #e2735f; color-scheme: dark;
+}
+body { background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 16px; line-height: 1.62; }
+.wrap {
+  max-width: 1000px; margin: 0 auto;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 40px 80px;
+  display: grid; gap: 52px;
+}
+.col { max-width: 74ch; display: grid; gap: 14px; }
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; line-height: 1.18; margin: 0; font-weight: 600; }
+h1 { font-size: clamp(1.9rem, 4.2vw, 2.7rem); }
+h2 { font-size: 1.5rem; }
+h3 { font-size: 1.12rem; }
+h2 .n, h3 .n { color: var(--accent); font-family: var(--font-mono); font-size: 0.8em; margin-right: 0.5em; font-weight: 500; }
+p, ul, ol { margin: 0; }
+ul, ol { padding-left: 1.25em; display: grid; gap: 6px; }
+section { display: grid; gap: 20px; }
+.eyebrow { font-family: var(--font-mono); font-size: 0.78rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.abstract { background: var(--panel); border: 1px solid var(--rule); border-radius: 6px; padding: 18px 20px; display: grid; gap: 10px; max-width: 80ch; }
+.abstract .eyebrow { color: var(--accent); }
+.kw { font-size: 0.9rem; color: var(--muted); }
+nav.toc { font-size: 0.93rem; }
+nav.toc ol { gap: 2px; }
+nav.toc a { color: var(--fg); text-decoration: none; border-bottom: 1px solid var(--rule); }
+nav.toc a:hover, nav.toc a:focus-visible { border-color: var(--accent); color: var(--accent); }
+a { color: var(--accent); }
+a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+figure { margin: 0; display: grid; gap: 10px; min-width: 0; }
+figcaption { color: var(--muted); font-size: 0.9rem; max-width: 80ch; }
+figcaption b { color: var(--fg); }
+.chart { background: var(--panel); border: 1px solid var(--rule); border-radius: 6px; padding: 12px; overflow-x: auto; }
+.chart svg { display: block; width: 100%; height: auto; min-width: 520px; }
+.img { background: #ffffff; border: 1px solid var(--rule); border-radius: 6px; padding: 10px; display: grid; place-items: center; }
+.img img { max-width: 100%; height: auto; display: block; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+.grid3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; }
+.grid2 > *, .grid3 > * { min-width: 0; }
+.sub { font-family: var(--font-mono); font-size: 0.78rem; color: var(--muted); }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 0.85rem; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend i { width: 14px; height: 3px; border-radius: 2px; display: inline-block; }
+.tablewrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 0.9rem; }
+caption { text-align: left; color: var(--muted); font-size: 0.88rem; padding-bottom: 6px; caption-side: top; }
+th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--rule); white-space: nowrap; vertical-align: top; }
+th { font-weight: 600; color: var(--muted); font-size: 0.78rem; letter-spacing: 0.04em; text-transform: uppercase; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; font-family: var(--font-mono); font-size: 0.86rem; }
+td.wrap { white-space: normal; min-width: 16ch; }
+tr.hl td { color: var(--accent); font-weight: 600; }
+.mono, code { font-family: var(--font-mono); font-size: 0.88em; }
+.eq { font-family: var(--font-mono); font-size: 0.9rem; background: var(--panel); border: 1px solid var(--rule); border-radius: 4px; padding: 8px 12px; overflow-x: auto; white-space: nowrap; }
+.note { border-left: 3px solid var(--accent); padding: 2px 0 2px 14px; color: var(--fg); }
+.refs { font-size: 0.9rem; }
+.refs li { padding-left: 2px; }
+.sih { font-family: var(--font-display); font-size: 1.12rem; margin-top: 8px; }
+#si { gap: 18px; }
+.gallery { display: grid; grid-template-columns: minmax(120px, 0.7fr) repeat(5, minmax(140px, 1fr)); gap: 8px; align-items: center; min-width: 900px; }
+.gallery-wrap { overflow-x: auto; }
+.gh { font-family: var(--font-mono); font-size: 0.74rem; color: var(--muted); text-align: center; }
+.gname { font-size: 0.85rem; font-weight: 600; display: grid; gap: 2px; }
+.gcell { background: #ffffff; border: 1px solid var(--rule); border-radius: 4px; aspect-ratio: 1; display: grid; place-items: center; overflow: hidden; max-width: 100%; }
+.gcell img { max-width: 100%; max-height: 100%; }
+.gcell { position: relative; }
+.gcount { position: absolute; left: 4px; bottom: 3px; font-family: var(--font-mono); font-size: 0.68rem; color: #333; background: rgba(255,255,255,0.85); padding: 0 4px; border-radius: 3px; }
+.gcell.missing { color: var(--muted); font-size: 0.8rem; background: var(--panel); }
+footer { color: var(--muted); font-size: 0.88rem; border-top: 1px solid var(--rule); padding-top: 18px; }
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+
+<div class="wrap">
+  <header style="display:grid;gap:14px">
+    <div class="eyebrow">Informe técnico · tbkit / estudios/superredes</div>
+    <h1>Estructura electrónica y magnetismo de campo medio en superredes cristalinas de nanotubos de carbono</h1>
+    <p class="kw">tight binding π · Slater-Koster s+p (c_bandas) · Hubbard de campo medio · schwarzitas · súper-grafeno · súper-cuadrado · banda plana · red de Lieb</p>
+  </header>
+
+  <div class="abstract">
+    <div class="eyebrow">Resumen</div>
+    <p>Se calcula la estructura electrónica de ocho superestructuras de carbono (tres schwarzitas, dos superredes 2D cristalinas, una mallada y dos jaulas) con un modelo π de primeros vecinos, y se comprueban las tres más interesantes con un tight binding s+p ajustado a bandas DFT. Las superredes construidas por la ruta cristalina reproducen, a la escala de la superred, la física de redes conocidas: el súper-cuadrado tiene un cono de Dirac en M con una banda casi plana en E<sub>F</sub>, la firma de una red de Lieb, y el súper-grafeno un cruce lineal con una banda casi plana pegada. La misma red construida con paredes amorfas pierde el cono. La schwarzita D es la única semiconductora (gap 1.25 eV en π, 0.51 eV en s+p), y en π su gap escala como el inverso del tamaño de celda; P y el giroide son metálicos. El Hubbard de campo medio con U = |t| no magnetiza ninguna estructura: la banda plana es una sola entre cientos y no alcanza el criterio de Stoner. Al subir U, el súper-cuadrado se ordena en el mismo intervalo que el grafeno (2.0–2.5|t|), mientras que el súper-grafeno ya tiene a 2.0|t| un estado antiferro débil (0.036 μ<sub>B</sub>) localizado en sus nodos, que sobrevive al refinar la malla k y baja la energía 3.1 meV por celda. Ese U está por encima del efectivo del carbono, así que el resultado indica una tendencia, no un magnetismo esperable.</p>
+  </div>
+
+  <nav class="toc" aria-label="Contenido">
+    <ol>
+      <li><a href="#intro">Introducción</a></li>
+      <li><a href="#metodos">Métodos</a></li>
+      <li><a href="#validacion">Validación</a></li>
+      <li><a href="#bandas">Resultados: bandas π</a></li>
+      <li><a href="#sp">Resultados: comprobación s+p</a></li>
+      <li><a href="#magnetismo">Resultados: magnetismo de campo medio</a></li>
+      <li><a href="#discusion">Discusión y limitaciones</a></li>
+      <li><a href="#conclusiones">Conclusiones</a></li>
+      <li><a href="#refs">Referencias</a></li>
+    </ol>
+  </nav>
+
+  <section id="intro">
+    <h2><span class="n">1</span>Introducción</h2>
+    <div class="col">
+      <p>Las redes covalentes de nanotubos (superredes, schwarzitas) se propusieron como carbono poroso con curvatura negativa (Mackay y Terrones 1991; Lenosky et al. 1992; Romo-Herrera et al. 2007). Casi todo lo publicado sobre ellas usa modelos con paredes desordenadas o celdas pequeñas, y su electrónica se discute poco más allá de si tienen gap. Aquí se usan celdas construidas por una ruta cristalina: nodos de rodilla ensamblados de brazos rectos, con los heptágonos que exige Gauss-Bonnet en posiciones fijas y sin pentágonos sobrantes. Con paredes así de limpias tiene sentido preguntar si la topología de la superred se ve en las bandas, y si alguna banda plana lleva a magnetismo.</p>
+    </div>
+  </section>
+
+  <section id="metodos">
+    <h2><span class="n">2</span>Métodos</h2>
+    <div class="col">
+      <h3><span class="n">2.1</span>Estructuras</h3>
+      <p>Las celdas vienen de <code>nanocarbon_lab</code> como extxyz y se usan tal como salen del constructor, relajadas con su campo de fuerza de valencia y sin relajar con el tight binding. Ningún paquete importa a otro: las estructuras pasan solo por fichero.</p>
+    </div>
+    <div class="tablewrap"><table>
+      <caption><b>Table 1.</b> Structures. Crystalline = knee route (exact ring census); meshed = implicit route (amorphous wall).</caption>
+      <thead><tr><th>structure</th><th>route</th><th class="num">atoms</th><th>periodicity</th><th>rings</th><th>k mesh (π)</th><th>path</th></tr></thead>
+      <tbody>
+        <tr><td>Schwarz P</td><td>crystalline</td><td class="num">968</td><td>3D</td><td>6: 456, 7: 24</td><td>6×6×6</td><td>Γ–X–M–Γ–R–X</td></tr>
+        <tr><td>Schwarz D</td><td>crystalline</td><td class="num">1440</td><td>3D</td><td>6: 608, 7: 96</td><td>5×5×5</td><td>Γ–X–M–Γ–R–X</td></tr>
+        <tr><td>gyroid</td><td>crystalline</td><td class="num">1744</td><td>3D</td><td>6: 816, 7: 48</td><td>4×4×4</td><td>Γ–X–M–Γ–R–X</td></tr>
+        <tr><td>super-graphene</td><td>crystalline</td><td class="num">920</td><td>2D (rectangular cell)</td><td>6: 432, 7: 24</td><td>16×16</td><td>Γ–X–S–Y–Γ</td></tr>
+        <tr><td>super-square</td><td>crystalline</td><td class="num">372</td><td>2D</td><td>5: 4, 6: 164, 7: 16</td><td>24×24</td><td>Γ–X–M–Γ</td></tr>
+        <tr><td>super-graphene</td><td>meshed</td><td class="num">1180</td><td>2D</td><td>5: 42, 6: 480, 7: 62, 8: 2</td><td>12×12</td><td>Γ–X–S–Y–Γ</td></tr>
+        <tr><td>super-cube</td><td>meshed cage</td><td class="num">1748</td><td>0D</td><td>5: 66, 6: 690, 7: 106, 8: 4</td><td>Γ</td><td>—</td></tr>
+        <tr><td>super-hypercube</td><td>meshed cage</td><td class="num">6494</td><td>0D</td><td>5: 254, 6: 2539, 7: 398, 8: 24</td><td>Γ</td><td>—</td></tr>
+      </tbody>
+    </table></div>
+    <div class="col">
+      <p>La celda hexagonal primitiva del súper-grafeno no se pudo usar (el constructor da 784 átomos en vez de 920 al reducirla), así que se trabaja en la celda rectangular de cuatro nodos y su camino Γ–X–S–Y–Γ.</p>
+
+      <h3><span class="n">2.2</span>Modelo π</h3>
+      <p>Hückel de primeros vecinos con un orbital π local por átomo, sin factor angular (el de <code>tbkit</code>, que no pierde enlaces axiales en tubos curvos), t = −2.7 eV y solapamiento nulo. Se diagonaliza H(k) en una malla Γ-centrada y en un camino de 60 puntos por tramo. La DOS se ensancha con gaussianas de 0.03 eV sobre la malla. Para un sistema con gap, el cero de energía es el centro del gap, no el nivel de Fermi que da el resolvedor.</p>
+
+      <h3><span class="n">2.3</span>Tight binding s+p (<code>c_bandas</code>)</h3>
+      <p>Para ver la mezcla σ-π que causa la curvatura de los nodos, se repiten las bandas con el conjunto <code>c_bandas</code> de <code>tbkit</code>: Slater-Koster s+p (cuatro orbitales por átomo) ajustado a bandas GPAW PBE de ondas planas del grafeno a tres constantes de red y de los tubos (8,0) y (5,5). Los tubos (10,0), (9,0) y (6,6) quedaron fuera del ajuste y lo validan. Su rango declarado de validez es C–C entre 1.37 y 1.48 Å y ±3 eV en torno a E<sub>F</sub>; los nodos de estas celdas llegan a 1.35–1.49 Å, ligeramente fuera. Se usan solo valores propios (los vectores de Schwarz D ocupan unos 14 GB), con 2N bandas ocupadas, y cada punto k se guarda al calcularse para poder reanudar.</p>
+
+      <h3><span class="n">2.4</span>Hubbard de campo medio</h3>
+      <p>Sobre el modelo π se resuelve el Hubbard en la aproximación de Hartree-Fock colineal (<code>tbkit.hubbard.mean_field</code>): potencial V<sub>σ</sub> = U(n<sub>−σ</sub> − n<sub>0</sub>/2), ocupaciones de Fermi con kT = 5 meV, mezcla lineal 0.3, convergencia a 10<sup>−6</sup> en las poblaciones. La energía total corrige el doble conteo: E = Σf ε − U Σ n<sub>↑</sub>n<sub>↓</sub> + U Σ n<sub>0</sub>²/4. Por defecto U = |t| = 2.7 eV (Yazyev 2010).</p>
+      <p>Las redes no son bipartitas (tienen heptágonos), así que el teorema de Lieb no fija el estado fundamental y no existe un arranque antiferro de subred. Cada estructura parte de tres estados (paramagnético, ferro y aleatorio) y gana la energía más baja. En el barrido de U se arranca de un patrón aleatorio, porque un arranque ferro conserva la simetría uniforme y no puede llegar a un estado escalonado. El grafeno de control, que sí es bipartito, arranca antiferro.</p>
+      <p>Para la malla 8×8 del súper-grafeno se usan dos atajos exactos: la inversión temporal (H real, espín colineal, sin campo) da n(k) = n(−k), y basta la mitad de los puntos k con peso doble (34 en vez de 64); y el ciclo autoconsistente se encadena en tramos de 10 iteraciones a través de las poblaciones mezcladas, que es la misma secuencia que una corrida larga. Las dos cosas se comprobaron sobre grafeno, con diferencias de 10<sup>−15</sup>.</p>
+
+      <h3><span class="n">2.5</span>Software</h3>
+      <p>Todo usa <code>packages/tbkit</code>. Los scripts y sus salidas están en <code>tbkit/estudios/superredes/</code>: <code>electronica.py</code>, <code>c_bandas.py</code>, <code>magnetismo.py</code>, <code>magnetismo_U.py</code>, <code>magnetismo_k8.py</code>, <code>energia_k8.py</code>, <code>momentos.py</code> y <code>figuras.py</code>.</p>
+    </div>
+  </section>
+
+  <section id="validacion">
+    <h2><span class="n">3</span>Validación</h2>
+    <div class="tablewrap"><table>
+      <caption><b>Table 2.</b> Checks against closed-form or published results.</caption>
+      <thead><tr><th>check</th><th>this work</th><th>reference</th></tr></thead>
+      <tbody>
+        <tr><td>graphene, π model</td><td>Dirac cone exactly at K</td><td>closed form</td></tr>
+        <tr><td>graphene, mean-field Hubbard at U = |t|</td><td>non-magnetic from all three starts</td><td>U<sub>c</sub> ≈ 2.23|t| in mean field</td></tr>
+        <tr><td>graphene, AFM onset (48×48 k)</td><td>between 2.0 and 2.5|t|; 0.21 μ<sub>B</sub> at 2.5|t|</td><td>2.23|t|</td></tr>
+        <tr><td>Schwarz D, gapped π system</td><td>stays non-magnetic at U = |t|</td><td>expected: no DOS at E<sub>F</sub></td></tr>
+        <tr><td>c_bandas, held-out tubes</td><td>(10,0), (9,0), (6,6) excluded from the fit</td><td>GPAW PBE bands</td></tr>
+      </tbody>
+    </table></div>
+    <div class="col">
+      <p>La convergencia en k resultó decisiva. Con 24×24 puntos el grafeno de control da un momento de 0.006 μ<sub>B</sub> a 2.0|t|, por debajo de su umbral. Es un artefacto: muestrear el cono de Dirac con pocos puntos crea densidad en E<sub>F</sub> que no existe, y el momento desaparece al densificar la malla.</p>
+    </div>
+    <div class="tablewrap"><table>
+      <caption><b>Table 3.</b> k-mesh convergence of the spurious moment of graphene at U = 2.0|t| (kT = 5 meV, antiferro start).</caption>
+      <thead><tr><th>k mesh</th><th class="num">max |m| (μ<sub>B</sub>)</th></tr></thead>
+      <tbody>
+        <tr><td>12×12</td><td class="num">0.022</td></tr>
+        <tr><td>24×24</td><td class="num">0.006</td></tr>
+        <tr><td>48×48</td><td class="num">3×10⁻⁷</td></tr>
+        <tr><td>96×96</td><td class="num">2×10⁻⁷</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section id="bandas">
+    <h2><span class="n">4</span>Resultados: bandas π</h2>
+    <figure>
+      <div class="img"><img src="fig/bandas.png" alt="Bandas π de seis superestructuras cerca del nivel de Fermi"></div>
+      <figcaption><b>Figure 1.</b> π bands near E<sub>F</sub> (gapless) or mid-gap (Schwarz D). Crystalline super-graphene and super-square show a linear crossing and near-flat bands; the meshed super-graphene shows only flat bands.</figcaption>
+    </figure>
+    <div class="tablewrap"><table>
+      <caption><b>Table 4.</b> π-model electronic character.</caption>
+      <thead><tr><th>structure</th><th class="num">atoms</th><th>character</th><th class="num">gap (eV)</th><th class="num">DOS(E<sub>F</sub>) (states/eV/atom)</th><th>feature</th></tr></thead>
+      <tbody>
+        <tr><td>super-graphene (crystalline)</td><td class="num">920</td><td>semimetal</td><td class="num">0</td><td class="num">0.015</td><td class="wrap">linear crossing on Γ–X (about 2/3 from Γ) and a near-flat band 0.05 eV below E<sub>F</sub></td></tr>
+        <tr><td>super-square (crystalline)</td><td class="num">372</td><td>semimetal</td><td class="num">0</td><td class="num">0.049</td><td class="wrap">cone at M touching a near-flat band at E<sub>F</sub></td></tr>
+        <tr><td>Schwarz P</td><td class="num">968</td><td>metal</td><td class="num">0</td><td class="num">0.049</td><td class="wrap">several crossings near E<sub>F</sub></td></tr>
+        <tr class="hl"><td>Schwarz D</td><td class="num">1440</td><td>semiconductor</td><td class="num">1.25</td><td class="num">0</td><td class="wrap">very flat band edges at ±0.63 eV from mid-gap</td></tr>
+        <tr><td>gyroid</td><td class="num">1744</td><td>metal</td><td class="num">0</td><td class="num">0.041</td><td class="wrap">—</td></tr>
+        <tr><td>super-graphene (meshed)</td><td class="num">1180</td><td>flat bands</td><td class="num">0</td><td class="num">0.046</td><td class="wrap">no cone: scattered 5-7 pairs localise the states</td></tr>
+        <tr><td>super-cube (cage)</td><td class="num">1748</td><td>molecule</td><td class="num">0.043</td><td class="num">—</td><td class="wrap">HOMO-LUMO gap</td></tr>
+        <tr><td>super-hypercube (cage)</td><td class="num">6494</td><td>molecule</td><td class="num">0.007</td><td class="num">—</td><td class="wrap">HOMO-LUMO gap</td></tr>
+      </tbody>
+    </table></div>
+    <div class="col">
+      <ul>
+        <li><b>Las superredes cristalinas reproducen la física de una red a escala de superred.</b> El súper-cuadrado tiene nodos en los vértices de una red cuadrada y tubos sobre las aristas, que es la topología de la red de Lieb: una banda plana y un cono de Dirac en M, que es lo que sale. El súper-grafeno es un panal de nodos con sitios en las aristas y da un cruce lineal con una banda casi plana pegada. Es una lectura por topología, coherente con las bandas, no una demostración.</li>
+        <li><b>El desorden de la pared lo borra.</b> El mismo súper-grafeno construido por la ruta mallada, con pares 5-7 dispersos, solo tiene bandas planas. Para física de bandas, la ruta cristalina es necesaria.</li>
+        <li><b>Schwarz D es la única con gap, y su gap escala como 1/L.</b> P y el giroide, de la misma familia de superficies mínimas, son metálicos. En D, alargar los brazos (k = 18 con 5, 7 y 9 filas, <code>escala_D.py</code>, malla 2×2×2) baja el gap como el inverso del tamaño de celda (Table 5): el producto gap × celda queda en 38–40 eV·Å. Es un gap de confinamiento en una red porosa, ajustable con la geometría.</li>
+      </ul>
+    </div>
+    <div class="tablewrap"><table>
+      <caption><b>Table 5.</b> Schwarz D π gap against cell size (k = 18 arms; 2×2×2 Γ-centred mesh; gap direct at Γ in all three).</caption>
+      <thead><tr><th>arm rows</th><th class="num">atoms</th><th class="num">cell (Å)</th><th class="num">gap (eV)</th><th class="num">gap × cell (eV·Å)</th></tr></thead>
+      <tbody>
+        <tr><td>5</td><td class="num">1440</td><td class="num">30.0</td><td class="num">1.26</td><td class="num">37.8</td></tr>
+        <tr><td>7</td><td class="num">3744</td><td class="num">52.8</td><td class="num">0.75</td><td class="num">39.5</td></tr>
+        <tr><td>9</td><td class="num">6048</td><td class="num">73.4</td><td class="num">0.52</td><td class="num">38.4</td></tr>
+      </tbody>
+    </table></div>
+    <figure>
+      <div class="img"><img src="fig/dos.png" alt="Densidad de estados π"></div>
+      <figcaption><b>Figure 2.</b> π density of states (Gaussian 0.03 eV on the k mesh).</figcaption>
+    </figure>
+  </section>
+
+  <section id="sp">
+    <h2><span class="n">5</span>Resultados: comprobación s+p</h2>
+    <figure>
+      <div class="img"><img src="fig/bandas_c_bandas.png" alt="Bandas π frente a s+p"></div>
+      <figcaption><b>Figure 3.</b> π model (grey) against s+p tight binding (c_bandas, colour) on the same path, zero at mid-gap or E<sub>F</sub>.</figcaption>
+    </figure>
+    <div class="tablewrap"><table>
+      <caption><b>Table 6.</b> π against s+p.</caption>
+      <thead><tr><th>structure</th><th class="num">gap π (eV)</th><th class="num">gap s+p (eV)</th><th>what changes</th></tr></thead>
+      <tbody>
+        <tr class="hl"><td>Schwarz D</td><td class="num">1.25</td><td class="num">0.51</td><td class="wrap">direct at Γ; still a semiconductor, gap less than half; band edges remain very flat</td></tr>
+        <tr><td>super-square</td><td class="num">0</td><td class="num">0</td><td class="wrap">near-touching at M kept (~10 meV, between near-flat bands); the bands around it move most of the three</td></tr>
+        <tr><td>super-graphene (crystalline)</td><td class="num">0</td><td class="num">0.007</td><td class="wrap">practically identical to π: linear crossing on Γ–X and near-flat band 0.07 eV below E<sub>F</sub></td></tr>
+      </tbody>
+    </table></div>
+    <div class="col">
+      <p>El gap de Schwarz D se confirma pero su valor no: la mezcla σ-π de los nodos curvos lo baja a menos de la mitad. Lo robusto es que D tiene gap mientras P y el giroide no lo tienen. Los cruces de las dos superredes cristalinas sobreviven a la mezcla σ-π, y el súper-grafeno casi no se mueve.</p>
+    </div>
+  </section>
+
+  <section id="magnetismo">
+    <h2><span class="n">6</span>Resultados: magnetismo de campo medio</h2>
+    <div class="col">
+      <h3><span class="n">6.1</span>U = |t|</h3>
+    </div>
+    <div class="tablewrap"><table>
+      <caption><b>Table 7.</b> Mean-field Hubbard at U = |t| = 2.7 eV, kT = 5 meV. All three starts converge to the same energy.</caption>
+      <thead><tr><th>structure</th><th class="num">atoms</th><th>k mesh</th><th class="num">E (eV)</th><th class="num">M (μ<sub>B</sub>)</th><th class="num">Σ|m| (μ<sub>B</sub>)</th></tr></thead>
+      <tbody>
+        <tr><td>graphene (control)</td><td class="num">8</td><td>24×24</td><td class="num">−34.011</td><td class="num">0</td><td class="num">0</td></tr>
+        <tr><td>super-square</td><td class="num">372</td><td>8×8</td><td class="num">−1574.185</td><td class="num">0</td><td class="num">0</td></tr>
+        <tr><td>super-graphene (crystalline)</td><td class="num">920</td><td>4×4</td><td class="num">−3901.478</td><td class="num">0</td><td class="num">0</td></tr>
+        <tr><td>Schwarz D (gapped control)</td><td class="num">1440</td><td>2×2×2</td><td class="num">−6089.332</td><td class="num">0</td><td class="num">&lt; 10⁻³</td></tr>
+      </tbody>
+    </table></div>
+    <div class="col">
+      <p>Nada es magnético a U = |t|. Una banda plana en E<sub>F</sub> invita a la inestabilidad de Stoner, pero aquí es una sola banda entre cientos por celda: la DOS en E<sub>F</sub> es de unos 0.05 estados/eV/átomo y U·DOS ≈ 0.1, lejos del criterio (~1).</p>
+      <h3><span class="n">6.2</span>Barrido de U</h3>
+    </div>
+    <div class="grid2">
+      <figure>
+        <div class="img"><img src="fig/magnetismo_U.png" alt="Momento escalonado frente a U"></div>
+        <figcaption><b>Figure 4.</b> Mean staggered moment per atom against U. Graphene at 24×24 k; its 2.0|t| point vanishes at 48×48 (Table 3). Super-graphene's 2.0|t| point is unchanged at 8×8 k.</figcaption>
+      </figure>
+      <div class="tablewrap" style="align-self:start"><table>
+        <caption><b>Table 8.</b> Mean |m| per atom (μ<sub>B</sub>); total moment zero in every magnetic case.</caption>
+        <thead><tr><th>structure</th><th class="num">1.5|t|</th><th class="num">2.0|t|</th><th class="num">2.5|t|</th></tr></thead>
+        <tbody>
+          <tr><td>graphene</td><td class="num">0</td><td class="num">0 (48×48)</td><td class="num">0.21</td></tr>
+          <tr><td>super-square</td><td class="num">0</td><td class="num">0</td><td class="num">0.18 (max 0.26)</td></tr>
+          <tr class="hl"><td>super-graphene</td><td class="num">0</td><td class="num">0.007 (max 0.036)</td><td class="num">0.19 (max 0.24)</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+    <div class="col">
+      <ul>
+        <li><b>El súper-cuadrado no adelanta el umbral.</b> Se ordena en el mismo intervalo que el grafeno, con un estado escalonado de momento total cero, repartido casi por igual: 0.17 μ<sub>B</sub> de media en los 104 átomos de heptágono, 0.17 a 1–2 enlaces y 0.20 a 3–5 enlaces. Es la inestabilidad antiferro del panal, algo más fuerte lejos de los nodos.</li>
+        <li><b>El súper-grafeno sí la adelanta, débilmente.</b> A 2.0|t|, donde el grafeno convergido no tiene momentos, tiene un estado escalonado (M = 0, máximo 0.036 μ<sub>B</sub>) concentrado en los nodos: el 44 % de Σ|m| en los 168 átomos de heptágono, el 39 % a 1–2 enlaces de ellos y nada a 6 o más enlaces. Con 8×8 k, partiendo del estado de 4×4, el momento no cae (0.036 en las dos mallas, Σ|m| = 6.55 μ<sub>B</sub>), y su energía queda 3.1 meV por celda por debajo de la paramagnética en la misma malla. Lo produce la banda casi plana pegada al cruce, que vive en los nodos.</li>
+        <li>A 2.5|t| ese estado de nodo queda absorbido por el antiferro del panal, con momentos repartidos (0.175 μ<sub>B</sub> en heptágonos, 0.21 a 6 o más enlaces).</li>
+      </ul>
+    </div>
+    <div class="grid3">
+      <figure>
+        <div class="img"><img src="fig/momentos_super-graphene_2t_k8.png" alt="Momentos del súper-grafeno a 2 t"></div>
+        <figcaption><b>Figure 5a.</b> Super-graphene at U = 2.0|t| (8×8 k): spin up red, down blue, intensity by |m| (max 0.036 μ<sub>B</sub>). 2×2 cells. The moment sits on the Y nodes.</figcaption>
+      </figure>
+      <figure>
+        <div class="img"><img src="fig/momentos_super-graphene_2.5t.png" alt="Momentos del súper-grafeno a 2.5 t"></div>
+        <figcaption><b>Figure 5b.</b> Super-graphene at 2.5|t| (max 0.24 μ<sub>B</sub>): honeycomb antiferromagnet over the whole wall.</figcaption>
+      </figure>
+      <figure>
+        <div class="img"><img src="fig/momentos_super-square_2.5t.png" alt="Momentos del súper-cuadrado a 2.5 t"></div>
+        <figcaption><b>Figure 5c.</b> Super-square at 2.5|t| (max 0.26 μ<sub>B</sub>).</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section id="discusion">
+    <h2><span class="n">7</span>Discusión y limitaciones</h2>
+    <div class="col">
+      <p><b>Por qué la banda plana no basta.</b> En una red de Lieb ideal la banda plana tiene peso en una fracción fija de los sitios y la interacción efectiva en ella es del orden de U. En una superred de tubos esa banda se reparte sobre decenas o cientos de átomos por nodo, así que su interacción efectiva baja con el tamaño del nodo, mientras su anchura no baja igual. El súper-grafeno es el caso donde la banda queda más localizada en el nodo, y es el único que se adelanta.</p>
+      <p><b>Limitaciones.</b></p>
+      <ul>
+        <li>U por encima de 2|t| no es físico para el carbono: el U local efectivo del grafeno, descontadas las repulsiones no locales, es unos 1.6|t| (Schüler et al. 2013), y en campo medio el umbral real queda sobreestimado. El barrido mide la distancia a la inestabilidad; no predice magnetismo.</li>
+        <li>Los momentos de campo medio son un parámetro de orden, no un estado fundamental correlacionado. La ganancia de 3.1 meV por celda es del orden de kT = 5 meV.</li>
+        <li>Las geometrías vienen del campo de fuerza del constructor; no se relajaron con tight binding ni DFT.</li>
+        <li>c_bandas se aplica algo fuera de su rango de enlaces, y su gap de Schwarz D (0.51 eV) no sustituye a uno de DFT.</li>
+        <li>Los gaps y posiciones de banda son del modelo, no energías ópticas.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section id="conclusiones">
+    <h2><span class="n">8</span>Conclusiones</h2>
+    <div class="col">
+      <ol>
+        <li>Las superredes de nanotubos construidas con paredes cristalinas muestran a escala de superred las bandas de su red: cono más banda plana tipo Lieb en el súper-cuadrado, cruce lineal más banda casi plana en el súper-grafeno. Con paredes amorfas esa física desaparece.</li>
+        <li>Schwarz D es semiconductora con bordes de banda muy planos (gap 1.25 eV en π, 0.51 eV en s+p) y su gap escala como 1/L con el tamaño de celda (38–40 eV·Å en π); P y el giroide son metálicos.</li>
+        <li>Ninguna estructura es magnética con U = |t|. El súper-cuadrado se ordena en el mismo intervalo de U que el grafeno. El súper-grafeno tiene un estado débil, convergido en k, localizado en sus nodos a 2.0|t|.</li>
+        <li>La convergencia en k es imprescindible para este tipo de afirmaciones: con mallas de 12 o 24 puntos el propio grafeno parece magnético por debajo de su umbral.</li>
+      </ol>
+    </div>
+  </section>
+
+  <section id="refs">
+    <h2><span class="n">9</span>Referencias</h2>
+    <ol class="refs">
+      <li>A. L. Mackay, H. Terrones, <i>Nature</i> <b>352</b> (1991) 762.</li>
+      <li>T. Lenosky, X. Gonze, M. Teter, V. Elser, <i>Nature</i> <b>355</b> (1992) 333.</li>
+      <li>J. M. Romo-Herrera, M. Terrones, H. Terrones, S. Dag, V. Meunier, <i>Nano Lett.</i> <b>7</b> (2007) 570.</li>
+      <li>E. H. Lieb, <i>Phys. Rev. Lett.</i> <b>62</b> (1989) 1201.</li>
+      <li>S. Sorella, E. Tosatti, <i>Europhys. Lett.</i> <b>19</b> (1992) 699.</li>
+      <li>O. V. Yazyev, <i>Rep. Prog. Phys.</i> <b>73</b> (2010) 056501.</li>
+      <li>M. Schüler, M. Rösner, T. O. Wehling, A. I. Lichtenstein, M. I. Katsnelson, <i>Phys. Rev. Lett.</i> <b>111</b> (2013) 036601.</li>
+      <li>A. Mielke, <i>J. Phys. A</i> <b>24</b> (1991) L73; H. Tasaki, <i>Phys. Rev. Lett.</i> <b>69</b> (1992) 1608 (ferromagnetismo de banda plana).</li>
+    </ol>
+  </section>
+
+  <footer>Informe generado a partir de <code>packages/tbkit/estudios/superredes</code>. Tablas y figuras en inglés; texto en español.</footer>
+</div>
