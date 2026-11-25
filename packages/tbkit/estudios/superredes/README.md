@@ -89,13 +89,13 @@ un estado escalonado.
 
 | estructura | 1.5\|t\| | 2.0\|t\| | 2.5\|t\| |
 |---|---|---|---|
-| grafeno (control) | 0 | 0 | 0.21 μB/sitio |
+| grafeno (control) | 0 | 0.006 con 24×24 k; 0 con 48×48 | 0.21 μB/sitio |
 | súper-cuadrado | 0 | 0 | 0.18 μB/sitio de media, máx. 0.26, M = 0 |
-| súper-grafeno (cristalina) | 0 | 0.007 μB/sitio de media, máx. 0.036, M = 0 | 0.19 μB/sitio de media, máx. 0.24, M = 0 |
+| súper-grafeno (cristalina) | 0 | 0.007 μB/sitio de media, máx. 0.036 (artefacto de malla k, ver abajo) | 0.19 μB/sitio de media, máx. 0.24, M = 0 |
 
 (entradas: ⟨|m|⟩ por átomo.)
 
-- **El control pasa**: el grafeno se magnetiza entre 2.0 y 2.5 |t|. El umbral de
+- **El control pasa**: con malla convergida (48×48) el grafeno se magnetiza entre 2.0 y 2.5 |t|. El umbral de
   campo medio del panal es 2.23 |t| (Monte Carlo cuántico: ~3.8 |t|).
 - **Las superredes no adelantan el umbral.** El súper-cuadrado se ordena en el
   mismo intervalo que el grafeno, con un estado escalonado de momento total
@@ -104,14 +104,18 @@ un estado escalonado.
   1-2 enlaces (132) y 0.20 a 3-5 enlaces (136). Es la inestabilidad
   antiferro del panal, algo más fuerte lejos de los nodos, no un magnetismo de
   banda plana localizado en ellos.
-- **El súper-grafeno parece adelantar el umbral, débilmente (en verificación: el grafeno con la malla 24×24 también da 0.006 μB a 2.0 |t|).** A 2.0 |t|, donde el
-  grafeno aún no tiene momentos, ya tiene un estado escalonado (M = 0, máximo
-  0.036 μB) localizado en los nodos: el 44 % de Σ|m| está en los 168 átomos de
-  heptágono y el 39 % a 1-2 enlaces de ellos; a ≥ 6 enlaces no hay momento.
-  Es lo esperable de la banda casi plana pegada al cruce, que vive en los nodos.
-  Converge lento: 690 iteraciones (2.8 h), el frenado típico junto a un umbral.
-  A 2.5 |t| ese estado de nodo queda absorbido por el antiferro del panal: los
-  momentos se reparten (0.175 μB en heptágonos, 0.21 a ≥ 6 enlaces), como en el
+- **A 2.0 |t| hay momentos pequeños, pero son de muestreo, no de la red.** El
+  súper-grafeno da un estado escalonado débil (máx. 0.036 μB, M = 0) en los nodos:
+  el 44 % de Σ|m| en los 168 átomos de heptágono y el 39 % a 1-2 enlaces. Pero el
+  grafeno de control también da uno a 2.0 |t| y desaparece al densificar la
+  malla k: máx. 0.022 μB con 12×12, 0.006 con 24×24, 3·10⁻⁷ con 48×48 y 2·10⁻⁷
+  con 96×96. Es el cono de Dirac muestreado por pocos k, con kT = 5 meV. El súper-grafeno se
+  calculó con 4×4 sobre un cruce lineal, así que su momento a 2.0 |t| es casi
+  seguro el mismo artefacto (vive donde viven los estados del cruce: los nodos).
+  Confirmarlo pide una malla 8×8, unas 11 h. **No hay evidencia de que alguna
+  superred adelante el umbral del grafeno.**
+- A 2.5 |t| todas tienen el antiferro del panal, con los momentos repartidos
+  (súper-grafeno: 0.175 μB en heptágonos, 0.21 a ≥ 6 enlaces), como en el
   súper-cuadrado.
 - **U > 2|t| no es físico para el carbono**: el U local efectivo del grafeno,
   descontando las repulsiones no locales, es ~1.6 |t| (Schüler et al., PRL 111,
