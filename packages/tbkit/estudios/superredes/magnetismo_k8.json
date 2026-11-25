@@ -1029,5 +1029,8 @@
 3.1e-05,
 3.1e-05,
 -2.3e-05
-]
+],
+"paramagnetic_energy_eV": -3901.4561977028234,
+"paramagnetic_converged": true,
+"magnetic_minus_paramagnetic_meV": -3.1439160939044086
 }

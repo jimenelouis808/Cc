@@ -91,29 +91,35 @@ un estado escalonado.
 |---|---|---|---|
 | grafeno (control) | 0 | 0.006 con 24×24 k; 0 con 48×48 | 0.21 μB/sitio |
 | súper-cuadrado | 0 | 0 | 0.18 μB/sitio de media, máx. 0.26, M = 0 |
-| súper-grafeno (cristalina) | 0 | 0.007 μB/sitio de media, máx. 0.036 (artefacto de malla k, ver abajo) | 0.19 μB/sitio de media, máx. 0.24, M = 0 |
+| súper-grafeno (cristalina) | 0 | 0.007 μB/sitio de media, máx. 0.036, M = 0 (igual con 8×8 k) | 0.19 μB/sitio de media, máx. 0.24, M = 0 |
 
 (entradas: ⟨|m|⟩ por átomo.)
 
 - **El control pasa**: con malla convergida (48×48) el grafeno se magnetiza entre 2.0 y 2.5 |t|. El umbral de
   campo medio del panal es 2.23 |t| (Monte Carlo cuántico: ~3.8 |t|).
-- **Las superredes no adelantan el umbral.** El súper-cuadrado se ordena en el
+- **El súper-cuadrado no adelanta el umbral.** Se ordena en el
   mismo intervalo que el grafeno, con un estado escalonado de momento total
   cero. `momentos.py` (`momentos.json`) reparte los momentos según la distancia
   en enlaces a un heptágono: 0.17 μB en los átomos de heptágono (104), 0.17 a
   1-2 enlaces (132) y 0.20 a 3-5 enlaces (136). Es la inestabilidad
   antiferro del panal, algo más fuerte lejos de los nodos, no un magnetismo de
   banda plana localizado en ellos.
-- **A 2.0 |t| hay momentos pequeños, pero son de muestreo, no de la red.** El
-  súper-grafeno da un estado escalonado débil (máx. 0.036 μB, M = 0) en los nodos:
-  el 44 % de Σ|m| en los 168 átomos de heptágono y el 39 % a 1-2 enlaces. Pero el
-  grafeno de control también da uno a 2.0 |t| y desaparece al densificar la
-  malla k: máx. 0.022 μB con 12×12, 0.006 con 24×24, 3·10⁻⁷ con 48×48 y 2·10⁻⁷
-  con 96×96. Es el cono de Dirac muestreado por pocos k, con kT = 5 meV. El súper-grafeno se
-  calculó con 4×4 sobre un cruce lineal, así que su momento a 2.0 |t| es casi
-  seguro el mismo artefacto (vive donde viven los estados del cruce: los nodos).
-  Confirmarlo pide una malla 8×8, unas 11 h. **No hay evidencia de que alguna
-  superred adelante el umbral del grafeno.**
+- **A 2.0 |t| el súper-grafeno sí tiene un estado magnético débil, y no es de
+  muestreo.** El grafeno de control también da un momento a 2.0 |t|, pero es
+  artefacto: desaparece al densificar la malla k (máx. 0.022 μB con 12×12, 0.006
+  con 24×24, 3·10⁻⁷ con 48×48 y 2·10⁻⁷ con 96×96). El súper-grafeno se repitió
+  con 8×8 (`magnetismo_k8.py`, desde el estado de 4×4, con puntos de control y la
+  mitad de los k por inversión temporal, ambas cosas exactas): el momento no cae,
+  máx. 0.036 μB con 4×4 y con 8×8, Σ|m| 6.55 μB, M = 0. Está 3.1 meV por celda
+  (920 átomos) por debajo del paramagnético en la misma malla (`energia_k8.py`).
+  Vive en los nodos: el 44 % de Σ|m| en los 168 átomos de heptágono, el 39 % a
+  1-2 enlaces, nada a ≥ 6 enlaces. Es la banda casi plana pegada al cruce, que
+  vive en los nodos, la que adelanta el umbral.
+  **Es pequeño y está a un U no físico**: 2.0 |t| sigue por encima del ~1.6 |t|
+  del carbono, la ganancia de energía es del orden de kT = 5 meV y los momentos
+  de campo medio son un parámetro de orden, no un estado correlacionado. Lo
+  robusto es la tendencia: en el súper-grafeno los nodos bajan el umbral; en el
+  súper-cuadrado no.
 - A 2.5 |t| todas tienen el antiferro del panal, con los momentos repartidos
   (súper-grafeno: 0.175 μB en heptágonos, 0.21 a ≥ 6 enlaces), como en el
   súper-cuadrado.
