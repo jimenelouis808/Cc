@@ -16,3 +16,4 @@ knee-super-graphene | q=-1 | random              E -3901.24714 M +0.000 max 0.00
 knee-super-graphene | q=-1 | paramagnetic        E -3901.24790 M +0.000 max 0.000 conv True (320 s)
 knee-super-graphene | q=+1 | ferro               E -3901.54951 M +0.001 max 0.000 conv True (1368 s)
 knee-super-graphene | q=+1 | random              E -3901.54951 M +0.001 max 0.000 conv True (1003 s)
+knee-super-graphene | q=+1 | paramagnetic        E -3901.54914 M +0.000 max 0.000 conv True (333 s)

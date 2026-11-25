@@ -150,5 +150,7 @@ modelo π (s+p da 0.51 eV a 30 Å, no 1.26).
 `dopaje_banda_plana.py`: un electrón o un hueco por celda, U = |t|, arranques
 ferro, aleatorio y paramagnético. El súper-cuadrado sigue sin magnetismo en los
 dos signos: la banda plana de una superred se reparte sobre cientos de átomos y
-la interacción efectiva en ella es pequeña. El súper-grafeno está en
-`dopaje_banda_plana.json` cuando termina.
+la interacción efectiva en ella es pequeña. El súper-grafeno tampoco se
+magnetiza: con q = −1 y q = +1 los arranques ferro y aleatorio convergen a
+momentos locales ≤ 5·10⁻⁶ μB, y las energías quedan a menos de 1 meV por celda
+de la paramagnética. Resultados en `dopaje_banda_plana.json`.
