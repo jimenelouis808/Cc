@@ -113,8 +113,8 @@ un estado escalonado.
   máx. 0.036 μB con 4×4 y con 8×8, Σ|m| 6.55 μB, M = 0. Está 3.1 meV por celda
   (920 átomos) por debajo del paramagnético en la misma malla (`energia_k8.py`).
   Vive en los nodos: el 44 % de Σ|m| en los 168 átomos de heptágono, el 39 % a
-  1-2 enlaces, nada a ≥ 6 enlaces. Es la banda casi plana pegada al cruce, que
-  vive en los nodos, la que adelanta el umbral.
+  1-2 enlaces, nada a ≥ 6 enlaces. Lo que adelanta el umbral es la banda casi plana
+  pegada al cruce, que vive en esos mismos nodos.
   **Es pequeño y está a un U no físico**: 2.0 |t| sigue por encima del ~1.6 |t|
   del carbono, la ganancia de energía es del orden de kT = 5 meV y los momentos
   de campo medio son un parámetro de orden, no un estado correlacionado. Lo
