@@ -1,3 +1,13 @@
 warning: The `UV_NATIVE_TLS` environment variable is deprecated and will be removed in a future release. Use `UV_SYSTEM_CERTS` instead.
 34 k points (8x8 halved by time reversal); resuming at 0
 it    10  change 9.5e-05  max|m| 0.03592  (23 s/it)
+it    20  change 4.7e-06  max|m| 0.03593  (23 s/it)
+it    30  change 2.9e-06  max|m| 0.03594  (23 s/it)
+it    40  change 2.4e-06  max|m| 0.03596  (23 s/it)
+it    50  change 2.0e-06  max|m| 0.03597  (23 s/it)
+it    60  change 1.7e-06  max|m| 0.03597  (24 s/it)
+it    70  change 1.5e-06  max|m| 0.03598  (23 s/it)
+it    80  change 1.3e-06  max|m| 0.03599  (23 s/it)
+it    90  change 1.1e-06  max|m| 0.03599  (24 s/it)
+it    96  change 9.9e-07  max|m| 0.03600  (24 s/it)
+done True 0.03599833240718814
