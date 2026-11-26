@@ -51,3 +51,26 @@ def test_an_arm_off_every_vertex_is_refused():
     with pytest.raises(ValueError, match="misses"):
         G.geodesic_map(points, graph.edges, frame, freq=2, rows=1,
                        tolerance_deg=0.5)
+
+
+def test_a_periodic_net_builds_in_its_cell_clean():
+    built = G.build_geodesic_superstructure("super-cubic", m=2, freq=2,
+                                            rows=1)
+    assert built.info["ring_counts"] == {6: 204, 7: 24}
+    assert built.info["ring_deficit"] == -24
+    assert all(built.pbc)
+    assert str(sp2_quality(built.info["geometry"])[0]) == "clean"
+    assert built.info["disclinations_placed"] == 1.0
+
+
+def test_windows_open_only_on_six_fold_vertices():
+    graph = named_graph("supertube-(4,4)", 1.0)
+    points, cell = G._graph_frame(graph)
+    frames, miss = G.fit_node_frames(points, graph.edges, 4, starts=4,
+                                     cell=cell)
+    assert frames.shape == (len(points), 12, 3) and miss < 5.0
+    (vertices, tris), budget, _, _ = G.geodesic_map(
+        points, graph.edges, frames, freq=4, rows=1, tolerance_deg=5.0,
+        cell=cell)
+    degree = np.bincount(tris.ravel(), minlength=len(vertices))
+    assert int((6 - degree).sum()) == budget

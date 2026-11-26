@@ -66,6 +66,16 @@ def geodesic_sphere(directions: np.ndarray, freq: int) -> Mesh:
     return vertices / mean, tris
 
 
+def _six_fold(tris: np.ndarray, n: int) -> np.ndarray:
+    """Mask of the sphere vertices of degree six -- the only window sites.
+
+    A window on a five-fold vertex rims a pentagonal mouth, and a tube
+    cannot join it to a hexagonal one at the far end; the twelve five-fold
+    vertices are kept closed (they are the node's pentagons).
+    """
+    return np.bincount(np.asarray(tris).ravel(), minlength=n) == 6
+
+
 def _star(tris: np.ndarray, centre: int) -> tuple[list[int], list[int]]:
     """Triangles around ``centre`` and its ordered link (the window rim)."""
     around = [k for k, t in enumerate(tris) if centre in t]
@@ -81,9 +91,20 @@ def _star(tris: np.ndarray, centre: int) -> tuple[list[int], list[int]]:
     return around, rim
 
 
+def _arm_vectors(points: np.ndarray, edges, cell=None) -> list[np.ndarray]:
+    """Each edge's vector from its start node to its end node's image.
+
+    ``cell`` holds the cell edges for a periodic graph (an edge's integer
+    shift is in cells); ``None`` for a finite one.
+    """
+    cell = np.zeros(3) if cell is None else np.asarray(cell, dtype=float)
+    return [np.asarray(points[j], float) + np.asarray(shift, float) * cell
+            - np.asarray(points[i], float) for i, j, shift in edges]
+
+
 def geodesic_map(points: np.ndarray, edges, frame: np.ndarray,
-                 freq: int = 4, rows: int = 2, tolerance_deg: float = 2.0
-                 ) -> tuple[Mesh, int, float, dict]:
+                 freq: int = 4, rows: int = 2, tolerance_deg: float = 2.0,
+                 cell=None) -> tuple[Mesh, int, float, dict]:
     """The coarse carrier of a finite graph of tubes on geodesic nodes.
 
     Parameters
@@ -92,11 +113,16 @@ def geodesic_map(points: np.ndarray, edges, frame: np.ndarray,
         The graph (finite): node positions and ``(i, j, shift)`` edges.
     frame
         Twelve icosahedral directions fixing every node sphere's
-        orientation.
+        orientation, or one such set per node, shaped ``(V, 12, 3)``
+        (:func:`fit_node_frames`).
     freq
         Geodesic frequency of the node spheres.
     rows
         Antiprism rows on the shortest arm; the graph is scaled to fit.
+    cell
+        For a periodic graph, the cell edges (``0`` on an axis that does
+        not repeat), in the units of ``points``. The map is then built in
+        that cell, scaled with everything else, and returned periodic.
     tolerance_deg
         How far an arm may miss the nearest sphere vertex. An icosahedral
         cage's arms miss by zero; anything larger is refused rather than
@@ -105,20 +131,28 @@ def geodesic_map(points: np.ndarray, edges, frame: np.ndarray,
     Returns
     -------
     (mesh, budget, scale, report)
+        ``report["box"]`` is the scaled cell (zeros when finite).
     """
-    sphere_v, sphere_t = geodesic_sphere(np.asarray(frame, float), freq)
-    radius = float(np.mean(np.linalg.norm(sphere_v, axis=1)))
-    directions = sphere_v / np.linalg.norm(sphere_v, axis=1, keepdims=True)
     points = np.asarray(points, dtype=float)
+    frame = np.asarray(frame, dtype=float)
+    if frame.ndim == 2:
+        frame = np.broadcast_to(frame, (len(points),) + frame.shape)
+    spheres = [geodesic_sphere(f, freq) for f in frame]
+    radius = float(np.mean(np.linalg.norm(spheres[0][0], axis=1)))
 
-    # Which sphere vertex each arm leaves by, at each end.
-    windows: dict[int, dict[int, int]] = {i: {} for i in range(len(points))}
+    vectors = _arm_vectors(points, edges, cell)
+    # Which sphere vertex each arm leaves by, at each end. Keyed by
+    # (edge, end): a one-node periodic net joins a node to its own image,
+    # so the node alone does not name the window.
+    windows: dict[int, dict[tuple[int, int], int]] = {
+        i: {} for i in range(len(points))}
     worst = 0.0
     for e, (i, j, _shift) in enumerate(edges):
-        d = points[j] - points[i]
-        d /= np.linalg.norm(d)
-        for node, vec in ((i, d), (j, -d)):
-            cos = directions @ vec
+        d = vectors[e] / np.linalg.norm(vectors[e])
+        for end, node, vec in ((0, i, d), (1, j, -d)):
+            sv, st = spheres[node]
+            cos = (sv / np.linalg.norm(sv, axis=1, keepdims=True)) @ vec
+            cos = np.where(_six_fold(st, len(sv)), cos, -2.0)
             k = int(np.argmax(cos))
             miss = float(np.degrees(np.arccos(np.clip(cos[k], -1, 1))))
             worst = max(worst, miss)
@@ -127,34 +161,41 @@ def geodesic_map(points: np.ndarray, edges, frame: np.ndarray,
                     f"an arm misses the nearest node-sphere vertex by "
                     f"{miss:.1f} deg; the geodesic carrier at frequency "
                     f"{freq} has no window along it.")
-            windows[node][e] = k
+            windows[node][(e, end)] = k
 
     # Scale: node spheres sit at radius `radius`; the arm between windows
     # must hold `rows` antiprism rows on the shortest edge.
-    lengths = [np.linalg.norm(points[j] - points[i]) for i, j, _ in edges]
+    lengths = [float(np.linalg.norm(v)) for v in vectors]
     scale = (2.0 * radius + rows * _ROW) / min(lengths)
     centres = points * scale
-    build = _Builder(np.zeros(3))
+    box = (np.zeros(3) if cell is None
+           else np.asarray(cell, dtype=float) * scale)
+    build = _Builder(box)
+    # Rims relative to their node's centre: the far end of a periodic arm
+    # is an image of its node, not the node.
     rims: dict[tuple[int, int], list[np.ndarray]] = {}
 
     for node in range(len(points)):
+        sphere_v, sphere_t = spheres[node]
         removed: set[int] = set()
-        for e, k in windows[node].items():
+        for key, k in windows[node].items():
             around, rim = _star(sphere_t, k)
             if removed & set(around):
                 raise ValueError("two windows on one node overlap; raise "
                                  "the geodesic frequency.")
             removed |= set(around)
-            rims[(node, e)] = [centres[node] + sphere_v[r] for r in rim]
+            rims[key] = [sphere_v[r] for r in rim]
         for t, (a, b, c) in enumerate(sphere_t):
             if t in removed:
                 continue
             build.tris.append(tuple(build.vertex(centres[node] + sphere_v[x])
                                     for x in (a, b, c)))
 
-    for e, (i, j, _shift) in enumerate(edges):
-        start, end = rims[(i, e)], rims[(j, e)]
-        axis = centres[j] - centres[i]
+    for e, (i, _j, _shift) in enumerate(edges):
+        far = centres[i] + vectors[e] * scale
+        start = [centres[i] + v for v in rims[(e, 0)]]
+        end = [far + v for v in rims[(e, 1)]]
+        axis = far - centres[i]
         axis /= np.linalg.norm(axis)
         p = np.cross(axis, [0.0, 0.0, 1.0])
         if np.linalg.norm(p) < 0.1:
@@ -226,7 +267,8 @@ def geodesic_map(points: np.ndarray, edges, frame: np.ndarray,
     # their node centre.
     vertices, tris = mesh
     budget = 12 * (len(points) - len(edges))
-    report = {"worst_arm_miss_deg": round(worst, 3), "node_radius": radius}
+    report = {"worst_arm_miss_deg": round(worst, 3), "node_radius": radius,
+              "box": box}
     return (vertices, tris), budget, scale, report
 
 
@@ -243,13 +285,17 @@ def build_geodesic_superstructure(
     relax: bool = True,
     relax_iterations: int = 3000,
 ) -> Atoms:
-    """A finite cage of tubes on geodesic nodes, refined into graphene.
+    """A cage or periodic net of tubes on geodesic nodes, as graphene.
 
     Parameters
     ----------
     graph
-        A finite :class:`~.supernetwork.SuperGraph` or catalogue name whose
-        nodes are an icosahedron's vertices or share its frame.
+        A :class:`~.supernetwork.SuperGraph` or catalogue name, finite or
+        periodic. A periodic net is built in its own cell (vacuum on an
+        axis that does not repeat) and the cell is scanned, as for the
+        octahedral frames. The node spheres share one fitted frame when
+        that puts every arm within ``tolerance_deg`` of a window site, and
+        are fitted node by node otherwise (:func:`fit_node_frames`).
     m
         Goldberg-Coxeter index: tube circumference ``6m`` rings.
     freq, rows
@@ -269,22 +315,25 @@ def build_geodesic_superstructure(
 
     if isinstance(graph, str):
         graph = named_graph(graph, 1.0)
-    if graph.periodic:
-        raise ValueError("the geodesic carrier builds finite cages only.")
-    points = np.asarray(graph.nodes, dtype=float)
-    frame, miss = fit_frame(points, graph.edges, freq)
+    points, cell = _graph_frame(graph)
+    frame, miss = fit_frame(points, graph.edges, freq, cell=cell)
+    per_node = miss > tolerance_deg
+    if per_node:
+        frame, miss = fit_node_frames(points, graph.edges, freq, cell=cell)
     coarse, budget, scale, report = geodesic_map(
         points, graph.edges, frame, freq=freq, rows=rows,
-        tolerance_deg=tolerance_deg)
+        tolerance_deg=tolerance_deg, cell=cell)
+    box = report.pop("box")
+    live = box if np.any(box > 0) else None
     if equilateral:
-        coarse = equilateralise(coarse, None)
-    fine = subdivide(coarse, m, None)
+        coarse = equilateralise(coarse, live)
+    fine = subdivide(coarse, m, live)
     if smooth:
-        fine = taubin_smooth(fine, None, iterations=smooth)
-    atoms = finish_refined(fine, None, (False, False, False), budget,
-                           bond=bond, relax=relax,
+        fine = taubin_smooth(fine, live, iterations=smooth)
+    atoms = finish_refined(fine, live, tuple(bool(x) for x in graph.pbc),
+                           budget, bond=bond, relax=relax,
                            relax_iterations=relax_iterations, vacuum=vacuum,
-                           label=graph.name)
+                           label=graph.name, cell_scan=live is not None)
     degree = np.bincount(np.asarray(coarse[1]).ravel())
     atoms.info.update({
         "builder": "geodesic",
@@ -292,6 +341,7 @@ def build_geodesic_superstructure(
         "kind": graph.name,
         "gc_indices": (int(m), 0),
         "node_frequency": int(freq),
+        "node_frames": "per node" if per_node else "shared",
         "arm_rows": int(rows),
         "n_nodes": len(points),
         "n_struts": len(graph.edges),
@@ -304,8 +354,24 @@ def build_geodesic_superstructure(
     return atoms
 
 
+def _graph_frame(graph) -> tuple[np.ndarray, np.ndarray | None]:
+    """Cartesian node positions and, if periodic, the cell edges.
+
+    A periodic :class:`~.supernetwork.SuperGraph` stores fractional nodes
+    and a cell ``shape``; an axis that does not repeat gets a zero edge,
+    which is what the mesh builders read as "finite along this axis".
+    """
+    nodes = np.asarray(graph.nodes, dtype=float)
+    if not graph.periodic:
+        return nodes, None
+    shape = np.asarray(graph.shape, dtype=float)
+    cell = np.where(np.asarray(graph.pbc, bool), shape, 0.0)
+    return nodes * shape, cell
+
+
 def fit_frame(points: np.ndarray, edges, freq: int,
-              starts: int = 24, seed: int = 0) -> tuple[np.ndarray, float]:
+              starts: int = 24, seed: int = 0,
+              cell=None) -> tuple[np.ndarray, float]:
     """The icosahedral frame whose geodesic vertices best fit every arm.
 
     The worst arm's miss from its nearest sphere vertex is minimised over
@@ -316,17 +382,51 @@ def fit_frame(points: np.ndarray, edges, freq: int,
 
     Returns ``(frame, worst_miss_deg)``.
     """
+    arms = [v / np.linalg.norm(v) for v in _arm_vectors(points, edges, cell)]
+    return _fit_arms(np.array(arms + [-a for a in arms]), freq, starts, seed)
+
+
+def fit_node_frames(points: np.ndarray, edges, freq: int, starts: int = 8,
+                    seed: int = 0, cell=None
+                    ) -> tuple[np.ndarray, float]:
+    """One icosahedral frame per node, each fitted to that node's arms.
+
+    A graph whose nodes are not all images of one another under the
+    icosahedral group -- a rolled super-graphene (supertube), the
+    hypercube's projection -- has no single frame that puts every arm on
+    a sphere vertex: measured, the best global fits miss by 7-16 deg. But
+    each node alone has three to five arms, and those fit. The arms then
+    join rims of differently turned spheres, which the antiprism stacking
+    already handles (it matches any two rims by an index shift and a
+    residual twist).
+
+    Returns ``(frames, worst_miss_deg)`` with ``frames`` shaped
+    ``(V, 12, 3)``.
+    """
+    vectors = _arm_vectors(points, edges, cell)
+    per_node: list[list[np.ndarray]] = [[] for _ in range(len(points))]
+    for (i, j, _shift), v in zip(edges, vectors, strict=True):
+        u = v / np.linalg.norm(v)
+        per_node[i].append(u)
+        per_node[j].append(-u)
+    frames, worst = [], 0.0
+    for arms in per_node:
+        frame, miss = _fit_arms(np.array(arms), freq, starts, seed)
+        frames.append(frame)
+        worst = max(worst, miss)
+    return np.array(frames), worst
+
+
+def _fit_arms(arms: np.ndarray, freq: int, starts: int, seed: int
+              ) -> tuple[np.ndarray, float]:
+    """The rotated golden icosahedron whose sphere best fits ``arms``."""
     from scipy.optimize import minimize
     from scipy.spatial.transform import Rotation
 
     golden = _icosahedral_frame(np.zeros((1, 3)))
-    sphere, _ = geodesic_sphere(golden, freq)
+    sphere, sphere_t = geodesic_sphere(golden, freq)
     dirs = sphere / np.linalg.norm(sphere, axis=1, keepdims=True)
-    arms = []
-    for i, j, _shift in edges:
-        d = np.asarray(points[j], float) - np.asarray(points[i], float)
-        arms.append(d / np.linalg.norm(d))
-    arms = np.array(arms + [-a for a in arms])
+    dirs = dirs[_six_fold(sphere_t, len(sphere))]
 
     def worst(rotvec):
         rotated = Rotation.from_rotvec(rotvec).apply(dirs)
@@ -346,7 +446,7 @@ def fit_frame(points: np.ndarray, edges, freq: int,
         # frequency's, so its fit is always a candidate -- and the
         # optimiser on the finer sphere, with more local minima, measurably
         # misses it (dodecahedron: 0 deg at frequency 2, 6 at 4).
-        coarse_frame, _ = fit_frame(points, edges, 2, starts, seed)
+        coarse_frame, _ = _fit_arms(arms, 2, starts, seed)
         candidates.append(Rotation.align_vectors(coarse_frame,
                                                  golden)[0].as_rotvec())
     best = None
@@ -382,10 +482,10 @@ def _icosahedral_frame(points: np.ndarray) -> np.ndarray:
     return np.array(base)
 
 
-#: The cages this carrier builds, with the frequency and tolerance that
-#: fit each one: icosahedron, cube, dodecahedron and the C60 of tubes put
-#: every arm exactly on a two-fold axis of a frequency-2 sphere; the
-#: tetrahedron and the octahedron miss by 2.1 deg.
+#: The cages and nets this carrier builds, with the frequency and
+#: tolerance that fit each one: icosahedron, cube, dodecahedron and the
+#: C60 of tubes put every arm exactly on a two-fold axis of a frequency-2
+#: sphere; the tetrahedron and the octahedron miss by 2.1 deg.
 GEODESIC_CAGES: dict[str, dict] = {
     "super-icosahedron": {"freq": 2, "tolerance_deg": 0.5},
     "super-cube": {"freq": 2, "tolerance_deg": 0.5},
@@ -395,6 +495,24 @@ GEODESIC_CAGES: dict[str, dict] = {
     # nonagons, strained); at 4 they are clean.
     "super-tetrahedron": {"freq": 4, "tolerance_deg": 2.5},
     "super-octahedron": {"freq": 4, "tolerance_deg": 2.5},
+    # Periodic nets, each in its own cell. <100> arms are two-fold axes of
+    # the golden icosahedron and <111> arms three-fold ones (face centres,
+    # sphere vertices at frequency 3); the honeycomb's 120-deg arms fit a
+    # frequency-2 sphere exactly too.
+    "super-square": {"freq": 2, "tolerance_deg": 0.5},
+    "super-graphene": {"freq": 2, "tolerance_deg": 0.5},
+    "super-cubic": {"freq": 2, "tolerance_deg": 0.5},
+    "super-diamond": {"freq": 3, "tolerance_deg": 0.5},
+    # Twelve <110> arms: no frequency-2 window set avoids shared rims, and
+    # at 4 they miss by 2.1 deg and come out clean -- the first exact
+    # route to the fcc net, which the octahedral frames cannot build.
+    "super-fcc": {"freq": 4, "tolerance_deg": 2.5},
+    "super-cuboctahedron": {"freq": 4, "tolerance_deg": 2.5},
+    "super-icosidodecahedron": {"freq": 2, "tolerance_deg": 0.5},
+    # The projected tesseract has two kinds of node and no shared frame
+    # (best 14 deg); fitted node by node, frequency 6 puts every arm on a
+    # window exactly.
+    "super-hypercube": {"freq": 6, "tolerance_deg": 0.5},
 }
 
 
@@ -404,11 +522,14 @@ def geodesic_atom_count(graph: str = "super-icosahedron", m: int = 2,
     from .supernetwork import named_graph
 
     g = named_graph(graph, 1.0)
-    points = np.asarray(g.nodes, dtype=float)
-    frame, _ = fit_frame(points, g.edges, freq, starts=8)
+    points, cell = _graph_frame(g)
     tolerance = GEODESIC_CAGES.get(graph, {}).get("tolerance_deg", 2.5)
+    frame, miss = fit_frame(points, g.edges, freq, starts=8, cell=cell)
+    if miss > tolerance:
+        frame, _ = fit_node_frames(points, g.edges, freq, cell=cell)
     (_, tris), _, _, _ = geodesic_map(points, g.edges, frame, freq=freq,
-                                      rows=rows, tolerance_deg=tolerance)
+                                      rows=rows, tolerance_deg=tolerance,
+                                      cell=cell)
     return len(tris) * m * m
 
 

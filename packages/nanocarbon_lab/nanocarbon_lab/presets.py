@@ -269,6 +269,26 @@ PRESETS: dict[str, dict[str, object]] = {
            ("Octahedral cage (geodesic, clean)", "super-octahedron", 4),
            ("Superfullerene C60 (geodesic, clean)", "superfullerene-C60", 2),
        )},
+    # Measured at m=1: 3840 atoms, {5: 96, 7: 240}, 1.355-1.483 A, clean.
+    "Cuboctahedral cage (geodesic, clean)": {
+        "mode_kind": "superstructure (geodesic)",
+        "gd_graph": "super-cuboctahedron", "gd_m": 1, "gd_freq": 4,
+        "gd_rows": 1, "anneal": 0},
+    # The same carrier in a periodic cell, scanned. m=2, rows=1, measured
+    # clean and 100 % placed:
+    #   super-square   freq 2   416 atoms  1.367-1.473 A  {5:4, 7:16}
+    #   super-cubic    freq 2   464        1.401-1.442    {7:24}
+    #   super-graphene freq 2  1568        1.342-1.506    {5:24, 7:48}
+    #   super-diamond  freq 3  5760        1.341-1.511    18 min
+    #   super-fcc      freq 4  5120        1.340-1.505    13 min
+    **{label: {"mode_kind": "superstructure (geodesic)", "gd_graph": graph,
+               "gd_m": 2, "gd_freq": freq, "gd_rows": 1, "anneal": 0}
+       for label, graph, freq in (
+           ("Super-cubic (geodesic, clean)", "super-cubic", 2),
+           ("Super-square (geodesic, clean)", "super-square", 2),
+           ("Super-diamond (geodesic, clean, slow)", "super-diamond", 3),
+           ("Super-fcc (geodesic, clean, slow)", "super-fcc", 4),
+       )},
     "Cube cage (frame, exact corners)": {
         "mode_kind": "superstructure (frame)", "fr_kind": "cube cage",
         "fr_m": 3, "fr_rows": 2, "fr_class2": False, "anneal": 0},

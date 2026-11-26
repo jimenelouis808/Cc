@@ -1526,8 +1526,73 @@ come out crystalline-walled rather than amorphous.
 * `rows` is antiprism rows on the shortest arm; the scale is
   `(2 * node_radius + rows * sqrt(3)/2) / shortest edge`.
 
-Still open on this route: periodic nets (the carrier is finite-only),
-the tesseract, super-fcc, supertubes, chiral GC.
+### Periodic nets: the same carrier in a cell
+
+A periodic `SuperGraph` is built in its own cell (`_graph_frame`: zero
+edge on an axis that does not repeat), the map's `_Builder` wraps into
+that box, and `finish_refined(cell_scan=True)` scans the cell as for the
+frames. Windows are keyed by **(edge, end)**, not by node: a one-node net
+joins the node to its own image, so the node alone does not name the
+window -- keyed by node, super-cubic's +x and -x windows overwrote each
+other.
+
+The arm directions fit golden-icosahedron spheres exactly: <100> arms are
+two-fold axes (vertices at freq 2), <111> arms three-fold ones (face
+centres, vertices at freq 3), and the honeycomb's 120 deg arms fit freq 2
+as well. Measured at m = 2, rows = 1, every row CLEAN and 100 % placed:
+
+| net | freq | atoms | census | bonds (Å) | time |
+|---|---|---|---|---|---|
+| super-cubic | 2 | 464 | `{6: 204, 7: 24}` | **1.401-1.442** | 16 s |
+| super-square | 2 | 416 | `{5: 4, 6: 186, 7: 16}` | 1.367-1.473 | 18 s |
+| super-graphene | 2 | 1568 | `{5: 24, 6: 708, 7: 48}` | 1.342-1.506 | 200 s |
+| super-diamond | 3 | 5760 | `{5: 96, 6: 2576, 7: 192}` | 1.341-1.511 | 18 min |
+| **super-fcc** | 4 | 5120 | `{5: 24, 6: 2232, 7: 264}` | 1.340-1.505 | 13 min |
+
+* **super-cubic is the tightest P-type cell in the package**: the knee
+  P is 1.417-1.540 (strained) and the frame 1.343-1.470, with the same
+  `{7: 24}`.
+* **super-fcc had no exact route at all** -- the frames section above
+  explains why a rhombic-dodecahedron node cannot work. A frequency-4
+  geodesic node takes twelve <110> arms within 2.1 deg, and the cell is
+  clean. That paragraph's "consequence of twelve tubes meeting at a
+  point" was about the octahedral node, not about the net.
+* **Pentagons on a periodic net are not wrong here.** A geodesic node is
+  convex between its windows, so super-graphene and super-diamond carry
+  pentagons the knee route does not -- and every one is in positive
+  curvature (100 % placed). The knee super-graphene (`{7: 24}`,
+  1.408-1.436) is still the better sheet; the geodesic one is a
+  different, fatter-noded structure.
+* The cell scan dominates the large cells' time.
+
+### Per-node frames, and windows only on six-fold vertices
+
+A supertube (rolled super-graphene) or the projected tesseract has no
+single frame: the best global fits miss by 7-16 deg. `fit_node_frames`
+fits each node's sphere to its own three to five arms, and the antiprism
+stacking already joins any two rims by an index shift and a residual
+twist, so differently turned spheres need nothing else. The builder
+uses one shared frame when it is within `tolerance_deg` and falls back
+to per-node frames otherwise (`info["node_frames"]`).
+
+**Windows open only on degree-6 sphere vertices** (`_six_fold`). The
+first per-node fit put one end of a supertube arm on a five-fold vertex
+-- a pentagonal mouth -- and the other on a six-fold one, and the arm
+could not be stacked. The twelve five-fold vertices stay closed; they
+are the node's pentagons.
+
+| cage | freq | m, rows | atoms | bonds (Å) | verdict |
+|---|---|---|---|---|---|
+| cuboctahedron | 4 | 1, 1 | 3840 | 1.355-1.483 | clean |
+| hypercube, per node | 4 | 1, 1 | 7136 | 1.320-1.532 | strained, 98 % |
+| hypercube, per node | **6** | 1, 1 | 14256 | 1.324-1.501 | strained, **100 %** |
+| truncated cube | 4 | 1, 1 | 7680 | 1.299-1.546 | broken |
+
+The hypercube fits **exactly** at frequency 6, node by node, and its
+census `{5: 192, 7: 384}` meets `12(V - E) = -192` with every defect
+placed; the frame route's tesseract was broken at every size. Strained
+is the honest verdict and it is a real improvement, not a fix.
+
 
 ## Perfect is two questions, and most builders answer only one
 
