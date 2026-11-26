@@ -120,6 +120,11 @@ CARBON_MODES = (
     # vertices. Schwarz P comes out as twelve octagons per cell and
     # nothing else that is not a hexagon; see builders/goldberg.py.
     "superstructure (Goldberg)",
+    # Octahedral nodes and prism arms (builders/frame.py): the census is
+    # the minimum the graph allows and every defect is isolated -- and it
+    # builds finite CAGES, which the knee route cannot: a cage corner
+    # carries six pentagons outside and twelve heptagons in its necks.
+    "superstructure (frame)",
     "junction",
     "schwarzite",
     "network",
@@ -344,6 +349,7 @@ def builder_for(mode: str):
         build_capped_cnt,
         build_cnt,
         build_coil,
+        build_frame,
         build_fullerene,
         build_goldberg,
         build_haeckelite,
@@ -412,6 +418,7 @@ def builder_for(mode: str):
         "junction (knees)": build_knee_junction,
         "supernetwork (knees)": build_knee_supernetwork,
         "superstructure (Goldberg)": build_goldberg,
+        "superstructure (frame)": build_frame,
         "junction": build_junction,
         "schwarzite": build_schwarzite,
         "network": build_nanotube_network,
@@ -814,6 +821,13 @@ def estimate_atoms(job: Job) -> int:
         arguments = {k: v for k, v in p.items() if k in keep}
         arguments["relax"] = False
         return len(maker(**arguments))
+
+    if mode == "superstructure (frame)":
+        from .builders.frame import frame_atom_count
+
+        return frame_atom_count(str(p.get("kind", "cube cage")),
+                                int(p.get("m", 2)), int(p.get("rows", 2)),
+                                bool(p.get("class_two", False)))
 
     if mode == "superstructure (Goldberg)":
         # Exact and free: coarse faces per cell times T.
@@ -1251,6 +1265,10 @@ _CLI_MAP: dict[str, tuple[str, dict[str, str]]] = {
         "net": "--net", "circumference": "--circumference",
         "arm_rows": "--arm-rows", "bond": "--bond",
         "vacuum": "--vacuum",
+    }),
+    "superstructure (frame)": ("frame", {
+        "kind": "--kind", "m": "--m", "rows": "--rows",
+        "class_two": "--class-two", "bond": "--bond", "vacuum": "--vacuum",
     }),
     "superstructure (Goldberg)": ("goldberg", {
         "kind": "--kind", "m": "--m", "n": "--n", "bond": "--bond",

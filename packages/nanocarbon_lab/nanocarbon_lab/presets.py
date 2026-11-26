@@ -238,6 +238,28 @@ PRESETS: dict[str, dict[str, object]] = {
     "Heptanene on Schwarz D (all heptagons)": {
         "mode_kind": "superstructure (Goldberg)", "gb_kind": "diamond",
         "gb_m": 1, "gb_class2": False, "anneal": 0},
+    # Octahedral frames (builders/frame.py): truncated-octahedron nodes,
+    # prism arms, refined into graphene. Measured: every defect isolated
+    # and on its own side of the curvature, the census the minimum each
+    # node allows. The cube cage is the one cage the knee route cannot
+    # build at all (a convex corner never balances): here each corner
+    # carries six pentagons outside and twelve heptagons in its necks.
+    #   cube cage       m=3 rows=2  5616 atoms  1.343-1.517 A  clean
+    #   adamantane cage m=2 rows=1  2400 atoms  1.350-1.486 A  clean
+    #   super-cubic     m=4 rows=2  1536 atoms  1.343-1.470 A  clean
+    #   super-diamond   m=3 rows=1  4320 atoms  1.367-1.497 A  clean
+    "Cube cage (frame, exact corners)": {
+        "mode_kind": "superstructure (frame)", "fr_kind": "cube cage",
+        "fr_m": 3, "fr_rows": 2, "fr_class2": False, "anneal": 0},
+    "Adamantane cage (frame)": {
+        "mode_kind": "superstructure (frame)", "fr_kind": "adamantane cage",
+        "fr_m": 2, "fr_rows": 1, "fr_class2": False, "anneal": 0},
+    "Super-cubic (frame, square tubes)": {
+        "mode_kind": "superstructure (frame)", "fr_kind": "super-cubic",
+        "fr_m": 4, "fr_rows": 2, "fr_class2": False, "anneal": 0},
+    "Super-diamond (frame, hexagonal tubes)": {
+        "mode_kind": "superstructure (frame)", "fr_kind": "super-diamond",
+        "fr_m": 3, "fr_rows": 1, "fr_class2": False, "anneal": 0},
     "Super-square (Goldberg, octagons)": {
         "mode_kind": "superstructure (Goldberg)", "gb_kind": "super-square",
         "gb_m": 3, "gb_class2": False, "anneal": 0},

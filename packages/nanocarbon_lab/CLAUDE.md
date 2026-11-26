@@ -1378,6 +1378,63 @@ see the periodic coil section. What Chuang adds and this package lacks is
 the **chiral** family (a tilted base vector), which needs the same
 consistent lattice cut that keeps chiral GC(m, n) out of this module.
 
+## Octahedral frames: the cages the knee route cannot build
+
+`builders/frame.py` is the Goldberg construction on a thickened graph.
+Every node is a **truncated octahedron** -- the bcc cell, six square faces
+along <100> and eight hexagonal ones along <111> -- every arm a **prism**
+of the face it leaves by, and every face without an arm is closed: a
+hexagon fanned (a flat patch, no defect), a square split on a diagonal
+(two short corners, two pentagons, on the outside). Counting triangles
+round each coarse vertex then gives the census, and it is the minimum the
+node allows, every defect isolated:
+
+| node | census | same as |
+|---|---|---|
+| 6 <100> arms | 24 heptagons | knee P |
+| 4 <100>, planar | 4 pentagons + 16 heptagons | knee X, super-square |
+| 4 <111> | 12 heptagons | knee tetrahedral |
+| **cube corner, 3 <100>** | **6 pentagons + 12 heptagons** | nothing -- new |
+| square + hexagon arm on neighbouring faces | adds an octagon | (tesseract) |
+
+The cube corner is the point. A convex node never balances, so the knee
+route cannot build any finite cage (see the convex-hull note above); here
+its three closed squares put six pentagons on the convex outside and its
+twelve heptagons sit in the necks -- the right sign at every one, measured.
+
+Measured, refined by GC(m, 0), 100 % placed in every row:
+
+| frame | m, rows | atoms | bonds (Å) | verdict |
+|---|---|---|---|---|
+| cube cage | 3, 2 | 5616 | 1.343-1.517 | clean |
+| cube cage | 2, 1 | 2112 | 1.334-1.510 | strained |
+| adamantane cage | 2, 1 | 2400 | 1.350-1.486 | clean |
+| super-cubic | 4, 2 | 1536 | 1.343-1.470 | clean |
+| super-square | 3, 2 | 756 | 1.361-1.481 | clean |
+| super-diamond | 3, 1 | 4320 | 1.367-1.497 | clean |
+| tesseract | 3, 1 | 12960 | 1.289-1.574 | **broken** |
+
+Two things were needed and both were measured:
+
+* **Taubin smoothing of the refined mesh** (`goldberg.taubin_smooth`).
+  The prisms' folds are 90 or 120 deg; left flat, the force field bends
+  them out as bond strain.
+* **A wide cell scan** (`finish_refined(cell_scan=True)`). A periodic cell
+  cannot change size while relaxing, and the mean-bond rescale missed the
+  best cell by **20 %** on super-cubic: scanned with full relaxations,
+  0.78-0.82 of it gave 1.31-1.49 Å where the rescale gave 1.33-1.59. A
+  +-10 % scan found nothing; the scan is 0.60-1.20 coarse and +-0.04 fine.
+  It is most of the build time for large cells.
+
+**The tesseract is not fixed.** Its inner corners send a square arm and a
+hexagonal one out of neighbouring faces, which leaves an octagon between
+them, and that node relaxes broken at every size tried. It stays in the
+catalogue with no preset. The frames are bcc-lattice graphs only: an fcc
+(<110>) arm needs a rhombic-dodecahedron node whose vertices are shared
+by three or four faces, which would make nonagons and dodecagons -- so
+super-fcc has no exact route here, and that is a consequence of twelve
+tubes meeting at a point rather than a missing feature.
+
 ## Perfect is two questions, and most builders answer only one
 
 "Is it textbook-exact?" splits into **topology** (is the census the one

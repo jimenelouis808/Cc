@@ -631,6 +631,139 @@ def goldberg_atom_count(kind: str, m: int, n: int = 0) -> int:
     return len(tris) // cells * triangulation_number(m, n)
 
 
+def taubin_smooth(mesh: Mesh, box: np.ndarray | None, iterations: int = 20,
+                  lam: float = 0.5, mu: float = -0.53) -> Mesh:
+    """Round a polyhedral mesh without shrinking it (Taubin's lambda/mu).
+
+    A coarse map refined into flat patches meets itself at sharp folds --
+    90 deg along a square tube's edges -- which the valence force field
+    then has to bend out with bond strain. Alternating a shrinking and an
+    inflating umbrella step rounds the folds and leaves the overall size
+    alone. Connectivity, and so the census, is untouched.
+    """
+    from .fullerene_mesh import minimum_image
+
+    vertices, tris = np.array(mesh[0], dtype=float), np.asarray(mesh[1])
+    neighbours: dict[int, set[int]] = defaultdict(set)
+    for a, b, c in tris:
+        for u, v in ((a, b), (b, c), (c, a)):
+            neighbours[int(u)].add(int(v))
+            neighbours[int(v)].add(int(u))
+    index = [np.fromiter(neighbours[i], dtype=int)
+             for i in range(len(vertices))]
+    live = None if box is None or not np.any(np.asarray(box) > 0) else box
+    for _ in range(iterations):
+        for factor in (lam, mu):
+            step = np.array([minimum_image(vertices[nb] - vertices[i],
+                                           live).mean(axis=0)
+                             for i, nb in enumerate(index)])
+            vertices = vertices + factor * step
+    return _wrap(vertices, live), tris
+
+
+def finish_refined(mesh: Mesh, box: np.ndarray | None,
+                   pbc: tuple[bool, bool, bool], budget: int,
+                   bond: float = CC_BOND, relax: bool = True,
+                   relax_iterations: int = 3000, vacuum: float = 12.0,
+                   label: str = "structure", cell_scan: bool = False
+                   ) -> Atoms:
+    """Dual, rescale, relax, check the census, package -- shared tail.
+
+    ``box`` holds the cell edges on the periodic axes (``0`` elsewhere) or
+    is ``None`` for a finite structure. Non-periodic axes get ``vacuum``
+    either side and the structure centred. The census is checked against
+    ``budget`` and a mismatch raises: the map was not the surface it
+    claimed to be.
+
+    Returns an ``Atoms`` with ``ring_counts``, ``ring_deficit``,
+    ``pentagons``, ``rings``, ``bonds``, ``geometry``, ``cell_lengths``,
+    ``disclination_check`` and ``disclinations_placed`` in ``info``.
+    """
+    from ..analyse.curvature import disclination_check
+    from .capped_cnt import geometry_report
+    from .fullerene_mesh import dual_honeycomb, minimum_image, relax_shell
+
+    vertices, tris = mesh
+    live_box = None if box is None or not np.any(np.asarray(box) > 0) \
+        else np.asarray(box, dtype=float)
+    positions, bonds, rings = dual_honeycomb((vertices, tris), box=live_box)
+    pairs = np.asarray(sorted(bonds), dtype=int)
+    raw = np.linalg.norm(minimum_image(positions[pairs[:, 1]]
+                                       - positions[pairs[:, 0]], live_box),
+                         axis=1)
+    scale = bond / float(raw.mean())
+    positions = positions * scale
+    live_box = None if live_box is None else live_box * scale
+    if relax and live_box is not None and cell_scan:
+        # A periodic cell cannot change size during the relaxation, so a
+        # map whose tubes and nodes want different scales is left strained
+        # by the mean-bond rescale alone. Scan the cell (on its periodic
+        # axes) and keep the scale whose short relaxation fits carbon best.
+        # Measured on the super-cubic frame: the best cell sat 20 % BELOW
+        # the mean-bond rescale (1.31-1.49 Å there against 1.33-1.59 at
+        # the rescale), so the coarse pass is wide and the fine one local.
+        def score(factor: float, iterations: int):
+            trial_box = live_box * factor
+            trial = relax_shell(positions * factor, bonds, equilibrium=bond,
+                                max_iterations=iterations, box=trial_box)
+            lengths = np.linalg.norm(minimum_image(
+                trial[pairs[:, 1]] - trial[pairs[:, 0]], trial_box), axis=1)
+            return float(np.abs(lengths - bond).max()), factor, trial
+
+        best = min((score(f, 600) for f in np.arange(0.60, 1.201, 0.05)),
+                   key=lambda r: r[0])
+        centre = best[1]
+        best = min([best] + [score(f, 1500) for f in
+                             np.arange(centre - 0.04, centre + 0.041, 0.01)],
+                   key=lambda r: r[0])
+        _, factor, positions = best
+        live_box = live_box * factor
+    if relax:
+        positions = relax_shell(positions, bonds, equilibrium=bond,
+                                max_iterations=relax_iterations, box=live_box)
+    ring_counts: dict[int, int] = defaultdict(int)
+    for ring in rings:
+        ring_counts[len(ring)] += 1
+    ring_counts = dict(sorted(ring_counts.items()))
+    deficit = sum((6 - s) * c for s, c in ring_counts.items())
+    if deficit != budget:
+        raise RuntimeError(
+            f"{label}: sum(6-n) = {deficit} against the budget {budget}; the "
+            "coarse map is not the surface it claims to be.")
+
+    cell = np.zeros(3) if live_box is None else np.array(live_box, dtype=float)
+    positions = positions.copy()
+    for axis in range(3):
+        if not pbc[axis]:
+            span = float(np.ptp(positions[:, axis]))
+            cell[axis] = span + 2.0 * vacuum
+            positions[:, axis] += 0.5 * cell[axis] - 0.5 * (
+                positions[:, axis].min() + positions[:, axis].max())
+    atoms = Atoms(symbols=["C"] * len(positions), positions=positions,
+                  cell=list(cell), pbc=pbc)
+    if any(pbc):
+        atoms.wrap()
+    periodic = np.where(np.array(pbc), cell, 0.0)
+    metric = None if not any(pbc) else periodic
+    placement = disclination_check(positions, rings, sorted(bonds),
+                                   box=metric)
+    atoms.info.update({
+        "ring_counts": ring_counts,
+        "ring_deficit": int(deficit),
+        "pentagons": int(ring_counts.get(5, 0)),
+        "rings": [[int(x) for x in ring] for ring in rings],
+        "bonds": sorted(bonds),
+        "relaxed": bool(relax),
+        "cell_lengths": [round(float(x), 3) for x in cell],
+        "geometry": geometry_report(positions, sorted(bonds), box=metric),
+        # Pentagons in positive curvature, heptagons and octagons in
+        # negative: the intrinsic check every meshed builder records.
+        "disclination_check": placement,
+        "disclinations_placed": placement["agreement"],
+    })
+    return atoms
+
+
 def build_goldberg(
     kind: str = "primitive",
     m: int = 3,
@@ -698,44 +831,9 @@ def build_goldberg(
                 np.cos(k * p[:, 2])
         vertices = project_to_surface(vertices, field, box)
 
-    from ..analyse.curvature import disclination_check
-    from .capped_cnt import geometry_report
-    from .fullerene_mesh import dual_honeycomb, minimum_image, relax_shell
-
-    positions, bonds, rings = dual_honeycomb((vertices, tris), box=box)
-    pairs = np.asarray(sorted(bonds), dtype=int)
-    raw = np.linalg.norm(minimum_image(positions[pairs[:, 1]]
-                                       - positions[pairs[:, 0]], box), axis=1)
-    scale = bond / float(raw.mean())
-    positions, box = positions * scale, box * scale
-    if relax:
-        positions = relax_shell(positions, bonds, equilibrium=bond,
-                                max_iterations=relax_iterations, box=box)
-    ring_counts: dict[int, int] = defaultdict(int)
-    for ring in rings:
-        ring_counts[len(ring)] += 1
-    ring_counts = dict(sorted(ring_counts.items()))
-    deficit = sum((6 - s) * c for s, c in ring_counts.items())
-    if deficit != budget:
-        raise RuntimeError(
-            f"{kind}: sum(6-n) = {deficit} against the genus-{genus} budget "
-            f"{budget}; the coarse map is not the surface it claims to be.")
-
-    cell = np.array(box, dtype=float)
-    if not pbc[2]:
-        # A sheet: centre it in vacuum along z.
-        height = float(np.ptp(positions[:, 2]))
-        cell[2] = height + 2.0 * vacuum
-        positions = positions.copy()
-        positions[:, 2] += 0.5 * cell[2] - 0.5 * (positions[:, 2].min()
-                                                 + positions[:, 2].max())
-    atoms = Atoms(symbols=["C"] * len(positions), positions=positions,
-                  cell=list(cell), pbc=pbc)
-    atoms.wrap()
-    placement = disclination_check(positions, rings, sorted(bonds),
-                                   box=np.where(np.array(pbc), cell, 0.0))
-    geometry = geometry_report(positions, sorted(bonds),
-                               box=np.where(np.array(pbc), cell, 0.0))
+    atoms = finish_refined((vertices, tris), box, pbc, budget, bond=bond,
+                           relax=relax, relax_iterations=relax_iterations,
+                           vacuum=vacuum, label=f"{kind} (genus {genus})")
     atoms.info.update({
         "builder": "goldberg",
         "structure_type": "schwarzite" if kind in ("primitive", "diamond")
@@ -746,19 +844,7 @@ def build_goldberg(
         "genus": int(genus),
         "euler": 2 - 2 * int(genus),
         "ring_budget": int(budget),
-        "ring_counts": ring_counts,
-        "ring_deficit": int(deficit),
-        "pentagons": int(ring_counts.get(5, 0)),
-        "rings": [[int(x) for x in ring] for ring in rings],
-        "bonds": sorted(bonds),
-        "relaxed": bool(relax),
         "projected": bool(project),
-        "cell_lengths": [round(float(x), 3) for x in cell],
-        "geometry": geometry,
-        # The intrinsic placement check every meshed builder records:
-        # octagons in negative curvature, pentagons in positive.
-        "disclination_check": placement,
-        "disclinations_placed": placement["agreement"],
     })
     return atoms
 

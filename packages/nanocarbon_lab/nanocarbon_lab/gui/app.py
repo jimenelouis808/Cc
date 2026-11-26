@@ -79,6 +79,7 @@ from ..builders import fullerene_mesh as fm
 from ..builders.bamboo import CUP_ORIENTATIONS
 from ..builders.beads import BEAD_LAYOUTS
 from ..builders.capped_cnt import MIN_CAP_FREQ
+from ..builders.frame import FRAMES
 from ..builders.goldberg import GOLDBERG_MAPS
 from ..builders.haeckelite import CATALOGUE as haeckelite_catalogue
 from ..builders.haeckelite import PATTERNS as haeckelite_patterns
@@ -794,6 +795,12 @@ class NanocarbonGUI:
         self.var_s_cell = self._var("s_cell", tk.DoubleVar(value=36.0))
         self.var_s_thickness = self._var("s_thickness", tk.DoubleVar(value=0.0))
         self.var_s_goldberg = self._var("s_goldberg", tk.IntVar(value=1))
+        self.var_fr_kind = self._var("fr_kind",
+                                     tk.StringVar(value="cube cage"))
+        self.var_fr_m = self._var("fr_m", tk.IntVar(value=3))
+        self.var_fr_rows = self._var("fr_rows", tk.IntVar(value=2))
+        self.var_fr_class2 = self._var("fr_class2",
+                                       tk.BooleanVar(value=False))
         self.var_gb_kind = self._var("gb_kind",
                                      tk.StringVar(value="primitive"))
         self.var_gb_m = self._var("gb_m", tk.IntVar(value=4))
@@ -1164,6 +1171,30 @@ class NanocarbonGUI:
                                 wraplength=260, justify="left")
         self.lbl_gb.grid(row=4, column=0, columnspan=2, sticky="w")
         self.var_gb_kind.trace_add("write", lambda *_: self._update_gb_hint())
+
+        # --- frame route: octahedral nodes and prism arms
+        self.frame_fr = ttk.LabelFrame(
+            parent, text="Superstructure (octahedral frame)", padding=8)
+        self.frame_fr.columnconfigure(0, weight=1)
+        ttk.Label(self.frame_fr, text="Frame").grid(row=0, column=0,
+                                                    sticky="w")
+        ttk.Combobox(self.frame_fr, textvariable=self.var_fr_kind,
+                     values=sorted(FRAMES), state="readonly",
+                     width=16).grid(row=0, column=1, sticky="e", pady=(0, 6))
+        self._param(self.frame_fr, "Index m (tube = 4m or 6m rings)",
+                    self.var_fr_m, 2, 5, 1, integer=True, hard_lo=1,
+                    hard_hi=8, command=self._update_fr_hint)
+        self._param(self.frame_fr, "Rows per arm", self.var_fr_rows,
+                    0, 6, 3, integer=True, hard_lo=0, hard_hi=20,
+                    command=self._update_fr_hint)
+        ttk.Checkbutton(self.frame_fr, text="Class II, (m, m)",
+                        variable=self.var_fr_class2,
+                        command=self._update_fr_hint).grid(
+            row=5, column=0, columnspan=2, sticky="w")
+        self.lbl_fr = ttk.Label(self.frame_fr, text="", foreground=MUTED,
+                                wraplength=260, justify="left")
+        self.lbl_fr.grid(row=6, column=0, columnspan=2, sticky="w")
+        self.var_fr_kind.trace_add("write", lambda *_: self._update_fr_hint())
 
         # --- knee route: the lattice node behind a cell or a junction
         self.frame_knee = ttk.LabelFrame(
@@ -2234,7 +2265,7 @@ class NanocarbonGUI:
                       self.frame_ribbon,
                       self.frame_centreline, self.frame_defects,
                       self.frame_coil, self.frame_junction, self.frame_schwarzite,
-                      self.frame_knee, self.frame_gb,
+                      self.frame_knee, self.frame_gb, self.frame_fr,
                       self.frame_knee_toroid, self.frame_knee_coil,
                       self.frame_haeckelite,
                       self.frame_cage, self.frame_mw, self.frame_bundle,
@@ -2318,6 +2349,10 @@ class NanocarbonGUI:
             self._knee_kind_changed()
             # There is nothing to anneal: the census is exact before any
             # relaxation and a flip could only leave it.
+            self.var_anneal.set(0)
+        elif mode == "superstructure (frame)":
+            self.frame_fr.pack(fill="x")
+            self._update_fr_hint()
             self.var_anneal.set(0)
         elif mode == "superstructure (Goldberg)":
             self.frame_gb.pack(fill="x")
@@ -3219,6 +3254,26 @@ class NanocarbonGUI:
                          f"{found.atoms} atoms.")
         self.on_build()
 
+    def _update_fr_hint(self) -> None:
+        """Size and law before the build, both exact from the coarse map."""
+        from ..builders.frame import FRAMES, frame_atom_count
+
+        kind = self.var_fr_kind.get()
+        if kind not in FRAMES:
+            self.lbl_fr.config(text="")
+            return
+        m = int(self.var_fr_m.get())
+        rows = int(self.var_fr_rows.get())
+        atoms = frame_atom_count(kind, m, rows, bool(self.var_fr_class2.get()))
+        size = ("" if atoms < 6000 else " Large: several minutes, most "
+                "of it the cell search.")
+        self.lbl_fr.config(text=(
+            f"{FRAMES[kind][1]}: {atoms} atoms. Every node carries exactly "
+            "the rings its arms ask for — heptagons in the necks, pentagons "
+            "only where the node is convex (cage corners, the poles of a "
+            "planar crossing) — each one isolated in flat graphene."
+            + size))
+
     def _update_gb_hint(self) -> None:
         """Size and census before the build -- both exact, from the map."""
         from ..builders.goldberg import GOLDBERG_MAPS, goldberg_atom_count
@@ -3299,7 +3354,26 @@ class NanocarbonGUI:
                   + ("" if name in SUPERLATTICES else
                      " This is a finite cage, so the length above is the "
                      "strut, not a cell edge.")
-                  + self._goldberg_note(radius)))
+                  + self._goldberg_note(radius)
+                  + self._exact_alternative(name)))
+
+    #: Where each meshed net has an exact-wall version, and which mode
+    #: builds it. The meshed wall is 11-21 % non-hexagonal; these carry
+    #: only the rings the topology asks for.
+    EXACT_ALTERNATIVES = {
+        "super-graphene": "supernetwork (knees), 24 heptagons per cell",
+        "super-square": "superstructure (frame) or (Goldberg)",
+        "super-cubic": "superstructure (frame), 24 heptagons per node",
+        "super-diamond": "superstructure (frame) or schwarzite (knees)",
+        "super-cube": "superstructure (frame), 'cube cage'",
+    }
+
+    def _exact_alternative(self, name: str) -> str:
+        """Point a meshed net at its exact-wall version, when there is one."""
+        target = self.EXACT_ALTERNATIVES.get(name)
+        if target is None:
+            return ""
+        return f" An exact, defect-minimal wall: {target}."
 
     def _goldberg_note(self, radius: float) -> str:
         """What the Goldberg refinement does here, and whether it fits.
@@ -3983,6 +4057,11 @@ class NanocarbonGUI:
                 wall_anchor=1.0 if self.var_anchor.get() else 0.0,
                 roughness=float(self.var_roughness.get()),
             )
+        elif mode == "superstructure (frame)":
+            params = dict(kind=self.var_fr_kind.get(),
+                          m=int(self.var_fr_m.get()),
+                          rows=int(self.var_fr_rows.get()),
+                          class_two=bool(self.var_fr_class2.get()))
         elif mode == "superstructure (Goldberg)":
             m = int(self.var_gb_m.get())
             params = dict(kind=self.var_gb_kind.get(), m=m,

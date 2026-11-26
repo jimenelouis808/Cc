@@ -56,6 +56,11 @@ CASES: list[tuple[str, str, dict, int | None, bool]] = [
      {"kind": "diamond", "m": 1, "n": 1}, -96, False),
     ("D, all heptagons GC(1,0)", "superstructure (Goldberg)",
      {"kind": "diamond", "m": 1}, -96, False),
+    # Octahedral frames: the cages the knee route cannot build.
+    ("adamantane cage, frame", "superstructure (frame)",
+     {"kind": "adamantane cage", "m": 2, "rows": 1}, -72, False),
+    ("cube cage, frame", "superstructure (frame)",
+     {"kind": "cube cage", "m": 3, "rows": 2}, -48, True),
 ]
 
 

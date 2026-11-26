@@ -47,12 +47,14 @@ from ase import io as ase_io
 
 from ..builders import (
     BEND_PLANES,
+    FRAMES,
     GOLDBERG_MAPS,
     build_bundle,
     build_capped_cnt,
     build_carbon_foam,
     build_cnt,
     build_coil,
+    build_frame,
     build_fullerene,
     build_goldberg,
     build_graphene_supercell,
@@ -1200,6 +1202,18 @@ def _cmd_goldberg(args):
     print(f"  structure   = {describe_goldberg(atoms)}")
     print("  route       = flat graphene patches on a coarse map; the only "
           "rings that are not hexagons are the map's own vertices")
+    return 0
+
+
+def _cmd_frame(args):
+    from ..builders.frame import describe_frame
+
+    atoms = build_frame(kind=args.kind, m=args.m, rows=args.rows,
+                        class_two=args.class_two, bond=args.bond,
+                        vacuum=args.vacuum, relax=not args.no_relax)
+    atoms = _maybe_dope(atoms, args)
+    _report_structure(atoms, *write_render_bundle(atoms, Path(args.out)))
+    print(f"  structure   = {describe_frame(atoms)}")
     return 0
 
 
@@ -2868,6 +2882,32 @@ def build_parser() -> argparse.ArgumentParser:
     _add_doping_arguments(
         gb, seed_help="Seed for dopant placement; the cell itself is exact.")
     gb.set_defaults(func=_cmd_goldberg)
+
+    fr = sub.add_parser(
+        "frame",
+        help="A superstructure of truncated-octahedron nodes and prism "
+             "arms along <100> and <111>, refined into graphene patches. "
+             "The census is the minimum the graph allows, every defect "
+             "isolated -- and it builds finite cages, which the knee route "
+             "cannot.",
+    )
+    fr.add_argument("--kind", choices=sorted(FRAMES), default="cube cage")
+    fr.add_argument("--m", type=int, default=3,
+                    help="Goldberg-Coxeter index: tube circumference 4m "
+                         "(square arms) or 6m (hexagonal) rings.")
+    fr.add_argument("--rows", type=int, default=2,
+                    help="Prism rows per arm before refinement; 0 fuses "
+                         "the nodes.")
+    fr.add_argument("--class-two", action="store_true", dest="class_two",
+                    help="Refine by (m, m) instead of (m, 0).")
+    fr.add_argument("--bond", type=float, default=1.42)
+    fr.add_argument("--vacuum", type=float, default=12.0)
+    fr.add_argument("--no-relax", action="store_true")
+    fr.add_argument("--out", required=True,
+                    help="Output path without extension.")
+    _add_doping_arguments(
+        fr, seed_help="Seed for dopant placement; the frame itself is exact.")
+    fr.set_defaults(func=_cmd_frame)
 
     sk = sub.add_parser(
         "schwarzite-knees",
