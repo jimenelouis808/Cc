@@ -125,6 +125,11 @@ CARBON_MODES = (
     # builds finite CAGES, which the knee route cannot: a cage corner
     # carries six pentagons outside and twelve heptagons in its necks.
     "superstructure (frame)",
+    # Geodesic-sphere nodes and antiprism arms (builders/geodesic.py): a
+    # deltahedral carrier for cages whose arms are not on the bcc
+    # directions. The five Platonic cages and the C60 of tubes come out
+    # clean, every disclination placed.
+    "superstructure (geodesic)",
     "junction",
     "schwarzite",
     "network",
@@ -351,6 +356,7 @@ def builder_for(mode: str):
         build_coil,
         build_frame,
         build_fullerene,
+        build_geodesic_superstructure,
         build_goldberg,
         build_haeckelite,
         build_haeckelite_tube,
@@ -419,6 +425,7 @@ def builder_for(mode: str):
         "supernetwork (knees)": build_knee_supernetwork,
         "superstructure (Goldberg)": build_goldberg,
         "superstructure (frame)": build_frame,
+        "superstructure (geodesic)": build_geodesic_superstructure,
         "junction": build_junction,
         "schwarzite": build_schwarzite,
         "network": build_nanotube_network,
@@ -821,6 +828,13 @@ def estimate_atoms(job: Job) -> int:
         arguments = {k: v for k, v in p.items() if k in keep}
         arguments["relax"] = False
         return len(maker(**arguments))
+
+    if mode == "superstructure (geodesic)":
+        from .builders.geodesic import geodesic_atom_count
+
+        return geodesic_atom_count(str(p.get("graph", "super-icosahedron")),
+                                   int(p.get("m", 2)), int(p.get("freq", 2)),
+                                   int(p.get("rows", 1)))
 
     if mode == "superstructure (frame)":
         from .builders.frame import frame_atom_count
@@ -1265,6 +1279,10 @@ _CLI_MAP: dict[str, tuple[str, dict[str, str]]] = {
         "net": "--net", "circumference": "--circumference",
         "arm_rows": "--arm-rows", "bond": "--bond",
         "vacuum": "--vacuum",
+    }),
+    "superstructure (geodesic)": ("geodesic", {
+        "graph": "--graph", "m": "--m", "freq": "--freq", "rows": "--rows",
+        "bond": "--bond", "vacuum": "--vacuum",
     }),
     "superstructure (frame)": ("frame", {
         "kind": "--kind", "m": "--m", "rows": "--rows",

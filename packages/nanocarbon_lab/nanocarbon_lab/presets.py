@@ -248,6 +248,27 @@ PRESETS: dict[str, dict[str, object]] = {
     #   adamantane cage m=2 rows=1  2400 atoms  1.350-1.486 A  clean
     #   super-cubic     m=4 rows=2  1536 atoms  1.343-1.470 A  clean
     #   super-diamond   m=3 rows=1  4320 atoms  1.367-1.497 A  clean
+    # Geodesic-sphere nodes and antiprism arms (builders/geodesic.py), the
+    # deltahedral carrier: every coarse triangle near-equilateral, so the
+    # graphene between defects is unsheared. Measured, m=2, rows=1, all
+    # clean and 100 % placed (pentagons on the nodes' convex outside,
+    # heptagons in the necks):
+    #   icosahedron   freq 2   5280 atoms  1.376-1.463 A
+    #   cube          freq 2   3136        1.391-1.444
+    #   dodecahedron  freq 2   7840        1.394-1.442
+    #   tetrahedron   freq 4   5120        1.371-1.494
+    #   octahedron    freq 4   7680        1.361-1.498
+    #   C60 of tubes  freq 2  23520        1.391-1.465
+    **{label: {"mode_kind": "superstructure (geodesic)", "gd_graph": graph,
+               "gd_m": 2, "gd_freq": freq, "gd_rows": 1, "anneal": 0}
+       for label, graph, freq in (
+           ("Icosahedral cage (geodesic, clean)", "super-icosahedron", 2),
+           ("Cubic cage (geodesic, clean)", "super-cube", 2),
+           ("Dodecahedral cage (geodesic, clean)", "super-dodecahedron", 2),
+           ("Tetrahedral cage (geodesic, clean)", "super-tetrahedron", 4),
+           ("Octahedral cage (geodesic, clean)", "super-octahedron", 4),
+           ("Superfullerene C60 (geodesic, clean)", "superfullerene-C60", 2),
+       )},
     "Cube cage (frame, exact corners)": {
         "mode_kind": "superstructure (frame)", "fr_kind": "cube cage",
         "fr_m": 3, "fr_rows": 2, "fr_class2": False, "anneal": 0},

@@ -6,6 +6,7 @@ from .cnt import build_cnt
 from .foam3d import build_carbon_foam
 from .frame import FRAMES, build_frame, describe_frame
 from .fullerene import build_fullerene, build_nano_onion
+from .geodesic import GEODESIC_CAGES, build_geodesic_superstructure, describe_geodesic
 from .goldberg import GOLDBERG_MAPS, build_goldberg, describe_goldberg
 from .graphene import build_graphene, build_graphene_supercell
 from .haeckelite import build_haeckelite, describe_haeckelite
@@ -49,6 +50,9 @@ __all__ = [
     "build_graphene_supercell",
     "build_junction",
     "build_goldberg",
+    "build_geodesic_superstructure",
+    "describe_geodesic",
+    "GEODESIC_CAGES",
     "build_frame",
     "describe_frame",
     "FRAMES",

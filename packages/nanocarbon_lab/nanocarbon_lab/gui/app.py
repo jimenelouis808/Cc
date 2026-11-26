@@ -80,6 +80,7 @@ from ..builders.bamboo import CUP_ORIENTATIONS
 from ..builders.beads import BEAD_LAYOUTS
 from ..builders.capped_cnt import MIN_CAP_FREQ
 from ..builders.frame import FRAMES
+from ..builders.geodesic import GEODESIC_CAGES
 from ..builders.goldberg import GOLDBERG_MAPS
 from ..builders.haeckelite import CATALOGUE as haeckelite_catalogue
 from ..builders.haeckelite import PATTERNS as haeckelite_patterns
@@ -795,6 +796,11 @@ class NanocarbonGUI:
         self.var_s_cell = self._var("s_cell", tk.DoubleVar(value=36.0))
         self.var_s_thickness = self._var("s_thickness", tk.DoubleVar(value=0.0))
         self.var_s_goldberg = self._var("s_goldberg", tk.IntVar(value=1))
+        self.var_gd_graph = self._var("gd_graph",
+                                      tk.StringVar(value="super-icosahedron"))
+        self.var_gd_m = self._var("gd_m", tk.IntVar(value=2))
+        self.var_gd_freq = self._var("gd_freq", tk.IntVar(value=2))
+        self.var_gd_rows = self._var("gd_rows", tk.IntVar(value=1))
         self.var_fr_kind = self._var("fr_kind",
                                      tk.StringVar(value="cube cage"))
         self.var_fr_m = self._var("fr_m", tk.IntVar(value=3))
@@ -1171,6 +1177,29 @@ class NanocarbonGUI:
                                 wraplength=260, justify="left")
         self.lbl_gb.grid(row=4, column=0, columnspan=2, sticky="w")
         self.var_gb_kind.trace_add("write", lambda *_: self._update_gb_hint())
+
+        # --- geodesic route: deltahedral cages
+        self.frame_gd = ttk.LabelFrame(
+            parent, text="Cage of tubes (geodesic nodes)", padding=8)
+        self.frame_gd.columnconfigure(0, weight=1)
+        ttk.Label(self.frame_gd, text="Cage").grid(row=0, column=0,
+                                                   sticky="w")
+        ttk.Combobox(self.frame_gd, textvariable=self.var_gd_graph,
+                     values=sorted(GEODESIC_CAGES), state="readonly",
+                     width=18).grid(row=0, column=1, sticky="e", pady=(0, 6))
+        self._param(self.frame_gd, "Index m (tube = 6m rings)",
+                    self.var_gd_m, 1, 4, 1, integer=True, hard_lo=1,
+                    hard_hi=6, command=self._update_gd_hint)
+        self._param(self.frame_gd, "Node sphere frequency", self.var_gd_freq,
+                    2, 6, 3, integer=True, hard_lo=2, hard_hi=8,
+                    command=self._update_gd_hint)
+        self._param(self.frame_gd, "Rows per arm", self.var_gd_rows,
+                    1, 4, 5, integer=True, hard_lo=1, hard_hi=12,
+                    command=self._update_gd_hint)
+        self.lbl_gd = ttk.Label(self.frame_gd, text="", foreground=MUTED,
+                                wraplength=260, justify="left")
+        self.lbl_gd.grid(row=7, column=0, columnspan=2, sticky="w")
+        self.var_gd_graph.trace_add("write", lambda *_: self._gd_cage_changed())
 
         # --- frame route: octahedral nodes and prism arms
         self.frame_fr = ttk.LabelFrame(
@@ -2266,6 +2295,7 @@ class NanocarbonGUI:
                       self.frame_centreline, self.frame_defects,
                       self.frame_coil, self.frame_junction, self.frame_schwarzite,
                       self.frame_knee, self.frame_gb, self.frame_fr,
+                      self.frame_gd,
                       self.frame_knee_toroid, self.frame_knee_coil,
                       self.frame_haeckelite,
                       self.frame_cage, self.frame_mw, self.frame_bundle,
@@ -2349,6 +2379,10 @@ class NanocarbonGUI:
             self._knee_kind_changed()
             # There is nothing to anneal: the census is exact before any
             # relaxation and a flip could only leave it.
+            self.var_anneal.set(0)
+        elif mode == "superstructure (geodesic)":
+            self.frame_gd.pack(fill="x")
+            self._update_gd_hint()
             self.var_anneal.set(0)
         elif mode == "superstructure (frame)":
             self.frame_fr.pack(fill="x")
@@ -3254,6 +3288,32 @@ class NanocarbonGUI:
                          f"{found.atoms} atoms.")
         self.on_build()
 
+    def _gd_cage_changed(self) -> None:
+        """A cage carries its own node frequency; write it into the box."""
+        own = GEODESIC_CAGES.get(self.var_gd_graph.get())
+        if own:
+            self.var_gd_freq.set(own["freq"])
+        self._update_gd_hint()
+
+    def _update_gd_hint(self) -> None:
+        """Size before the build, exact from the coarse carrier."""
+        from ..builders.geodesic import geodesic_atom_count
+
+        graph = self.var_gd_graph.get()
+        try:
+            atoms = geodesic_atom_count(graph, int(self.var_gd_m.get()),
+                                        int(self.var_gd_freq.get()),
+                                        int(self.var_gd_rows.get()))
+        except ValueError as problem:
+            self.lbl_gd.config(text=f"✗ {problem}")
+            return
+        self.lbl_gd.config(text=(
+            f"{atoms} atoms. Every node is a geodesic sphere: its closed "
+            "five-fold vertices are pentagons on the convex outside, and "
+            "every arm mouth rims with heptagons in the neck — each one "
+            "isolated in flat, unsheared graphene."
+            + ("" if atoms < 12000 else " Large: several minutes.")))
+
     def _update_fr_hint(self) -> None:
         """Size and law before the build, both exact from the coarse map."""
         from ..builders.frame import FRAMES, frame_atom_count
@@ -3365,7 +3425,12 @@ class NanocarbonGUI:
         "super-square": "superstructure (frame) or (Goldberg)",
         "super-cubic": "superstructure (frame), 24 heptagons per node",
         "super-diamond": "superstructure (frame) or schwarzite (knees)",
-        "super-cube": "superstructure (frame), 'cube cage'",
+        "super-cube": "superstructure (geodesic) or (frame)",
+        "super-icosahedron": "superstructure (geodesic)",
+        "super-dodecahedron": "superstructure (geodesic)",
+        "super-tetrahedron": "superstructure (geodesic)",
+        "super-octahedron": "superstructure (geodesic)",
+        "superfullerene-C60": "superstructure (geodesic)",
     }
 
     def _exact_alternative(self, name: str) -> str:
@@ -4057,6 +4122,13 @@ class NanocarbonGUI:
                 wall_anchor=1.0 if self.var_anchor.get() else 0.0,
                 roughness=float(self.var_roughness.get()),
             )
+        elif mode == "superstructure (geodesic)":
+            graph = self.var_gd_graph.get()
+            params = dict(graph=graph, m=int(self.var_gd_m.get()),
+                          freq=int(self.var_gd_freq.get()),
+                          rows=int(self.var_gd_rows.get()),
+                          tolerance_deg=GEODESIC_CAGES.get(graph, {}).get(
+                              "tolerance_deg", 2.5))
         elif mode == "superstructure (frame)":
             params = dict(kind=self.var_fr_kind.get(),
                           m=int(self.var_fr_m.get()),

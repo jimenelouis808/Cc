@@ -1473,7 +1473,61 @@ star of the vertex nearest its direction as a uniform antiprism. A star
 around a degree-6 vertex rims with heptagons, the twelve degree-5
 vertices left closed are pentagons on the convex side -- the right sign
 for a cage corner -- and an icosahedral cage's arms lie exactly on its
-own two-fold axes, which are geodesic vertices at frequency 2. Not built.
+own two-fold axes, which are geodesic vertices at frequency 2. Built: see below.
+
+## Geodesic carriers: the deltahedral principle, applied
+
+`builders/geodesic.py` is that carrier. Every node is a **geodesic
+sphere** (icosahedron subdivided at `freq`, projected, unit mean edge);
+each arm is assigned to the sphere vertex nearest its direction, the
+star of that vertex is removed as the window, and the arm is a stack of
+**uniform antiprism** rings -- each turned half a step so every strip
+triangle is equilateral, the residual twist spread over the layers so
+the last ring lands on the far window's rim. Then `equilateralise`,
+GC(m, 0), Taubin smoothing and `finish_refined`. Pipeline: **deltahedral
+carrier -> GC inflation -> smooth + VFF -> verify** (budget,
+intrinsic placement, collapse).
+
+**The frame is fitted, not assumed.** `fit_frame` rotates the golden
+icosahedron to minimise the arms' miss (Nelder-Mead over rotation
+vectors, worst miss as the score). The dodecahedral cage missed by
+15.5 deg in the naive orientation and by **0.0** fitted; the
+icosahedron, cube, dodecahedron and C60 cage are all exact at freq 2,
+the tetrahedron and octahedron within 2.11 deg. At freq > 2 the freq-2
+solution is added as a candidate, because the optimiser alone missed it.
+An arm missing every vertex by more than `tolerance_deg` is refused.
+
+Measured at m = 2, rows = 1, every row CLEAN and 100 % placed --
+pentagons (the closed five-fold vertices) on the convex outside of every
+node, heptagons (the window rims) in the necks, each one isolated:
+
+| cage | freq | atoms | census | bonds (Å) |
+|---|---|---|---|---|
+| icosahedron | 2 | 5280 | `{5: 84, 7: 180, 8: 60}` | 1.376-1.463 |
+| cube | 2 | 3136 | `{5: 48, 7: 96}` | 1.391-1.444 |
+| dodecahedron | 2 | 7840 | `{5: 120, 7: 240}` | 1.394-1.442 |
+| C60 of tubes | 2 | 23520 | `{5: 360, 7: 720}` | 1.391-1.465 |
+| tetrahedron | 4 | 5120 | `{5: 42, 7: 66}` | 1.371-1.494 |
+| octahedron | 4 | 7680 | `{5: 60, 7: 132}` | 1.361-1.498 |
+| icosahedron | 4 | 16800 | `{5: 144, 7: 360}` | 1.409-1.436 |
+
+Against the hull route's 1.22-1.66 Å *broken* on the same cages, with
+the same census machinery: the only difference is that the carrier's
+triangles are equilateral. **That is the principle confirmed**, and it
+is what makes finite cages -- which the knee route proves impossible --
+come out crystalline-walled rather than amorphous.
+
+* **Tetrahedron and octahedron need freq 4.** Their arms are 60-90 deg
+  apart, so at freq 2 neighbouring windows share rim vertices and those
+  become octagons and nonagons (strained). `GEODESIC_CAGES` stores each
+  cage's own freq and tolerance; the CLI and window read it.
+* The icosahedron at freq 2 keeps 60 octagons for the same reason
+  (its 30 two-fold windows touch); freq 4 removes them.
+* `rows` is antiprism rows on the shortest arm; the scale is
+  `(2 * node_radius + rows * sqrt(3)/2) / shortest edge`.
+
+Still open on this route: periodic nets (the carrier is finite-only),
+the tesseract, super-fcc, supertubes, chiral GC.
 
 ## Perfect is two questions, and most builders answer only one
 

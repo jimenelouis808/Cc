@@ -33,6 +33,7 @@ class TestTheTableIsTheModeList:
             "toroid (knees)", "coil (knees)", "coil (knees, periodic)",
             "junction (knees)", "supernetwork (knees)", "schwarzite (knees)",
             "superstructure (Goldberg)", "superstructure (frame)",
+            "superstructure (geodesic)",
         }
 
     def test_each_expected_budget_is_the_law_not_a_number(self):

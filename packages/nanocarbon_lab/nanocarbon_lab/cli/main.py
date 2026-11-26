@@ -48,6 +48,7 @@ from ase import io as ase_io
 from ..builders import (
     BEND_PLANES,
     FRAMES,
+    GEODESIC_CAGES,
     GOLDBERG_MAPS,
     build_bundle,
     build_capped_cnt,
@@ -56,6 +57,7 @@ from ..builders import (
     build_coil,
     build_frame,
     build_fullerene,
+    build_geodesic_superstructure,
     build_goldberg,
     build_graphene_supercell,
     build_haeckelite,
@@ -1202,6 +1204,22 @@ def _cmd_goldberg(args):
     print(f"  structure   = {describe_goldberg(atoms)}")
     print("  route       = flat graphene patches on a coarse map; the only "
           "rings that are not hexagons are the map's own vertices")
+    return 0
+
+
+def _cmd_geodesic(args):
+    from ..builders.geodesic import describe_geodesic
+
+    own = GEODESIC_CAGES.get(args.graph, {})
+    tolerance = own.get("tolerance_deg", 2.5)
+    freq = args.freq if args.freq is not None else own.get("freq", 2)
+    atoms = build_geodesic_superstructure(
+        graph=args.graph, m=args.m, freq=freq, rows=args.rows,
+        tolerance_deg=tolerance, bond=args.bond, vacuum=args.vacuum,
+        relax=not args.no_relax)
+    atoms = _maybe_dope(atoms, args)
+    _report_structure(atoms, *write_render_bundle(atoms, Path(args.out)))
+    print(f"  structure   = {describe_geodesic(atoms)}")
     return 0
 
 
@@ -2882,6 +2900,33 @@ def build_parser() -> argparse.ArgumentParser:
     _add_doping_arguments(
         gb, seed_help="Seed for dopant placement; the cell itself is exact.")
     gb.set_defaults(func=_cmd_goldberg)
+
+    gd = sub.add_parser(
+        "geodesic",
+        help="A cage of tubes on geodesic-sphere nodes with antiprism arms: "
+             "a deltahedral carrier refined into graphene. Pentagons sit on "
+             "the convex outside of every node, heptagons in the necks, "
+             "every one isolated; the Platonic cages and the C60 of tubes "
+             "come out clean.",
+    )
+    gd.add_argument("--graph", choices=sorted(GEODESIC_CAGES),
+                    default="super-icosahedron")
+    gd.add_argument("--m", type=int, default=2,
+                    help="Goldberg-Coxeter index: tube circumference 6m "
+                         "rings.")
+    gd.add_argument("--freq", type=int, default=None,
+                    help="Node sphere frequency; left out, the cage's own "
+                         "(2, or 4 for the tetrahedron and octahedron).")
+    gd.add_argument("--rows", type=int, default=1,
+                    help="Antiprism rows on the shortest arm.")
+    gd.add_argument("--bond", type=float, default=1.42)
+    gd.add_argument("--vacuum", type=float, default=12.0)
+    gd.add_argument("--no-relax", action="store_true")
+    gd.add_argument("--out", required=True,
+                    help="Output path without extension.")
+    _add_doping_arguments(
+        gd, seed_help="Seed for dopant placement; the cage itself is exact.")
+    gd.set_defaults(func=_cmd_geodesic)
 
     fr = sub.add_parser(
         "frame",
