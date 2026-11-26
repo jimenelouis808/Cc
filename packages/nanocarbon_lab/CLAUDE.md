@@ -1601,6 +1601,13 @@ The truncated cube says the same thing differently: broken at one row,
 strained at two, clean at m = 2 -- the room comes from the tube or from
 the arm, and either works.
 
+**The supertube is not fixed.** `supertube-(4,4)` on per-node
+frequency-4 frames (worst miss 3.7 deg), m = 1, one row, periodic along
+its axis: 10240 atoms, the census meets the budget, and the cell relaxes
+**broken**, 1.00-2.22 Å, after 46 minutes. Not diagnosed: the 3.7 deg
+miss, the single row and the axial seam are each candidates, and it is
+not in the catalogue.
+
 
 ## Perfect is two questions, and most builders answer only one
 
