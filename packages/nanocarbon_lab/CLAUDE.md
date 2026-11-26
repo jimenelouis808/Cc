@@ -1435,6 +1435,46 @@ by three or four faces, which would make nonagons and dodecagons -- so
 super-fcc has no exact route here, and that is a consequence of twelve
 tubes meeting at a point rather than a missing feature.
 
+## Hull nodes on any graph, and the principle they exposed
+
+`builders/hull.py` tries to lift the frame's restriction to bcc
+directions: every tube an antiprism stack on a regular `k`-gon, every
+node the **convex hull of its tubes' mouths** (so nothing can tear, at
+any arm angles), the coarse census optimised by edge flips while the map
+is small (`optimise_census`, objective curvature-aware through
+`curvature_charges = 3K/pi`, which sums to `6 chi` exactly), then GC
+inflation. It is **experimental and its geometry is not clean**, and the
+reason is the most useful thing learned here.
+
+The census half works. Coarse maps meet `12(V - E)` on every cage, and
+the defect count is near the minimum -- cube cage `{5: 11, 7: 59}` for a
+budget of -48 (the octahedral frame needs 144), tetrahedron 34, C60 cage
+361 -- with 97-100 % placed. The geometry half does not: every cage
+relaxes to about 1.22-1.66 Å, `broken`, and **none of these changed it**:
+surface projection plus tangential smoothing (it dragged vertices to 5 Å
+bonds where the hull and the implicit tubes disagree), Loop subdivision,
+curvature-aware flips, antiprism instead of prism tubes, more relaxation.
+
+**What every clean coarse map here has in common is equilateral
+triangles.** The muoctahedron, C168's Klein map, the octahedral frames
+and the knee nodes are all deltahedral: refined, each triangle becomes
+the exact lattice, unsheared, and all the curvature sits at disclinations
+and folds. A hull map's triangles run 0.30-2.65 edges long; refined, each
+is an affine image of the lattice -- sheared graphene -- and no later
+step removes a shear. `equilateralise` (springs to unit edges plus a
+repulsion) only gets them to 0.72-1.45: with tubes five or six edges
+round, the map is too small to have an equilateral realisation with the
+degrees it carries.
+
+So the rule for any future route is: **build a deltahedral carrier, then
+inflate.** The obvious general one is a geodesic (icosahedral, all
+near-equilateral) sphere as every node, each arm leaving through the
+star of the vertex nearest its direction as a uniform antiprism. A star
+around a degree-6 vertex rims with heptagons, the twelve degree-5
+vertices left closed are pentagons on the convex side -- the right sign
+for a cage corner -- and an icosahedral cage's arms lie exactly on its
+own two-fold axes, which are geodesic vertices at frequency 2. Not built.
+
 ## Perfect is two questions, and most builders answer only one
 
 "Is it textbook-exact?" splits into **topology** (is the census the one

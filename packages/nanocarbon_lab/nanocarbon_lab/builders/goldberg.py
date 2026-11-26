@@ -631,6 +631,65 @@ def goldberg_atom_count(kind: str, m: int, n: int = 0) -> int:
     return len(tris) // cells * triangulation_number(m, n)
 
 
+def loop_subdivide(mesh: Mesh, box: np.ndarray | None = None,
+                   levels: int = 1) -> Mesh:
+    """Loop subdivision: GC(2, 0) topology, smooth-surface geometry.
+
+    Topologically each step is :func:`subdivide` with ``m = 2`` -- every
+    triangle into four, every new vertex of degree six, the old vertices'
+    degrees kept -- so the census cannot change. Geometrically the new
+    vertices go where Loop's masks put them (3/8 of each edge end, 1/8 of
+    each opposite vertex) and the old ones move by Warren's weights, so
+    repeated steps converge to a smooth limit surface fixed by the coarse
+    map itself. That is what a flat refinement lacks: a coarse map's
+    kinks and badly shaped triangles otherwise survive into the graphene
+    as strain, and projecting onto an outside surface instead dragged
+    vertices to 5 Å bonds where the two shapes disagreed.
+    """
+    from .fullerene_mesh import minimum_image
+
+    live = None if box is None or not np.any(np.asarray(box) > 0) else box
+    vertices, tris = np.array(mesh[0], dtype=float), np.asarray(mesh[1])
+    for _ in range(levels):
+        n = len(vertices)
+        neighbours: dict[int, set[int]] = defaultdict(set)
+        opposite: dict[tuple[int, int], list[int]] = defaultdict(list)
+        for a, b, c in tris:
+            for u, v, w in ((a, b, c), (b, c, a), (c, a, b)):
+                neighbours[int(u)].add(int(v))
+                neighbours[int(v)].add(int(u))
+                opposite[(min(u, v), max(u, v))].append(int(w))
+        # New edge points.
+        edge_index: dict[tuple[int, int], int] = {}
+        new_points = []
+        for (u, v), opp in opposite.items():
+            d_v = minimum_image(vertices[v] - vertices[u], live)
+            point = vertices[u] + 0.5 * d_v
+            if len(opp) == 2:
+                d_c = minimum_image(vertices[opp[0]] - vertices[u], live)
+                d_d = minimum_image(vertices[opp[1]] - vertices[u], live)
+                point = vertices[u] + 0.375 * d_v + 0.125 * (d_c + d_d)
+            edge_index[(u, v)] = n + len(new_points)
+            new_points.append(point)
+        # Moved old points (Warren's beta).
+        moved = vertices.copy()
+        for i in range(n):
+            nb = np.fromiter(neighbours[i], dtype=int)
+            k = len(nb)
+            beta = 3.0 / 16.0 if k == 3 else 3.0 / (8.0 * k)
+            offsets = minimum_image(vertices[nb] - vertices[i], live)
+            moved[i] = vertices[i] + beta * offsets.sum(axis=0)
+        out_tris = []
+        for a, b, c in tris:
+            ab = edge_index[(min(a, b), max(a, b))]
+            bc = edge_index[(min(b, c), max(b, c))]
+            ca = edge_index[(min(c, a), max(c, a))]
+            out_tris += [(a, ab, ca), (ab, b, bc), (ca, bc, c), (ab, bc, ca)]
+        vertices = _wrap(np.vstack([moved, np.array(new_points)]), live)
+        tris = np.array(out_tris, dtype=int)
+    return vertices, tris
+
+
 def taubin_smooth(mesh: Mesh, box: np.ndarray | None, iterations: int = 20,
                   lam: float = 0.5, mu: float = -0.53) -> Mesh:
     """Round a polyhedral mesh without shrinking it (Taubin's lambda/mu).
