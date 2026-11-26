@@ -224,6 +224,20 @@ PRESETS: dict[str, dict[str, object]] = {
     "Schwarz P (Goldberg, small, DFT-ready)": {
         "mode_kind": "superstructure (Goldberg)", "gb_kind": "primitive",
         "gb_m": 2, "gb_class2": False, "anneal": 0},
+    # Schwarz D from Vanderbilt & Tersoff's C168 (PRL 68, 511, 1992),
+    # rebuilt from their Table I and used as a coarse Klein {3,7} map:
+    # 96 heptagons per cubic cell and nothing else. GC(1,1) IS C168
+    # (672 atoms, bonds 1.406-1.455 A); GC(2,0) is 896 atoms, clean.
+    # GC(1,0) is the all-heptagon cell -- see "heptanene" in CLAUDE.md.
+    "Schwarz D (Goldberg, C168 family)": {
+        "mode_kind": "superstructure (Goldberg)", "gb_kind": "diamond",
+        "gb_m": 1, "gb_class2": True, "anneal": 0},
+    "Schwarz D (Goldberg, 896 atoms)": {
+        "mode_kind": "superstructure (Goldberg)", "gb_kind": "diamond",
+        "gb_m": 2, "gb_class2": False, "anneal": 0},
+    "Heptanene on Schwarz D (all heptagons)": {
+        "mode_kind": "superstructure (Goldberg)", "gb_kind": "diamond",
+        "gb_m": 1, "gb_class2": False, "anneal": 0},
     "Super-square (Goldberg, octagons)": {
         "mode_kind": "superstructure (Goldberg)", "gb_kind": "super-square",
         "gb_m": 3, "gb_class2": False, "anneal": 0},

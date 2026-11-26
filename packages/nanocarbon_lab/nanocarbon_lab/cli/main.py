@@ -2849,7 +2849,10 @@ def build_parser() -> argparse.ArgumentParser:
                     help="'primitive': Schwarz P as the muoctahedron, 12 "
                          "octagons per cell. 'super-square': a sheet of "
                          "fused truncated octahedra, 4 pentagons at the "
-                         "poles and 8 octagons in the saddles.")
+                         "poles and 8 octagons in the saddles. 'diamond': "
+                         "Schwarz D from Vanderbilt & Tersoff's C168, 96 "
+                         "heptagons per cubic cell; --m 1 --n 1 is C168 "
+                         "itself, --m 1 --n 0 the all-heptagon cell.")
     gb.add_argument("--m", type=int, default=3,
                     help="Goldberg-Coxeter index: m rings between defects, "
                          "m^2 times the coarse map's faces.")

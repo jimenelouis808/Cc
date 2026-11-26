@@ -52,6 +52,10 @@ CASES: list[tuple[str, str, dict, int | None, bool]] = [
      {"kind": "primitive", "m": 3}, -24, False),
     ("super-square, GC(3,0)", "superstructure (Goldberg)",
      {"kind": "super-square", "m": 3}, -12, False),
+    ("Schwarz D, C168 = GC(1,1)", "superstructure (Goldberg)",
+     {"kind": "diamond", "m": 1, "n": 1}, -96, False),
+    ("D, all heptagons GC(1,0)", "superstructure (Goldberg)",
+     {"kind": "diamond", "m": 1}, -96, False),
 ]
 
 

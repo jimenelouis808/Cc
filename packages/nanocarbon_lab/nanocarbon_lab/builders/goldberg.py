@@ -438,6 +438,171 @@ def square_octagon_map(a: float = 4.0, vacuum: float = 0.0
     return (vertices, tris), box
 
 
+#: Vanderbilt & Tersoff's C168 (*Phys. Rev. Lett.* **68**, 511, 1992),
+#: Table I: the seven inequivalent atoms in units of the fcc lattice
+#: constant ``a = 21.8`` Å. The other 77 atoms of a joint follow from the
+#: twelve proper rotations of the tetrahedron, the second joint from
+#: inversion and a ``(a/4, a/4, a/4)`` translation.
+VANDERBILT_TERSOFF_C168 = np.array([
+    (0.1134, 0.0050, 0.2415), (-0.0109, 0.0303, 0.2200),
+    (0.0272, 0.0756, 0.2435), (-0.0984, 0.0826, 0.1704),
+    (-0.0662, 0.1383, 0.1542), (-0.0743, 0.0402, 0.2146),
+    (-0.1915, 0.0177, 0.1649),
+])
+C168_LATTICE = 21.8
+
+
+def _tetrahedral_rotations() -> list[np.ndarray]:
+    """The twelve proper rotations of the tetrahedron, group T."""
+    from itertools import product
+
+    out = []
+    for perm in ((0, 1, 2), (1, 2, 0), (2, 0, 1)):
+        for signs in product((1, -1), repeat=3):
+            if np.prod(signs) == 1:
+                rot = np.zeros((3, 3))
+                for row, col in enumerate(perm):
+                    rot[row, col] = signs[row]
+                out.append(rot)
+    return out
+
+
+def c168_atoms() -> tuple[np.ndarray, list[tuple[int, int]], np.ndarray]:
+    """Vanderbilt & Tersoff's C168 in its conventional cubic cell (672 atoms).
+
+    Rebuilt from the paper's own Table I, not transcribed: 7 sites x 12
+    rotations x 2 joints x 4 fcc translations, deduplicated. Measured, every
+    atom comes out three-coordinate with bonds 1.388-1.454 Å, which is the
+    check that the table was read correctly.
+
+    Returns positions (Å), bonds as index pairs, and the cubic cell edges.
+    """
+    from scipy.spatial import cKDTree
+
+    joint = np.array([rot @ site for rot in _tetrahedral_rotations()
+                      for site in VANDERBILT_TERSOFF_C168])
+    primitive = np.vstack([joint, -joint + 0.25])
+    frac = np.vstack([primitive + np.array(shift) for shift in
+                      ((0, 0, 0), (0, .5, .5), (.5, 0, .5), (.5, .5, 0))])
+    frac = np.mod(frac, 1.0)
+    keys = np.round(frac * 1e4).astype(np.int64) % 10000
+    _, first = np.unique(keys, axis=0, return_index=True)
+    positions = frac[np.sort(first)] * C168_LATTICE
+    box = np.array([C168_LATTICE] * 3)
+    pairs = sorted(cKDTree(positions, boxsize=C168_LATTICE).query_pairs(1.7))
+    degree = np.bincount(np.array(pairs).ravel(), minlength=len(positions))
+    if len(positions) != 672 or set(degree) != {3}:
+        raise RuntimeError("C168 did not rebuild as a trivalent 672-atom cell.")
+    return positions, pairs, box
+
+
+def _faces_of_trivalent_net(n_atoms: int, pairs, limit: int = 8
+                            ) -> list[list[int]]:
+    """The rings of a trivalent surface net: the shortest cycle at each angle.
+
+    On C168 every face is the smallest cycle through each of its corners,
+    which is not true of an arbitrary net -- the result is therefore checked
+    by the caller against Euler (each atom in exactly three faces).
+    """
+    from collections import deque
+
+    neighbours: dict[int, list[int]] = defaultdict(list)
+    for i, j in pairs:
+        neighbours[i].append(j)
+        neighbours[j].append(i)
+    faces: dict[tuple, list[int]] = {}
+    for centre in range(n_atoms):
+        for u in neighbours[centre]:
+            for v in neighbours[centre]:
+                if u >= v:
+                    continue
+                # Shortest path u -> v avoiding the centre.
+                parent = {u: None}
+                queue = deque([u])
+                while queue and v not in parent:
+                    node = queue.popleft()
+                    for nxt in neighbours[node]:
+                        if nxt != centre and nxt not in parent:
+                            parent[nxt] = node
+                            queue.append(nxt)
+                if v not in parent:
+                    continue
+                path = [v]
+                while parent[path[-1]] is not None:
+                    path.append(parent[path[-1]])
+                ring = [centre] + path
+                if len(ring) <= limit:
+                    faces.setdefault(tuple(sorted(ring)), ring)
+    return list(faces.values())
+
+
+def _c168_rings():
+    positions, pairs, box = c168_atoms()
+    rings = _faces_of_trivalent_net(len(positions), pairs)
+    count = np.zeros(len(positions), dtype=int)
+    for ring in rings:
+        count[ring] += 1
+    sizes = sorted({len(r) for r in rings})
+    if set(count) != {3} or sizes != [6, 7]:
+        raise RuntimeError("C168's faces were not perceived cleanly.")
+    centres = []
+    for ring in rings:
+        offsets = [_offset(positions, ring[0], k, box) for k in ring]
+        centres.append(_wrap((positions[ring[0]]
+                              + np.mean(offsets, axis=0))[None], box)[0])
+    return positions, pairs, box, rings, np.array(centres)
+
+
+def diamond_heptagon_map() -> tuple[Mesh, np.ndarray]:
+    """Schwarz D as Klein's {3,7} map: the coarse map behind C168.
+
+    Every hexagon of C168 is ringed by alternating hexagons and heptagons
+    (Vanderbilt & Tersoff), so it touches exactly three heptagons; those
+    three are a triangle of the coarse map, whose vertices are the 96
+    heptagon centres of the cubic cell -- degree seven each, 224 triangles,
+    ``chi = -16``. ``GC(1, 0)`` of it is four copies of their C56, and
+    ``GC(1, 1)`` gives C168 back.
+    """
+    positions, pairs, box, rings, centres = _c168_rings()
+    hepta = [k for k, ring in enumerate(rings) if len(ring) == 7]
+    index = {k: i for i, k in enumerate(hepta)}
+    edge_owner: dict[tuple[int, int], int] = {}
+    for k, ring in enumerate(rings):
+        for a, b in zip(ring, ring[1:] + ring[:1], strict=True):
+            key = (min(a, b), max(a, b))
+            edge_owner.setdefault(key, [])
+            edge_owner[key].append(k)
+    tris = []
+    for k, ring in enumerate(rings):
+        if len(ring) != 6:
+            continue
+        touching = set()
+        for a, b in zip(ring, ring[1:] + ring[:1], strict=True):
+            for other in edge_owner[(min(a, b), max(a, b))]:
+                if other != k and len(rings[other]) == 7:
+                    touching.add(other)
+        if len(touching) != 3:
+            raise RuntimeError("a C168 hexagon does not touch three heptagons.")
+        tris.append(tuple(index[t] for t in sorted(touching)))
+    return (centres[hepta], np.array(tris, dtype=int)), box
+
+
+def diamond_c168_map() -> tuple[Mesh, np.ndarray]:
+    """C168's own dual: ``GC(1, 1)`` of :func:`diamond_heptagon_map`.
+
+    Vertices are all 320 ring centres of the cubic cell (96 of degree 7),
+    triangles the 672 atoms. Subdividing it ``m`` times gives
+    ``GC(m, m)`` of the Klein map without needing an orientation.
+    """
+    positions, pairs, box, rings, centres = _c168_rings()
+    member: dict[int, list[int]] = defaultdict(list)
+    for k, ring in enumerate(rings):
+        for atom in ring:
+            member[atom].append(k)
+    tris = np.array([member[a] for a in range(len(positions))], dtype=int)
+    return (centres, tris), box
+
+
 #: Coarse maps by kind: ``kind -> (map builder, genus, pbc, budget,
 #: supercell)``. ``supercell`` is how many primitive cells per axis the
 #: map is built over before it is folded back (see :func:`fold_mesh`).
@@ -445,7 +610,13 @@ GOLDBERG_MAPS: dict[str, tuple[Callable, int, tuple[bool, bool, bool],
                                int, int]] = {
     "primitive": (primitive_octagon_map, 3, (True, True, True), -24, 1),
     "super-square": (square_octagon_map, 2, (True, True, False), -12, 2),
+    # Conventional cubic cell: four primitive D cells, genus 9.
+    "diamond": (diamond_heptagon_map, 9, (True, True, True), -96, 1),
 }
+
+#: Kinds whose class-II family is built from its own map, subdivided,
+#: rather than by the root-three step (which needs an oriented map).
+GOLDBERG_CLASS_TWO: dict[str, Callable] = {"diamond": diamond_c168_map}
 
 
 def goldberg_atom_count(kind: str, m: int, n: int = 0) -> int:
@@ -500,8 +671,12 @@ def build_goldberg(
         raise ValueError(f"unknown kind {kind!r}; built here: "
                          f"{sorted(GOLDBERG_MAPS)}.")
     make_map, genus, pbc, budget, supercell = GOLDBERG_MAPS[kind]
-    coarse, box = make_map()
-    fine = goldberg_coxeter(coarse, m, n, box)
+    if n == m and kind in GOLDBERG_CLASS_TWO:
+        coarse, box = GOLDBERG_CLASS_TWO[kind]()
+        fine = subdivide(coarse, m, box)
+    else:
+        coarse, box = make_map()
+        fine = goldberg_coxeter(coarse, m, n, box)
     if supercell > 1:
         if triangulation_number(m, n) < 4:
             raise ValueError(
@@ -563,7 +738,7 @@ def build_goldberg(
                                box=np.where(np.array(pbc), cell, 0.0))
     atoms.info.update({
         "builder": "goldberg",
-        "structure_type": "schwarzite" if kind == "primitive"
+        "structure_type": "schwarzite" if kind in ("primitive", "diamond")
         else "supernetwork",
         "kind": kind,
         "gc_indices": (int(m), int(n)),

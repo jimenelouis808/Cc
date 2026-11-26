@@ -1262,6 +1262,8 @@ C60-from-an-icosahedron construction on a surface of negative curvature.
 | Schwarz P | **GC(4,0)** | 768 | `{6: 368, 8: 12}` | **1.405-1.423** | clean |
 | super-square | knee (12, 5) | 180 | `{5: 4, 6: 68, 7: 16}` | 1.374-1.505 | clean |
 | super-square | **GC(3,0)** | 468 | `{5: 4, 6: 220, 8: 8}` | **1.404-1.436** | clean |
+| Schwarz D | knee (18, 5) | 1440 | `{6: 608, 7: 96}` | 1.347-1.489 | clean |
+| Schwarz D | **GC(2,0)** of C168's map | 896 | `{6: 336, 7: 96}` | **1.402-1.454** | clean |
 
 Both Goldberg rows place 100 % of their disclinations on the right side
 of the curvature, and their hexagons read a median `K` of zero: the
@@ -1315,15 +1317,66 @@ nets tear. **It ships as an option with one preset (super-graphene,
 k = 2), not as a default**, and the exact maps above are where the clean
 walls are. Do not extrapolate the super-graphene row to the others.
 
-### Next: the Klein map would give the C168 family
+### Schwarz D: Vanderbilt & Tersoff's C168 is the coarse map
 
-The {3,7} Klein map (`heptanene.klein_quartic_map`, dual side) is a
-coarse map with 24 degree-7 vertices on a genus-3 cell; GC(1,1) of it is
-168 atoms -- Vanderbilt & Tersoff's C168 -- and GC(m,0) gives 56 m^2. It
-is not built because the embedding is the hard part: `heptanene` found
-only two of twenty cocycles that embed at all, and at that cell the
-coarse edges reach half the box, so `subdivide` would need the explicit
-per-edge shifts rather than the minimum image.
+`c168_atoms` rebuilds C168 (*PRL* **68**, 511, 1992) from the paper's own
+Table I -- seven sites, the twelve rotations of T, inversion plus
+`(a/4, a/4, a/4)` for the second joint, the four fcc translations -- and
+checks it: 672 atoms in the 21.8 Å cubic cell, every atom
+three-coordinate, bonds 1.388-1.454 Å. Its faces are perceived as the
+shortest cycle at every angle and **checked against Euler** (each atom in
+exactly three faces, sizes only 6 and 7) rather than trusted; that
+shortcut is safe on C168 and is not a general ring perceiver.
+
+Every C168 hexagon is ringed by alternating hexagons and heptagons, so it
+touches exactly three heptagons, and those three are a triangle of the
+coarse map: **Klein's {3,7}**, 96 degree-7 vertices and 224 triangles per
+cubic cell (`diamond_heptagon_map`). C168's own dual
+(`diamond_c168_map`) is GC(1,1) of it, and subdividing that gives the
+class-II family without needing an oriented map.
+
+| GC | atoms | census | bonds (Å) | verdict |
+|---|---|---|---|---|
+| (1,0) | 224 | `{7: 96}` | 1.401-1.442 | clean |
+| (2,0) | 896 | `{6: 336, 7: 96}` | 1.402-1.454 | clean |
+| (3,0) | 2016 | `{6: 896, 7: 96}` | 1.406-1.445 | clean |
+| (1,1) = C168 | 672 | `{6: 224, 7: 96}` | 1.406-1.455 | clean |
+| (2,2) | 2688 | `{6: 1232, 7: 96}` | 1.411-1.477 | clean |
+
+Every row 100 % placed. The knee D at its default is 1440 atoms,
+1.347-1.489 Å; the Goldberg D is tighter at every size.
+
+### Heptanene exists on the D surface -- correcting this file
+
+GC(1,0) of the Klein map is **all heptagons**: 56 atoms per primitive fcc
+cell, 224 per cubic cell, 12.9 Å, the C56 Vanderbilt & Tersoff say they
+built first and inflated into C168. Relaxed with the same force field the
+heptanene section below uses: bonds **1.401-1.442 Å**, angles
+116.4-122.6 deg, angle sums from 357.1 deg (0.04 sp3 character), no
+contact under 2 Å, and the closest pair of atoms more than four bonds
+apart at **3.92 Å** -- the walls do not touch. Density 2.07 g/cm³.
+
+So the claim below that heptanene "is not carbon at any cell" is **wrong
+as a statement about the net**. What `build_heptanene` measured is that
+its own embeddings -- the Klein quartic placed barycentrically in a
+*simple cubic* 3-torus, one copy per 6-14 Å cube -- do not reach carbon,
+and that stands. The D-surface embedding is a different crystal: fcc,
+four copies per cubic cell, positions inherited from a relaxed C168.
+`build_heptanene` keeps refusing what it builds; the all-heptagon crystal
+is `build_goldberg("diamond", 1, 0)`. Neither has been checked beyond the
+valence force field; a DFT relaxation is what would settle it.
+
+### Coils: the knee route already is the literature's construction
+
+Chuang, Fan & Jin (*J. Chem. Inf. Model.* **49**, 361, 2009) classify
+toroidal and helical tubes by unfolding a polyhedral unit cell onto
+graphene, the non-hexagons sitting only at the polyhedron's vertices --
+the same idea as this module, one dimension down. `knee.py`'s toroid and
+coils are that construction for the Dunlap knee (two 5-7 pairs per knee,
+everything else exact lattice) and are already clean at 100 % placement;
+see the periodic coil section. What Chuang adds and this package lacks is
+the **chiral** family (a tilted base vector), which needs the same
+consistent lattice cut that keeps chiral GC(m, n) out of this module.
 
 ## Perfect is two questions, and most builders answer only one
 
@@ -2413,6 +2466,10 @@ fewer. The refusal is not a limitation of the sp2 assumption.
 What the accounting does give is where heptanene lives: `n3 = 56, n4 = 0`
 gives `chi = -4`, genus 3 -- exactly one schwarzite unit cell. Heptanene
 is a schwarzite, not a sheet.
+
+(**Correction:** on the D surface it does embed -- see "Heptanene exists
+on the D surface" above. What follows is about this builder's simple
+cubic embedding only.)
 
 **And no cell size rescues the embedding.** Expanding the Klein quartic's
 cubic 3-torus and relaxing under periodic boundary:

@@ -3239,7 +3239,10 @@ class NanocarbonGUI:
         census = {"primitive": "12 octagons per cell, nothing else "
                                "non-hexagonal",
                   "super-square": "4 pentagons at the poles, 8 octagons "
-                                  "in the saddles"}.get(kind, "")
+                                  "in the saddles",
+                  "diamond": "96 heptagons per cubic cell (Vanderbilt & "
+                             "Tersoff's map; (1,1) is their C168)"}.get(
+                      kind, "")
         self.lbl_gb.config(text=(
             f"GC({m},{n}): {atoms} atoms, {census}; sum(6-n) = {budget} "
             f"(genus {genus}). Flat graphene patches between the defects, "

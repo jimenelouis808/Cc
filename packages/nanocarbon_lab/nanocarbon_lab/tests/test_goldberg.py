@@ -120,3 +120,42 @@ class TestGeneralRoute:
 
         for builder in (build_schwarzite, build_supernetwork):
             assert "goldberg" in inspect.signature(builder).parameters
+
+
+class TestDiamondFromC168:
+    def test_c168_rebuilds_from_the_papers_table(self):
+        positions, pairs, box = gc.c168_atoms()
+        assert len(positions) == 672
+        lengths = []
+        for i, j in pairs:
+            d = positions[j] - positions[i]
+            d -= box * np.round(d / box)
+            lengths.append(np.linalg.norm(d))
+        assert 1.38 < min(lengths) and max(lengths) < 1.46
+
+    def test_the_klein_map_is_96_heptagon_vertices(self):
+        (vertices, tris), _ = gc.diamond_heptagon_map()
+        assert gc.degree_census(tris) == {7: 96}
+        assert len(tris) == 224
+
+    def test_class_two_one_is_c168_itself(self):
+        built = gc.build_goldberg("diamond", 1, 1)
+        assert len(built) == 672
+        assert built.info["ring_counts"] == {6: 224, 7: 96}
+        assert abs(built.cell[0][0] - gc.C168_LATTICE) < 0.05
+        verdict, _ = sp2_quality(built.info["geometry"])
+        assert str(verdict) == "clean"
+
+    @pytest.mark.parametrize("m, atoms", [(1, 224), (2, 896)])
+    def test_class_one_is_clean_and_all_heptagons_are_placed(self, m, atoms):
+        built = gc.build_goldberg("diamond", m, 0)
+        assert len(built) == atoms
+        assert built.info["ring_counts"][7] == 96
+        assert set(built.info["ring_counts"]) <= {6, 7}
+        verdict, _ = sp2_quality(built.info["geometry"])
+        assert str(verdict) == "clean"
+        assert built.info["disclinations_placed"] == 1.0
+
+    def test_the_count_estimate_is_exact(self):
+        assert gc.goldberg_atom_count("diamond", 1, 1) == 672
+        assert gc.goldberg_atom_count("diamond", 2, 0) == 896
