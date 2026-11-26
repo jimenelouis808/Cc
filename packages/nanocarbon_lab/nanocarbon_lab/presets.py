@@ -208,6 +208,25 @@ PRESETS: dict[str, dict[str, object]] = {
         "knee_k": 22, "knee_rows": 5, "anneal": 0},
     # A sheet of planar crossings. 180 atoms, {5: 4, 6: 68, 7: 16} --
     # the pentagons are the poles of each crossing and belong there.
+    # The Goldberg-Coxeter route (builders/goldberg.py): flat graphene
+    # patches on a coarse polyhedral map, defects only at its vertices --
+    # the construction of Mackay & Terrones (1991) and Koshino & Aoki
+    # (2016). Measured: P at m=4 is 768 atoms, {6: 368, 8: 12}, bonds
+    # 1.405-1.423 A, clean, every octagon in negative curvature -- the
+    # knee P at a comparable size is strained (1.417-1.540). The
+    # super-square at m=3 is 468 atoms, {5: 4, 6: 220, 8: 8}, bonds
+    # 1.404-1.436, clean -- against the knee super-square's 1.374-1.505,
+    # strained. Both have zero-length arms: the crossings are fused
+    # truncated octahedra, not nodes joined by tubes.
+    "Schwarz P (Goldberg, 12 octagons)": {
+        "mode_kind": "superstructure (Goldberg)", "gb_kind": "primitive",
+        "gb_m": 4, "gb_class2": False, "anneal": 0},
+    "Schwarz P (Goldberg, small, DFT-ready)": {
+        "mode_kind": "superstructure (Goldberg)", "gb_kind": "primitive",
+        "gb_m": 2, "gb_class2": False, "anneal": 0},
+    "Super-square (Goldberg, octagons)": {
+        "mode_kind": "superstructure (Goldberg)", "gb_kind": "super-square",
+        "gb_m": 3, "gb_class2": False, "anneal": 0},
     "Super-square (knees, tubes on a square net)": {
         "mode_kind": "supernetwork (knees)", "knee_net": "super-square",
         "knee_k": 12, "knee_rows": 5, "anneal": 0},
@@ -334,6 +353,14 @@ PRESETS: dict[str, dict[str, object]] = {
     "Super-graphene (tubes at 120°)": {
         "mode_kind": "supernetwork", "sn_graph": "super-graphene",
         "sn_scale": 34.0, "sn_radius": 5.0, "sn_blend": 4.0, "anneal": 0},
+    # The same net remeshed twice as coarse and filled with exact
+    # graphene patches: non-hexagonal rings 18 % -> 6 %, every one of
+    # them on the right side of the curvature (94 % -> 100 %). Needs the
+    # radius: at 5 A a refinement of 3 tears the neck.
+    "Super-graphene (meshed, Goldberg 2)": {
+        "mode_kind": "supernetwork", "sn_graph": "super-graphene",
+        "sn_scale": 34.0, "sn_radius": 5.0, "sn_blend": 4.0,
+        "sn_goldberg": 2, "anneal": 0},
     "Super-diamond (tubes at 109.47°)": {
         "mode_kind": "supernetwork", "sn_graph": "super-diamond",
         "sn_scale": 60.0, "sn_radius": 5.0, "sn_blend": 4.0, "anneal": 0},

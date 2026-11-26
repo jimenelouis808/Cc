@@ -164,6 +164,8 @@ SAMPLES: dict[str, Job] = {
     # pickling test and the parameter-name check, none of which read the
     # crystal. The builds that do read one are in
     # `test_nanoparticle.py`, which writes its own .cif.
+    "superstructure (Goldberg)": Job("superstructure (Goldberg)",
+                                     {"kind": "primitive", "m": 2, "n": 0}),
     "nanoparticle": Job(
         mode="nanoparticle",
         params={"cif": "crystal.cif", "shape": "sphere",

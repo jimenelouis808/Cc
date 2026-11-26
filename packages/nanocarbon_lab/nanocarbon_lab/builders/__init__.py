@@ -5,6 +5,7 @@ from .capped_cnt import build_capped_cnt
 from .cnt import build_cnt
 from .foam3d import build_carbon_foam
 from .fullerene import build_fullerene, build_nano_onion
+from .goldberg import GOLDBERG_MAPS, build_goldberg, describe_goldberg
 from .graphene import build_graphene, build_graphene_supercell
 from .haeckelite import build_haeckelite, describe_haeckelite
 from .haeckelite_tube import build_haeckelite_tube, describe_haeckelite_tube
@@ -46,6 +47,9 @@ __all__ = [
     "build_graphene",
     "build_graphene_supercell",
     "build_junction",
+    "build_goldberg",
+    "describe_goldberg",
+    "GOLDBERG_MAPS",
     "build_knee_coil",
     "build_knee_junction",
     "build_knee_periodic_coil",

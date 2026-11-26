@@ -27,11 +27,12 @@ class TestTheTableIsTheModeList:
             known = set(parameter_names(mode))
             assert set(params) <= known, label
 
-    def test_the_knee_routes_are_all_represented(self):
+    def test_the_exact_routes_are_all_represented(self):
         modes = {mode for _, mode, _, _, _ in CASES}
         assert modes == {
             "toroid (knees)", "coil (knees)", "coil (knees, periodic)",
             "junction (knees)", "supernetwork (knees)", "schwarzite (knees)",
+            "superstructure (Goldberg)",
         }
 
     def test_each_expected_budget_is_the_law_not_a_number(self):

@@ -47,12 +47,14 @@ from ase import io as ase_io
 
 from ..builders import (
     BEND_PLANES,
+    GOLDBERG_MAPS,
     build_bundle,
     build_capped_cnt,
     build_carbon_foam,
     build_cnt,
     build_coil,
     build_fullerene,
+    build_goldberg,
     build_graphene_supercell,
     build_haeckelite,
     build_haeckelite_tube,
@@ -493,7 +495,7 @@ def _cmd_cnt_cap(args):
         roughness=args.roughness,
         defects=_parse_defect_specs(args.defect),
         relax_iterations=args.relax_iterations,
-        seed=args.seed,
+        seed=args.seed, goldberg=args.goldberg,
     )
     atoms = _maybe_dope(atoms, args)
     xyz_path, json_path = write_render_bundle(atoms, Path(args.out))
@@ -1188,6 +1190,19 @@ def _cmd_schwarzite_knees(args):
     return 0
 
 
+def _cmd_goldberg(args):
+    from ..builders.goldberg import describe_goldberg
+
+    atoms = build_goldberg(kind=args.kind, m=args.m, n=args.n, bond=args.bond,
+                           vacuum=args.vacuum, relax=not args.no_relax)
+    atoms = _maybe_dope(atoms, args)
+    _report_structure(atoms, *write_render_bundle(atoms, Path(args.out)))
+    print(f"  structure   = {describe_goldberg(atoms)}")
+    print("  route       = flat graphene patches on a coarse map; the only "
+          "rings that are not hexagons are the map's own vertices")
+    return 0
+
+
 def _cmd_coil_knees_periodic(args):
     atoms = build_knee_periodic_coil(
         coil_radius=args.coil_radius, pitch=args.pitch,
@@ -1390,7 +1405,7 @@ def _cmd_schwarzite(args):
         thickness=args.thickness, bond=args.bond, grid_resolution=args.grid,
         remesh_iterations=args.remesh_iterations,
         anneal_sweeps=args.anneal_sweeps, roughness=args.roughness,
-        seed=args.seed,
+        seed=args.seed, goldberg=args.goldberg,
     )
     atoms = _maybe_dope(atoms, args)
     _report_structure(atoms, *write_render_bundle(atoms, Path(args.out)))
@@ -2822,6 +2837,35 @@ def build_parser() -> argparse.ArgumentParser:
         ck, seed_help="Seed for dopant placement; the coil itself is exact.")
     ck.set_defaults(func=_cmd_coil_knees)
 
+    gb = sub.add_parser(
+        "goldberg",
+        help="A superstructure from flat graphene patches on a coarse "
+             "polyhedral map, the defects only at the map's vertices "
+             "(Mackay & Terrones 1991; Koshino & Aoki 2016). Schwarz P is "
+             "twelve octagons per cell and hexagons everywhere else.",
+    )
+    gb.add_argument("--kind", choices=sorted(GOLDBERG_MAPS),
+                    default="primitive",
+                    help="'primitive': Schwarz P as the muoctahedron, 12 "
+                         "octagons per cell. 'super-square': a sheet of "
+                         "fused truncated octahedra, 4 pentagons at the "
+                         "poles and 8 octagons in the saddles.")
+    gb.add_argument("--m", type=int, default=3,
+                    help="Goldberg-Coxeter index: m rings between defects, "
+                         "m^2 times the coarse map's faces.")
+    gb.add_argument("--n", type=int, default=0,
+                    help="Second index: 0 or equal to --m (chiral patches "
+                         "are not built).")
+    gb.add_argument("--bond", type=float, default=1.42)
+    gb.add_argument("--vacuum", type=float, default=12.0,
+                    help="Vacuum above and below a sheet (Å).")
+    gb.add_argument("--no-relax", action="store_true")
+    gb.add_argument("--out", required=True,
+                    help="Output path without extension.")
+    _add_doping_arguments(
+        gb, seed_help="Seed for dopant placement; the cell itself is exact.")
+    gb.set_defaults(func=_cmd_goldberg)
+
     sk = sub.add_parser(
         "schwarzite-knees",
         help="A Schwarz P schwarzite built from a six-arm node: hexagons "
@@ -3098,6 +3142,12 @@ def build_parser() -> argparse.ArgumentParser:
     sn.add_argument("--grid", type=int, default=72,
                     help="Grid points across the cell.")
     sn.add_argument("--remesh-iterations", type=int, default=25)
+    sn.add_argument("--goldberg", type=int, default=1,
+                    help="Remesh this many times coarser and fill each coarse "
+                         "triangle with an exact graphene patch: far fewer "
+                         "disclinations, each in crystalline wall. 1 is the "
+                         "plain meshed route; the tube needs a radius above "
+                         "about 2*goldberg Å.")
     sn.add_argument("--out", required=True,
                     help="Output path without extension.")
     _add_surface_flags(sn)
@@ -3119,6 +3169,12 @@ def build_parser() -> argparse.ArgumentParser:
     sz.add_argument("--grid", type=int, default=64,
                     help="Grid points across one period; 64+ for a clean weld.")
     sz.add_argument("--remesh-iterations", type=int, default=25)
+    sz.add_argument("--goldberg", type=int, default=1,
+                    help="Remesh this many times coarser and fill each coarse "
+                         "triangle with an exact graphene patch: far fewer "
+                         "disclinations, each in crystalline wall. 1 is the "
+                         "plain meshed route; the tube needs a radius above "
+                         "about 2*goldberg Å.")
     sz.add_argument("--out", required=True, help="Output path without extension.")
     _add_surface_flags(sz, anneal=0)
     sz.set_defaults(func=_cmd_schwarzite)

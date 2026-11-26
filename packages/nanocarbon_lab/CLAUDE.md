@@ -1243,6 +1243,88 @@ coordinates it is meant to produce. This package met that wall from the
 other side: `heptanene`'s Laplacian has an **8-fold degenerate** first
 non-trivial eigenvalue, so no three of its eigenvectors embed it at all.
 
+## Goldberg-Coxeter: the literature's route, and the cleanest one here
+
+`builders/goldberg.py` is the third way to an exact wall, after the knee
+route and the mesh route, and it is the one the schwarzite literature has
+used since Mackay & Terrones (*Nature* **352**, 762, 1991) and Koshino &
+Aoki (*PRB* **93**, 041412(R), 2016): take a **coarse polyhedral map**
+whose vertices already carry the ring sizes the topology needs, fill every
+coarse triangle with a flat patch of the exact triangular lattice
+(`subdivide` for `(m, 0)`, `root_three` for `(1, 1)`, composed for
+`(m, m)`), and take the dual. Every new vertex has degree six, so the
+only non-hexagons are the map's own vertices, `m` rings apart. It is the
+C60-from-an-icosahedron construction on a surface of negative curvature.
+
+| structure | route | atoms | census | bonds (Å) | verdict |
+|---|---|---|---|---|---|
+| Schwarz P | knee (20, 9) | 968 | `{6: 456, 7: 24}` | 1.417-1.540 | strained |
+| Schwarz P | **GC(4,0)** | 768 | `{6: 368, 8: 12}` | **1.405-1.423** | clean |
+| super-square | knee (12, 5) | 180 | `{5: 4, 6: 68, 7: 16}` | 1.374-1.505 | clean |
+| super-square | **GC(3,0)** | 468 | `{5: 4, 6: 220, 8: 8}` | **1.404-1.436** | clean |
+
+Both Goldberg rows place 100 % of their disclinations on the right side
+of the curvature, and their hexagons read a median `K` of zero: the
+patches really are flat and the curvature really is at the defects.
+P is clean at every size tried, GC(1,0) to GC(6,0) and (1,1), (2,2).
+
+* **The P map is the muoctahedron {6,4|4}**: the hexagonal faces of the
+  bcc truncated-octahedron packing, which separate the corner labyrinth
+  from the body-centred one. 8 hexagons, 12 vertices, `chi = -4`. Fanned
+  from their centres, the vertices come out degree 8 -- twelve octagons
+  -- and nothing else is not six. It is written as its construction
+  (`_truncated_octahedron`), not as a vertex table.
+* **The super-square map is one LAYER of those octahedra**, side squares
+  open as windows, top and bottom squares closed and split on a diagonal:
+  `chi = -2`, census `{5: 4, 8: 8}`. The four pentagons are the poles of
+  each crossing, which are genuinely convex, as in the knee X node.
+* **Both have zero-length arms.** The crossings are fused octahedra, not
+  nodes joined by tubes. Putting a straight square-section tube between
+  two windows turns each window vertex from degree 8 into degree 7 --
+  the knee route's `{5: 4, 7: 16}` comes straight back. So octagons and
+  arms are exclusive on these maps, and that is topology, not tuning.
+* **A coarse edge of exactly half the cell cannot be minimum-imaged.**
+  The super-square's closing-square diagonals are `a/2`; the first build
+  took the wrong image on some of them and returned 3-6 Å bonds while the
+  census was perfect. The map is built in a 2 x 2 supercell, refined, and
+  `fold_mesh` folds it back, checking every triangle appears exactly
+  four times. That is why the super-square needs `m >= 2`.
+* **Chiral `(m, n)` is refused**, not approximated: it needs a
+  consistent cut of the triangular lattice across every coarse edge.
+
+### The general version works on one net, and that is the honest result
+
+`build_supernetwork(goldberg=k)` and `build_schwarzite(goldberg=k)`
+remesh `k` times coarser and fill the coarse mesh with lattice patches
+(`refine_remeshed`), projected back onto the field. Measured at the
+presets' sizes:
+
+| net | k = 1 | k = 2 |
+|---|---|---|
+| super-graphene (34/5/4) | 18.1 % non-hex, 94 % placed | **6.3 %, 100 % placed**, strained |
+| super-cubic (40/5/4) | 19.8 %, clean | torn (bonds to 6.3 Å) |
+| super-square (30/5/4) | 15.0 %, clean | torn |
+| super-diamond (60/5/4) | 19.9 % | broken, 6.1 % |
+| cube cage (24/3/2) | 20.3 % | broken |
+| icosahedral cage (24/4/3) | 21.0 % | broken |
+
+and super-graphene at `k = 3` is broken (bonds to 1.77 Å, collapsed).
+A coarse mesh needs about five edges round each tube, so `k` is bounded
+by the radius -- the window says so -- and even inside that bound most
+nets tear. **It ships as an option with one preset (super-graphene,
+k = 2), not as a default**, and the exact maps above are where the clean
+walls are. Do not extrapolate the super-graphene row to the others.
+
+### Next: the Klein map would give the C168 family
+
+The {3,7} Klein map (`heptanene.klein_quartic_map`, dual side) is a
+coarse map with 24 degree-7 vertices on a genus-3 cell; GC(1,1) of it is
+168 atoms -- Vanderbilt & Tersoff's C168 -- and GC(m,0) gives 56 m^2. It
+is not built because the embedding is the hard part: `heptanene` found
+only two of twenty cocycles that embed at all, and at that cell the
+coarse edges reach half the box, so `subdivide` would need the explicit
+per-edge shifts rather than the minimum image.
+
 ## Perfect is two questions, and most builders answer only one
 
 "Is it textbook-exact?" splits into **topology** (is the census the one

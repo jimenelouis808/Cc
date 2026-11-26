@@ -79,6 +79,7 @@ from ..builders import fullerene_mesh as fm
 from ..builders.bamboo import CUP_ORIENTATIONS
 from ..builders.beads import BEAD_LAYOUTS
 from ..builders.capped_cnt import MIN_CAP_FREQ
+from ..builders.goldberg import GOLDBERG_MAPS
 from ..builders.haeckelite import CATALOGUE as haeckelite_catalogue
 from ..builders.haeckelite import PATTERNS as haeckelite_patterns
 from ..builders.knee import (
@@ -792,6 +793,12 @@ class NanocarbonGUI:
         self.var_s_kind = self._var("s_kind", tk.StringVar(value="primitive"))
         self.var_s_cell = self._var("s_cell", tk.DoubleVar(value=36.0))
         self.var_s_thickness = self._var("s_thickness", tk.DoubleVar(value=0.0))
+        self.var_s_goldberg = self._var("s_goldberg", tk.IntVar(value=1))
+        self.var_gb_kind = self._var("gb_kind",
+                                     tk.StringVar(value="primitive"))
+        self.var_gb_m = self._var("gb_m", tk.IntVar(value=4))
+        self.var_gb_class2 = self._var("gb_class2",
+                                       tk.BooleanVar(value=False))
         self.var_nc_pent = self._var("nc_pent", tk.IntVar(value=1))
         self.var_nc_radius = self._var("nc_radius",
                                        tk.DoubleVar(value=22.0))
@@ -834,6 +841,7 @@ class NanocarbonGUI:
         self.var_sn_scale = self._var("sn_scale", tk.DoubleVar(value=40.0))
         self.var_sn_radius = self._var("sn_radius", tk.DoubleVar(value=5.0))
         self.var_sn_blend = self._var("sn_blend", tk.DoubleVar(value=4.0))
+        self.var_sn_goldberg = self._var("sn_goldberg", tk.IntVar(value=1))
         self.var_net_kind = self._var("net_kind", tk.StringVar(value="cubic"))
         self.var_net_cell = self._var("net_cell", tk.DoubleVar(value=40.0))
         self.var_net_radius = self._var("net_radius", tk.DoubleVar(value=6.0))
@@ -1137,6 +1145,26 @@ class NanocarbonGUI:
                   foreground=MUTED, font=("TkDefaultFont", 8), wraplength=230,
                   justify="left").grid(row=7, column=0, columnspan=2, sticky="w")
 
+        # --- Goldberg route: flat graphene patches on a coarse map
+        self.frame_gb = ttk.LabelFrame(
+            parent, text="Superstructure (Goldberg-Coxeter)", padding=8)
+        self.frame_gb.columnconfigure(0, weight=1)
+        ttk.Label(self.frame_gb, text="Map").grid(row=0, column=0, sticky="w")
+        ttk.Combobox(self.frame_gb, textvariable=self.var_gb_kind,
+                     values=sorted(GOLDBERG_MAPS), state="readonly",
+                     width=14).grid(row=0, column=1, sticky="e", pady=(0, 6))
+        self._param(self.frame_gb, "Index m (rings between defects)",
+                    self.var_gb_m, 2, 8, 1, integer=True, hard_lo=1,
+                    hard_hi=16, command=self._update_gb_hint)
+        ttk.Checkbutton(self.frame_gb, text="Class II, (m, m) instead of (m, 0)",
+                        variable=self.var_gb_class2,
+                        command=self._update_gb_hint).grid(
+            row=3, column=0, columnspan=2, sticky="w")
+        self.lbl_gb = ttk.Label(self.frame_gb, text="", foreground=MUTED,
+                                wraplength=260, justify="left")
+        self.lbl_gb.grid(row=4, column=0, columnspan=2, sticky="w")
+        self.var_gb_kind.trace_add("write", lambda *_: self._update_gb_hint())
+
         # --- knee route: the lattice node behind a cell or a junction
         self.frame_knee = ttk.LabelFrame(
             parent, text="Knee node (exact census)", padding=8)
@@ -1297,6 +1325,10 @@ class NanocarbonGUI:
                     30.0, 56.0, 1, resolution=0.5, hard_lo=20.0, hard_hi=120.0)
         self._param(self.frame_schwarzite, "Thickness offset", self.var_s_thickness,
                     -0.4, 0.4, 3, resolution=0.02, hard_lo=-1.0, hard_hi=1.0)
+        # Coarse remesh + exact graphene patches (builders/goldberg.py).
+        self._param(self.frame_schwarzite, "Goldberg refinement",
+                    self.var_s_goldberg, 1, 3, 6, integer=True,
+                    hard_lo=1, hard_hi=4)
         ttk.Label(self.frame_schwarzite,
                   text="A periodic unit cell: tubes leave one face and return "
                        "through the opposite one. Bigger cells curve more "
@@ -1517,6 +1549,13 @@ class NanocarbonGUI:
         self.lbl_sn = ttk.Label(self.frame_sn, text="", foreground=MUTED,
                                 wraplength=260, justify="left")
         self.lbl_sn.grid(row=7, column=0, columnspan=2, sticky="w")
+        # Remesh coarse, then fill each triangle with an exact lattice
+        # patch: 18 % non-hexagonal rings on super-graphene become 6 %,
+        # all of them on the right side of the curvature. The tube must
+        # hold five coarse edges round it, so radius > ~2 x this.
+        self._param(self.frame_sn, "Goldberg refinement",
+                    self.var_sn_goldberg, 1, 3, 8, integer=True,
+                    hard_lo=1, hard_hi=4, command=self._update_sn_hint)
         self.var_sn_graph.trace_add("write", lambda *_: self._update_sn_hint())
 
         self._build_nanoparticle_panel(parent)
@@ -2195,7 +2234,7 @@ class NanocarbonGUI:
                       self.frame_ribbon,
                       self.frame_centreline, self.frame_defects,
                       self.frame_coil, self.frame_junction, self.frame_schwarzite,
-                      self.frame_knee,
+                      self.frame_knee, self.frame_gb,
                       self.frame_knee_toroid, self.frame_knee_coil,
                       self.frame_haeckelite,
                       self.frame_cage, self.frame_mw, self.frame_bundle,
@@ -2279,6 +2318,11 @@ class NanocarbonGUI:
             self._knee_kind_changed()
             # There is nothing to anneal: the census is exact before any
             # relaxation and a flip could only leave it.
+            self.var_anneal.set(0)
+        elif mode == "superstructure (Goldberg)":
+            self.frame_gb.pack(fill="x")
+            self._update_gb_hint()
+            # Exact before any relaxation, like the knee route.
             self.var_anneal.set(0)
         elif mode == "toroid (knees)":
             self.frame_knee_toroid.pack(fill="x")
@@ -3175,6 +3219,33 @@ class NanocarbonGUI:
                          f"{found.atoms} atoms.")
         self.on_build()
 
+    def _update_gb_hint(self) -> None:
+        """Size and census before the build -- both exact, from the map."""
+        from ..builders.goldberg import GOLDBERG_MAPS, goldberg_atom_count
+
+        kind = self.var_gb_kind.get()
+        m = int(self.var_gb_m.get())
+        n = m if self.var_gb_class2.get() else 0
+        if kind not in GOLDBERG_MAPS:
+            self.lbl_gb.config(text="")
+            return
+        _, genus, _, budget, supercell = GOLDBERG_MAPS[kind]
+        if supercell > 1 and m * m + m * n + n * n < 4:
+            self.lbl_gb.config(text=(
+                f"✗ {kind} needs m ≥ 2: its coarse map's edges are half "
+                "the cell, which only a refined mesh can carry."))
+            return
+        atoms = goldberg_atom_count(kind, m, n)
+        census = {"primitive": "12 octagons per cell, nothing else "
+                               "non-hexagonal",
+                  "super-square": "4 pentagons at the poles, 8 octagons "
+                                  "in the saddles"}.get(kind, "")
+        self.lbl_gb.config(text=(
+            f"GC({m},{n}): {atoms} atoms, {census}; sum(6-n) = {budget} "
+            f"(genus {genus}). Flat graphene patches between the defects, "
+            f"{m} rings apart — the literature's construction "
+            "(Mackay & Terrones 1991; Koshino & Aoki 2016)."))
+
     def _update_sn_hint(self) -> None:
         """Say whether a tube survives between two vertices, and what the
         ring budget will be.
@@ -3224,7 +3295,28 @@ class NanocarbonGUI:
                   f"against it. {graph.note}"
                   + ("" if name in SUPERLATTICES else
                      " This is a finite cage, so the length above is the "
-                     "strut, not a cell edge.")))
+                     "strut, not a cell edge.")
+                  + self._goldberg_note(radius)))
+
+    def _goldberg_note(self, radius: float) -> str:
+        """What the Goldberg refinement does here, and whether it fits.
+
+        A coarse remesh needs about five coarse edges round each tube, so
+        the refinement is bounded by the radius: measured on super-graphene
+        at r = 5 Å, 2 cuts the non-hexagonal rings from 18 % to 6 % with all
+        of them placed, and 3 tears the neck (bonds to 1.77 Å).
+        """
+        level = int(self.var_sn_goldberg.get())
+        if level <= 1:
+            return ""
+        if radius < 2.0 * level + 0.5:
+            return (f" ✗ Goldberg {level} needs a tube radius above about "
+                    f"{2.0 * level + 0.5:.1f} Å: the coarse mesh cannot "
+                    "carry five edges round a thinner tube and the neck "
+                    "tears.")
+        return (f" Goldberg {level}: remeshed {level}× coarser and filled "
+                "with exact graphene patches, so far fewer disclinations, "
+                f"{level} rings apart.")
 
     def _graft_fields(self) -> dict:
         """The grafting half of a Job, shared by all three families.
@@ -3888,6 +3980,10 @@ class NanocarbonGUI:
                 wall_anchor=1.0 if self.var_anchor.get() else 0.0,
                 roughness=float(self.var_roughness.get()),
             )
+        elif mode == "superstructure (Goldberg)":
+            m = int(self.var_gb_m.get())
+            params = dict(kind=self.var_gb_kind.get(), m=m,
+                          n=m if self.var_gb_class2.get() else 0)
         elif mode == "nanocone":
             params = dict(
                 n_pentagons=int(self.var_nc_pent.get()),
@@ -3939,6 +4035,7 @@ class NanocarbonGUI:
                 place_curvature=bool(self.var_place.get()),
                 wall_anchor=1.0 if self.var_anchor.get() else 0.0,
                 roughness=float(self.var_roughness.get()),
+                goldberg=int(self.var_sn_goldberg.get()),
             )
         elif mode == "schwarzite":
             params = dict(
@@ -3949,6 +4046,7 @@ class NanocarbonGUI:
                 place_curvature=bool(self.var_place.get()),
                 wall_anchor=1.0 if self.var_anchor.get() else 0.0,
                 roughness=float(self.var_roughness.get()),
+                goldberg=int(self.var_s_goldberg.get()),
             )
         elif mode == "coil (relaxed)":
             params = dict(

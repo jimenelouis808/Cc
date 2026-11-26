@@ -970,6 +970,7 @@ def build_supernetwork(
     relax_iterations: int = 3000,
     roughness: float = 0.0,
     seed: int | None = 0,
+    goldberg: int = 1,
     _rescue: bool = True,
 ) -> Atoms:
     """Hang a nanotube on every edge of ``graph`` and weld the vertices.
@@ -993,6 +994,15 @@ def build_supernetwork(
         vertex into a sphere and the tubes stop being tubes.
     vacuum
         Padding in Å on directions that do not repeat.
+
+    goldberg
+        Remesh this many times coarser and fill every coarse triangle
+        with a patch of the exact triangular lattice
+        (:func:`~nanocarbon_lab.builders.goldberg.refine_remeshed`). The
+        wall is then crystalline between isolated disclinations instead of
+        amorphous; ``1`` is the plain meshed route. The tube must hold at
+        least five coarse edges round its circumference, so this needs
+        ``tube_radius`` above about ``2 * goldberg`` Å.
 
     Returns
     -------
@@ -1095,14 +1105,26 @@ def build_supernetwork(
                 f"{stats['boundary_edges']} boundary edges")
             continue
         try:
+            # goldberg > 1: remesh COARSE, so the remesher picks far fewer
+            # disclinations, then fill every coarse triangle with a patch
+            # of the exact triangular lattice. The defects are the coarse
+            # mesh's, `goldberg` rings apart, and the wall between them is
+            # crystalline. See builders/goldberg.py.
+            remeshed = rm.isotropic_remesh(
+                mesh, field,
+                target_edge=float(goldberg * np.sqrt(3.0) * bond),
+                iterations=remesh_iterations,
+                box=finish_box, anneal_sweeps=anneal_sweeps,
+                place_curvature=place_curvature,
+                rng=make_rng(seed),
+            )
+            if goldberg > 1:
+                from .goldberg import refine_remeshed
+
+                remeshed = refine_remeshed(remeshed, goldberg, field,
+                                           finish_box)
             atoms = _finish(
-                rm.isotropic_remesh(
-                    mesh, field, target_edge=float(np.sqrt(3.0) * bond),
-                    iterations=remesh_iterations,
-                    box=finish_box, anneal_sweeps=anneal_sweeps,
-                    place_curvature=place_curvature,
-                    rng=make_rng(seed),
-                ),
+                remeshed,
                 field=field,
                 wall_anchor=wall_anchor,
                 bond=bond,
@@ -1128,6 +1150,7 @@ def build_supernetwork(
                     "grid_resolution": resolution,
                     "grid_retries": attempt,
                     "seed": seed,
+                    "goldberg": int(goldberg),
                 },
             )
             if graph.periodic:
@@ -1180,7 +1203,8 @@ def build_supernetwork(
                         anneal_sweeps=anneal_sweeps,
                         place_curvature=place_curvature, wall_anchor=anchor,
                         relax_iterations=relax_iterations,
-                        roughness=roughness, seed=seed, _rescue=False,
+                        roughness=roughness, seed=seed, goldberg=goldberg,
+                        _rescue=False,
                     )
 
                 atoms = rescue_collapsed_wall(

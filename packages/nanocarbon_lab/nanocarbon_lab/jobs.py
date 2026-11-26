@@ -114,6 +114,12 @@ CARBON_MODES = (
     # SuperGraph.ring_budget, reached there from chi = 2(V - E). The
     # two laws agree to the integer on every net in that catalogue.
     "supernetwork (knees)",
+    # The third route to an exact wall, the one the schwarzite literature
+    # uses (Mackay & Terrones 1991; Koshino & Aoki 2016): flat graphene
+    # patches on a coarse polyhedral map, the defects only at its
+    # vertices. Schwarz P comes out as twelve octagons per cell and
+    # nothing else that is not a hexagon; see builders/goldberg.py.
+    "superstructure (Goldberg)",
     "junction",
     "schwarzite",
     "network",
@@ -339,6 +345,7 @@ def builder_for(mode: str):
         build_cnt,
         build_coil,
         build_fullerene,
+        build_goldberg,
         build_haeckelite,
         build_haeckelite_tube,
         build_heptanene,
@@ -404,6 +411,7 @@ def builder_for(mode: str):
         "schwarzite (knees)": build_knee_schwarzite,
         "junction (knees)": build_knee_junction,
         "supernetwork (knees)": build_knee_supernetwork,
+        "superstructure (Goldberg)": build_goldberg,
         "junction": build_junction,
         "schwarzite": build_schwarzite,
         "network": build_nanotube_network,
@@ -806,6 +814,13 @@ def estimate_atoms(job: Job) -> int:
         arguments = {k: v for k, v in p.items() if k in keep}
         arguments["relax"] = False
         return len(maker(**arguments))
+
+    if mode == "superstructure (Goldberg)":
+        # Exact and free: coarse faces per cell times T.
+        from .builders.goldberg import goldberg_atom_count
+
+        return goldberg_atom_count(str(p.get("kind", "primitive")),
+                                   int(p.get("m", 3)), int(p.get("n", 0)))
 
     if mode == "heptanene":
         # Exact: the Klein quartic has 56 vertices and there is nothing
@@ -1237,6 +1252,10 @@ _CLI_MAP: dict[str, tuple[str, dict[str, str]]] = {
         "arm_rows": "--arm-rows", "bond": "--bond",
         "vacuum": "--vacuum",
     }),
+    "superstructure (Goldberg)": ("goldberg", {
+        "kind": "--kind", "m": "--m", "n": "--n", "bond": "--bond",
+        "vacuum": "--vacuum",
+    }),
     "heptanene": ("heptanene", {
         "bond": "--bond", "strict": "--no-strict",
     }),
@@ -1258,11 +1277,12 @@ _CLI_MAP: dict[str, tuple[str, dict[str, str]]] = {
     "supernetwork": ("supernetwork", {
         "graph": "--graph", "scale": "--scale",
         "tube_radius": "--tube-radius", "blend": "--blend", "bond": "--bond",
+        "goldberg": "--goldberg",
     }),
     "schwarzite": ("schwarzite", {
         "kind": "--kind", "cell": "--cell", "thickness": "--thickness",
         "bond": "--bond", "anneal_sweeps": "--anneal-sweeps",
-        "roughness": "--roughness",
+        "roughness": "--roughness", "goldberg": "--goldberg",
     }),
     "multi-wall": ("mwcnt", {
         "n_shells": "--shells", "inner_freq": "--inner-freq",

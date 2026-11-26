@@ -47,6 +47,11 @@ CASES: list[tuple[str, str, dict, int | None, bool]] = [
     ("Schwarz P cell", "schwarzite (knees)", {"kind": "primitive"}, -24, True),
     ("Schwarz D cell", "schwarzite (knees)", {"kind": "diamond"}, -96, True),
     ("gyroid cell", "schwarzite (knees)", {"kind": "gyroid"}, -48, True),
+    # The Goldberg-Coxeter route: flat patches, defects at map vertices.
+    ("Schwarz P, GC(3,0)", "superstructure (Goldberg)",
+     {"kind": "primitive", "m": 3}, -24, False),
+    ("super-square, GC(3,0)", "superstructure (Goldberg)",
+     {"kind": "super-square", "m": 3}, -12, False),
 ]
 
 

@@ -246,6 +246,7 @@ def build_schwarzite(
     roughness: float = 0.0,
     relax_iterations: int = 3000,
     seed: int | None = 0,
+    goldberg: int = 1,
 ) -> Atoms:
     """Build a **periodic** schwarzite unit cell (negative-curvature carbon).
 
@@ -310,6 +311,15 @@ def build_schwarzite(
         can fail; the builder checks and says so rather than emitting a
         torn surface.
 
+    goldberg
+        Remesh this many times coarser and fill every coarse triangle
+        with a patch of the exact triangular lattice
+        (:func:`~nanocarbon_lab.builders.goldberg.refine_remeshed`). The
+        wall is then crystalline between isolated disclinations instead of
+        amorphous; ``1`` is the plain meshed route. The tube must hold at
+        least five coarse edges round its circumference, so this needs
+        ``tube_radius`` above about ``2 * goldberg`` Å.
+
     Returns
     -------
     ase.Atoms
@@ -355,13 +365,21 @@ def build_schwarzite(
             )
             continue
         try:
-            return _finish(
+            # goldberg > 1 remeshes coarse and fills each triangle with an
+            # exact lattice patch (builders/goldberg.py): far fewer
+            # disclinations, each in crystalline wall.
+            from .goldberg import refine_remeshed
+
+            remeshed = refine_remeshed(
                 rm.isotropic_remesh(
-                    mesh, field, target_edge=np.sqrt(3.0) * bond,
+                    mesh, field, target_edge=goldberg * np.sqrt(3.0) * bond,
                     iterations=remesh_iterations, box=cell,
                     anneal_sweeps=anneal_sweeps, rng=make_rng(seed),
                     place_curvature=place_curvature,
                 ),
+                goldberg, field, cell)
+            return _finish(
+                remeshed,
                 field=field,
                 wall_anchor=wall_anchor,
                 bond=bond,
@@ -375,6 +393,7 @@ def build_schwarzite(
                     "anneal_sweeps": anneal_sweeps,
                     "roughness": roughness,
                     "schwarzite_kind": kind,
+                    "goldberg": int(goldberg),
                     "cell": cell,
                     "thickness": thickness,
                     "bond": bond,
