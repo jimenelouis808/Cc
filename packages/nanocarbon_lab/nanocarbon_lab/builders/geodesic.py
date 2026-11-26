@@ -513,6 +513,7 @@ GEODESIC_CAGES: dict[str, dict] = {
     # (best 14 deg); fitted node by node, frequency 6 puts every arm on a
     # window exactly.
     "super-hypercube": {"freq": 6, "tolerance_deg": 0.5},
+    "super-truncated-cube": {"freq": 4, "tolerance_deg": 2.5},
 }
 
 

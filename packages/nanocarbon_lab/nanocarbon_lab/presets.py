@@ -269,6 +269,13 @@ PRESETS: dict[str, dict[str, object]] = {
            ("Octahedral cage (geodesic, clean)", "super-octahedron", 4),
            ("Superfullerene C60 (geodesic, clean)", "superfullerene-C60", 2),
        )},
+    # The projected tesseract, one sphere frame per node, frequency 6,
+    # two antiprism rows: 14784 atoms, {5: 192, 7: 384}, 1.403-1.439 A,
+    # clean and 100 % placed. The octahedral frame was broken at every size.
+    "Hypercube cage (geodesic, clean)": {
+        "mode_kind": "superstructure (geodesic)",
+        "gd_graph": "super-hypercube", "gd_m": 1, "gd_freq": 6,
+        "gd_rows": 2, "anneal": 0},
     # Measured at m=1: 3840 atoms, {5: 96, 7: 240}, 1.355-1.483 A, clean.
     "Cuboctahedral cage (geodesic, clean)": {
         "mode_kind": "superstructure (geodesic)",

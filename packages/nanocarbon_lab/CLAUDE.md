@@ -1586,12 +1586,20 @@ are the node's pentagons.
 | cuboctahedron | 4 | 1, 1 | 3840 | 1.355-1.483 | clean |
 | hypercube, per node | 4 | 1, 1 | 7136 | 1.320-1.532 | strained, 98 % |
 | hypercube, per node | **6** | 1, 1 | 14256 | 1.324-1.501 | strained, **100 %** |
+| **hypercube, per node** | **6** | **1, 2** | 14784 | **1.403-1.439** | **clean, 100 %** |
 | truncated cube | 4 | 1, 1 | 7680 | 1.299-1.546 | broken |
+| truncated cube | 4 | 1, 2 | 8112 | 1.340-1.520 | strained |
+| truncated cube | 4 | 2, 1 | 30720 | 1.354-1.493 | clean |
 
 The hypercube fits **exactly** at frequency 6, node by node, and its
 census `{5: 192, 7: 384}` meets `12(V - E) = -192` with every defect
-placed; the frame route's tesseract was broken at every size. Strained
-is the honest verdict and it is a real improvement, not a fix.
+placed; the frame route's tesseract was broken at every size. With
+**two antiprism rows** it is clean, at 1.403-1.439 Å -- tighter than any
+cage in the table above. One row leaves the two kinds of node too close
+for the necks to relax; the census does not change, only the room.
+The truncated cube says the same thing differently: broken at one row,
+strained at two, clean at m = 2 -- the room comes from the tube or from
+the arm, and either works.
 
 
 ## Perfect is two questions, and most builders answer only one
