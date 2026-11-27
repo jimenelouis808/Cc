@@ -1620,9 +1620,18 @@ going *into* `equilateralise` was sound. Rebuilt after the fix, same
 parameters (per-node freq 4, m = 1, one row): 10240 atoms,
 `{5: 320, 7: 512}`, 1.309-1.537 Å, strained, 99.5 % placed -- from
 broken to strained on that one change. **At two rows it is clean**:
-10816 atoms, 1.358-1.483 Å, 100 % placed, 45 min. Only (4,4) has been
-measured; the other six supertubes are in `CAGES` but not in
-`GEODESIC_CAGES`.
+10816 atoms, 1.358-1.483 Å, 100 % placed, 45 min. All seven rolls in
+`CAGES` are in `GEODESIC_CAGES`; measured at the same parameters
+(frequency 4, m = 1, two rows):
+
+| supertube | atoms | census | bonds (Å) | verdict |
+|---|---|---|---|---|
+| (4,4) | 10816 | -- | 1.358-1.483 | clean |
+| (5,5) | 13520 | `{5: 480, 7: 720}` | 1.381-1.448 | clean |
+| (6,6) | 16224 | `{5: 456, 7: 744}` | 1.346-1.505 | clean |
+| (6,0) | 16224 | `{5: 508, 7: 796}` | 1.316-1.504 | strained |
+
+The armchair rolls are clean; the zigzag (6,0) is strained.
 
 ### The Archimedean audit: room, not frames
 
