@@ -1952,6 +1952,48 @@ table, which were built before the rule existed. GC(3,1) Schwarz P is the tighte
 in the Goldberg and geodesic frames of the window and on both
 subcommands; `(m, n)` and `(n, m)` are mirror images.
 
+### Periodic superstructures: the Euclidean kaleidoscope
+
+Which superstructures can be made periodic has an exact answer. A cage
+tiles space only if its point group is a crystallographic one, so **the
+icosahedral cages cannot** -- no lattice has a five-fold axis -- while
+the cubic family can: the uniform honeycombs of `[4,3,4]` are built from
+exactly those cages, and each is one periodic superstructure.
+`wythoff.euclidean_wythoff` takes the same three-mirror construction to
+the affine groups `[4,3,4]`, `[4,4]` and `[6,3]` (a mirror is a plane
+`n.x + d = 0`, the generator solves `n_i.x + d_i = rings_i * t`), grows
+the orbit **unfolded** in a window of five cells and cuts it to one.
+Folding as it grows is wrong for `[6,3]`: the orthohexagonal cell is not
+closed under its 60 deg rotations, and the orbit came out half-filled.
+The 15 distinct patterns' vertex counts and coordinations are pinned in
+`test_wythoff.py`; `WYTHOFF_NETS` names the twelve no other catalogue
+holds (cubic, square, honeycomb and kagome are super-cubic,
+super-square, super-graphene and super-kagome already).
+
+| net | made of | freq, r, rows | atoms | bonds (Å) | verdict |
+|---|---|---|---|---|---|
+| triangular 3^6 | -- | 2, 1, 1 | 232 | 1.367-1.439 | clean |
+| 4.8.8 | -- | 4, 2, 1 | 1272 | 1.363-1.476 | clean |
+| 3.12.12 | -- | 4, 3, 1 | 4272 | 1.385-1.462 | clean |
+| 4.6.12 | -- | 4, 1, 2 | 8112 | 1.359-1.482 | clean (broken at 1 row) |
+| truncated cubic | truncated cubes + octahedra | 4, 1, 2 | 2100 | 1.341-1.502 | clean (strained at 1 row) |
+| rectified cubic | octahedra + cuboctahedra | 6, 2, 1 | 2148 | 1.347-1.491 | clean, 99 % (broken at f2) |
+| **bitruncated cubic (SOD)** | truncated octahedra | 4, 2, 1 | 3792 | 1.353-1.493 | clean (broken at f2) |
+| cantitruncated cubic | truncated cuboctahedra, ... | 4, 2, 1 | 7680 | 1.377-1.464 | clean, 96 % |
+| omnitruncated cubic | truncated cuboctahedra + octagonal prisms | 4, 2, 1 | 15360 | 1.356-1.488 | clean, 95 % |
+| cantellated cubic | rhombicuboctahedra, cuboctahedra, cubes | 4, 1, 1-2 | 3840-4248 | 1.294-1.535 | broken |
+| runcitruncated cubic | truncated cubes, rhombicuboctahedra, ... | 4, 1, 2 | 8376 | 1.306-1.526 | strained |
+| 3.4.6.4 | -- | 4, 1, 1-2 | 3840-4112 | 1.296-1.538 | broken |
+All at m = 1 and the largest window that fits, so each node is as small
+as its arms allow. The truncated-octahedron cage tiles space face to face
+-- its periodic version is the **sodalite net**, and it is clean.
+The rule of the Archimedean audit holds again: strained at one row,
+clean at two; and where the arms miss the frequency-4 windows (the
+nets that hold rhombicuboctahedra or 3.4.6.4 vertices) more rows do not
+help, a finer sphere does. The tetrahedral cages' honeycombs (the
+quarter-cubic and alternated ones) need the `[3^[4]]` group and are not
+built.
+
 
 ## Perfect is two questions, and most builders answer only one
 
