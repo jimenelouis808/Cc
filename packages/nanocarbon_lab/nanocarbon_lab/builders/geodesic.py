@@ -780,7 +780,7 @@ GEODESIC_CAGES: dict[str, dict] = {
     "supertube-(4,4)": {"freq": 4, "tolerance_deg": 4.5},
     "supertube-(5,5)": {"freq": 4, "tolerance_deg": 4.5},
     "supertube-(6,6)": {"freq": 4, "tolerance_deg": 4.5},
-    "supertube-(8,8)": {"freq": 4, "tolerance_deg": 4.5},
+    "supertube-(8,8)": {"freq": 6, "tolerance_deg": 4.5},
     "supertube-(6,0)": {"freq": 6, "tolerance_deg": 4.5},
     "supertube-(8,0)": {"freq": 4, "tolerance_deg": 4.5},
     "supertube-(10,0)": {"freq": 4, "tolerance_deg": 4.5},
