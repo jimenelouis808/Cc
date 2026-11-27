@@ -334,24 +334,8 @@ def build_geodesic_superstructure(
     if isinstance(graph, str):
         graph = _named(graph)
     points, cell = _graph_frame(graph)
-    # One shared frame first: every window rim then has the same
-    # orientation and the carrier is mirror-exact (super-cube's GC(2,1)
-    # and GC(1,2) agree to 2e-9). Frames carried by a group come next,
-    # for Wythoff cages -- exact for [5,3], but a [4,3] mirror is not a
-    # symmetry of the icosahedral sphere, turns a two-fold rim 90 deg and
-    # makes the arm choose a twist (the Wythoff cube's mirror pair came
-    # out 1.9 % apart). Per-node fits are last.
-    frame, miss = fit_frame(points, graph.edges, freq, cell=cell, seed=seed)
-    per_node = miss > tolerance_deg
-    if per_node and graph.name.startswith("wythoff-"):
-        from .wythoff import wythoff_frames
-
-        group_frame, group_miss = wythoff_frames(graph.name, freq, seed=seed)
-        if group_miss <= tolerance_deg:
-            frame, miss, per_node = group_frame, group_miss, "group"
-    if per_node is True:
-        frame, miss = fit_node_frames(points, graph.edges, freq, cell=cell,
-                                      seed=seed)
+    frame, miss, per_node = _choose_frames(graph, points, cell, freq,
+                                           tolerance_deg, seed)
     coarse, budget, scale, report = geodesic_map(
         points, graph.edges, frame, freq=freq, rows=rows,
         tolerance_deg=tolerance_deg, cell=cell)
@@ -386,6 +370,36 @@ def build_geodesic_superstructure(
         **report,
     })
     return atoms
+
+
+def _choose_frames(graph, points, cell, freq: int, tolerance_deg: float,
+                   seed: int = 0, starts: int = 24):
+    """Node frames for a build, and which kind: shared, group or per node.
+
+    One shared frame first: every window rim then has the same
+    orientation and the carrier is mirror-exact (super-cube's GC(2,1)
+    and GC(1,2) agree to 2e-9). Frames carried by a group come next, for
+    Wythoff cages -- exact for [5,3], but a [4,3] mirror is not a
+    symmetry of the icosahedral sphere, turns a two-fold rim 90 deg and
+    makes the arm choose a twist (the Wythoff cube's mirror pair came out
+    1.9 % apart that way). Per-node fits are last.
+
+    Returns ``(frame, worst_miss_deg, kind)`` with kind ``False``
+    (shared), ``"group"`` or ``True`` (per node).
+    """
+    frame, miss = fit_frame(points, graph.edges, freq, starts=starts,
+                            seed=seed, cell=cell)
+    if miss <= tolerance_deg:
+        return frame, miss, False
+    if graph.name.startswith("wythoff-"):
+        from .wythoff import wythoff_frames
+
+        group_frame, group_miss = wythoff_frames(graph.name, freq, seed=seed)
+        if group_miss <= tolerance_deg:
+            return group_frame, group_miss, "group"
+    frame, miss = fit_node_frames(points, graph.edges, freq, cell=cell,
+                                  seed=seed)
+    return frame, miss, True
 
 
 def _graph_frame(graph) -> tuple[np.ndarray, np.ndarray | None]:
@@ -564,6 +578,11 @@ GEODESIC_CAGES: dict[str, dict] = {
     "super-bcc": {"freq": 3, "tolerance_deg": 0.5},
     "super-kagome": {"freq": 2, "tolerance_deg": 0.5},
     "super-lonsdaleite": {"freq": 3, "tolerance_deg": 0.5},
+    # Wythoff cages no other catalogue holds (builders/wythoff.py).
+    "wythoff-truncated-dodecahedron": {"freq": 2, "tolerance_deg": 0.5},
+    "wythoff-rhombicosidodecahedron": {"freq": 2, "tolerance_deg": 0.5},
+    "wythoff-truncated-icosidodecahedron": {"freq": 2, "tolerance_deg": 0.5},
+    "wythoff-truncated-cuboctahedron": {"freq": 4, "tolerance_deg": 1.5},
 }
 
 
@@ -574,9 +593,7 @@ def geodesic_atom_count(graph: str = "super-icosahedron", m: int = 2,
     g = _named(graph)
     points, cell = _graph_frame(g)
     tolerance = GEODESIC_CAGES.get(graph, {}).get("tolerance_deg", 2.5)
-    frame, miss = fit_frame(points, g.edges, freq, starts=8, cell=cell)
-    if miss > tolerance:
-        frame, _ = fit_node_frames(points, g.edges, freq, cell=cell)
+    frame, _, _ = _choose_frames(g, points, cell, freq, tolerance, starts=8)
     (_, tris), _, _, _ = geodesic_map(points, g.edges, frame, freq=freq,
                                       rows=rows, tolerance_deg=tolerance,
                                       cell=cell)

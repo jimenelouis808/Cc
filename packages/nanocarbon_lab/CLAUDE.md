@@ -1771,7 +1771,44 @@ The diastereomers' 1.1 % is inside that, and **no energetic difference
 between them can be claimed** from these builds. Settling it needs the
 enantiomer built by reflecting atoms rather than rebuilding, and an
 energy from something better than a fixed-cell VFF scan whose own step
-is 1 %. GC(3,1) Schwarz P is the tightest P cell in the package. `n` is
+is 1 %.
+
+**Exact enantiomers, and the carrier's own handedness.**
+`geodesic.enantiomer` reflects a finished structure through `x = L/2`:
+every length and angle identical, `gc_indices` and the srs label swapped,
+and a pseudoscalar (each atom's bond-vector triple product) flips sign --
+a test pins all three. `strain_energy` is the relaxer's bond and angle
+terms per atom, mirror-invariant by construction, for comparing builds.
+
+What made the rebuilt mirror differ was traced to the **window rims**.
+At frequency 2 a window around a two-fold vertex is a hexagon with only
+two-fold symmetry. With one shared frame every rim has the same
+orientation and arms join like rims: the Wythoff cube's GC(2,1) and
+GC(1,2) then agree to **1e-15**, the truncated icosahedron's to 4e-9.
+Carry the frames by the cube's group instead and a [4,3] mirror -- not a
+symmetry of the icosahedral sphere -- turns a rim 90 deg about its arm;
+the arm then needs a +-1.5-step twist, picks one, and the carrier itself
+becomes chiral (1.9 % apart). Per-node frames have the same exposure,
+which is why srs, whose nodes need them, could not compare its
+diastereomers. `_choose_frames` therefore prefers a shared frame, then
+group frames (exact under [5,3], whose every element is a symmetry of the
+sphere; 7e-5 on the truncated cuboctahedron), then per-node fits, and
+records which in `info["node_frames"]`. An even row count was tried as a
+fix for the twist and changed nothing on the cube, so it is not there.
+
+### Wythoff's kaleidoscope
+
+`builders/wythoff.py` generates every Platonic and Archimedean cage (the
+snubs aside) from three mirrors at `pi/p`, `pi/2`, `pi/q` and a ring
+pattern: the generator lies on each unringed mirror and equidistant from
+the ringed ones, its orbit is the vertex set, the shortest pairs are the
+edges. Sixteen solids, every vertex, edge and degree count checked
+against the tables in `test_wythoff.py`, none of them written down in the
+module. `wythoff_frames` fits the node frame once at the generator and
+carries it by the group element that carries the vertex, which fits
+every [5,3] solid **exactly** at frequency 2 -- including the three no
+other catalogue here had: the truncated dodecahedron, the
+rhombicosidodecahedron and the truncated icosidodecahedron. GC(3,1) Schwarz P is the tightest P cell in the package. `n` is
 in the Goldberg and geodesic frames of the window and on both
 subcommands; `(m, n)` and `(n, m)` are mirror images.
 
