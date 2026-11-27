@@ -219,10 +219,10 @@ PRESETS: dict[str, dict[str, object]] = {
     # strained. Both have zero-length arms: the crossings are fused
     # truncated octahedra, not nodes joined by tubes.
     "Schwarz P (Goldberg, 12 octagons)": {
-        "mode_kind": "superstructure (Goldberg)", "gb_kind": "primitive",
+        "mode_kind": "superstructure (Goldberg)", "gb_n": 0, "gb_kind": "primitive",
         "gb_m": 4, "gb_class2": False, "anneal": 0},
     "Schwarz P (Goldberg, small, DFT-ready)": {
-        "mode_kind": "superstructure (Goldberg)", "gb_kind": "primitive",
+        "mode_kind": "superstructure (Goldberg)", "gb_n": 0, "gb_kind": "primitive",
         "gb_m": 2, "gb_class2": False, "anneal": 0},
     # Schwarz D from Vanderbilt & Tersoff's C168 (PRL 68, 511, 1992),
     # rebuilt from their Table I and used as a coarse Klein {3,7} map:
@@ -230,13 +230,29 @@ PRESETS: dict[str, dict[str, object]] = {
     # (672 atoms, bonds 1.406-1.455 A); GC(2,0) is 896 atoms, clean.
     # GC(1,0) is the all-heptagon cell -- see "heptanene" in CLAUDE.md.
     "Schwarz D (Goldberg, C168 family)": {
-        "mode_kind": "superstructure (Goldberg)", "gb_kind": "diamond",
+        "mode_kind": "superstructure (Goldberg)", "gb_n": 0, "gb_kind": "diamond",
         "gb_m": 1, "gb_class2": True, "anneal": 0},
     "Schwarz D (Goldberg, 896 atoms)": {
-        "mode_kind": "superstructure (Goldberg)", "gb_kind": "diamond",
+        "mode_kind": "superstructure (Goldberg)", "gb_n": 0, "gb_kind": "diamond",
         "gb_m": 2, "gb_class2": False, "anneal": 0},
-    "Heptanene on Schwarz D (all heptagons)": {
+    # GC(2,0) of the D map relaxes to a = 24.74 A, which is faujasite's
+    # cubic cell: FAU's supercages sit on a diamond net and so does its
+    # framework, so the carbon lining the pores (zeolite-templated carbon)
+    # is a D-type wall, and this one is commensurate with the template.
+    "FAU replica (Schwarz D GC(2,0), a = 24.74 A)": {
+        "mode_kind": "superstructure (Goldberg)", "gb_n": 0,
+        "gb_kind": "diamond", "gb_m": 2, "gb_class2": False, "anneal": 0},
+    # Chiral GC (goldberg.chiral_subdivide); (m, n) and (n, m) are mirror
+    # images. Measured clean: P (3,1) 624 atoms 1.417-1.432 A, the
+    # tightest P cell here; D (2,1) 1568 atoms 1.407-1.468 A.
+    "Schwarz P chiral (Goldberg GC(3,1))": {
+        "mode_kind": "superstructure (Goldberg)", "gb_kind": "primitive",
+        "gb_m": 3, "gb_n": 1, "gb_class2": False, "anneal": 0},
+    "Schwarz D chiral (Goldberg GC(2,1))": {
         "mode_kind": "superstructure (Goldberg)", "gb_kind": "diamond",
+        "gb_m": 2, "gb_n": 1, "gb_class2": False, "anneal": 0},
+    "Heptanene on Schwarz D (all heptagons)": {
+        "mode_kind": "superstructure (Goldberg)", "gb_n": 0, "gb_kind": "diamond",
         "gb_m": 1, "gb_class2": False, "anneal": 0},
     # Octahedral frames (builders/frame.py): truncated-octahedron nodes,
     # prism arms, refined into graphene. Measured: every defect isolated
@@ -259,7 +275,7 @@ PRESETS: dict[str, dict[str, object]] = {
     #   tetrahedron   freq 4   5120        1.371-1.494
     #   octahedron    freq 4   7680        1.361-1.498
     #   C60 of tubes  freq 2  23520        1.391-1.465
-    **{label: {"mode_kind": "superstructure (geodesic)", "gd_graph": graph,
+    **{label: {"mode_kind": "superstructure (geodesic)", "gd_n": 0, "gd_graph": graph,
                "gd_m": 2, "gd_freq": freq, "gd_rows": 1, "anneal": 0}
        for label, graph, freq in (
            ("Icosahedral cage (geodesic, clean)", "super-icosahedron", 2),
@@ -273,12 +289,27 @@ PRESETS: dict[str, dict[str, object]] = {
     # two antiprism rows: 14784 atoms, {5: 192, 7: 384}, 1.403-1.439 A,
     # clean and 100 % placed. The octahedral frame was broken at every size.
     "Hypercube cage (geodesic, clean)": {
-        "mode_kind": "superstructure (geodesic)",
+        "mode_kind": "superstructure (geodesic)", "gd_n": 0,
         "gd_graph": "super-hypercube", "gd_m": 1, "gd_freq": 6,
         "gd_rows": 2, "anneal": 0},
+    # The Archimedean audit, every one clean and 100 % placed:
+    #   icosidodecahedron      freq 2, m=2, 1 row   12480  1.393-1.449 A
+    #   truncated tetrahedron  freq 4, m=1, 2 rows   4056  1.336-1.500
+    #   truncated octahedron   freq 4, m=1, 2 rows   8112  1.346-1.512
+    **{label: {"mode_kind": "superstructure (geodesic)", "gd_n": 0,
+               "gd_graph": graph, "gd_m": m, "gd_freq": freq,
+               "gd_rows": rows, "anneal": 0}
+       for label, graph, m, freq, rows in (
+           ("Icosidodecahedral cage (geodesic, clean)",
+            "super-icosidodecahedron", 2, 2, 1),
+           ("Truncated-tetrahedral cage (geodesic, clean)",
+            "super-truncated-tetrahedron", 1, 4, 2),
+           ("Truncated-octahedral cage (geodesic, clean)",
+            "super-truncated-octahedron", 1, 4, 2),
+       )},
     # Measured at m=1: 3840 atoms, {5: 96, 7: 240}, 1.355-1.483 A, clean.
     "Cuboctahedral cage (geodesic, clean)": {
-        "mode_kind": "superstructure (geodesic)",
+        "mode_kind": "superstructure (geodesic)", "gd_n": 0,
         "gd_graph": "super-cuboctahedron", "gd_m": 1, "gd_freq": 4,
         "gd_rows": 1, "anneal": 0},
     # The same carrier in a periodic cell, scanned. m=2, rows=1, measured
@@ -288,7 +319,7 @@ PRESETS: dict[str, dict[str, object]] = {
     #   super-graphene freq 2  1568        1.342-1.506    {5:24, 7:48}
     #   super-diamond  freq 3  5760        1.341-1.511    18 min
     #   super-fcc      freq 4  5120        1.340-1.505    13 min
-    **{label: {"mode_kind": "superstructure (geodesic)", "gd_graph": graph,
+    **{label: {"mode_kind": "superstructure (geodesic)", "gd_n": 0, "gd_graph": graph,
                "gd_m": 2, "gd_freq": freq, "gd_rows": 1, "anneal": 0}
        for label, graph, freq in (
            ("Super-cubic (geodesic, clean)", "super-cubic", 2),
@@ -309,7 +340,7 @@ PRESETS: dict[str, dict[str, object]] = {
         "mode_kind": "superstructure (frame)", "fr_kind": "super-diamond",
         "fr_m": 3, "fr_rows": 1, "fr_class2": False, "anneal": 0},
     "Super-square (Goldberg, octagons)": {
-        "mode_kind": "superstructure (Goldberg)", "gb_kind": "super-square",
+        "mode_kind": "superstructure (Goldberg)", "gb_n": 0, "gb_kind": "super-square",
         "gb_m": 3, "gb_class2": False, "anneal": 0},
     "Super-square (knees, tubes on a square net)": {
         "mode_kind": "supernetwork (knees)", "knee_net": "super-square",

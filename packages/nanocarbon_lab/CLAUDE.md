@@ -1621,6 +1621,68 @@ parameters (per-node freq 4, m = 1, one row): 10240 atoms,
 -- from broken to strained on that one change. Not in the catalogue
 yet.
 
+### The Archimedean audit: room, not frames
+
+Every cage in `supernetwork.CAGES` the carrier had not yet measured, at
+m = 1 or 2 and one or two antiprism rows:
+
+| cage | freq | m, rows | atoms | bonds (Å) | verdict |
+|---|---|---|---|---|---|
+| icosidodecahedron | 2 | 2, 1 | 12480 | 1.393-1.449 | clean |
+| truncated tetrahedron | 4 | 1, 1 | 3840 | 1.307-1.526 | strained |
+| truncated tetrahedron | 4 | 1, 2 | 4056 | 1.336-1.500 | clean |
+| truncated octahedron | 4 | 1, 1 | 7680 | 1.319-1.522 | strained |
+| truncated octahedron | 4 | 1, 2 | 8112 | 1.346-1.512 | clean |
+
+All 100 % placed. The pattern of the hypercube and the truncated cube
+holds everywhere: **a cage that is strained at one row is clean at two**
+-- the census is fixed by the graph, and only the room between nodes
+changes. The rhombicuboctahedron misses its windows by 2.8 deg at
+frequency 4 and is refused at the 2.5 deg tolerance (see below).
+
+### New periodic nets, and zeolite-templated carbon
+
+`GEODESIC_NETS` holds nets only this carrier has been measured on, kept
+out of `SUPERLATTICES` because that catalogue feeds the meshed and knee
+modes too: super-srs and its mirror (the gyroid's Laves graph, chiral,
+nodes in four orientations, fitted node by node), super-bcc (eight
+<111> arms, three-fold axes, freq 3), super-kagome (four in-plane arms
+at 60/120 deg, freq 2) and super-lonsdaleite (hexagonal diamond, nodes
+in two orientations, fitted node by node at freq 3).
+
+* **Orthohexagonal cells**: `_fold_orthohexagonal` puts a hexagonal net
+  in its `(a, a*sqrt3, c)` cell, because `minimum_image` takes only an
+  orthorhombic box. Its basis is written with `a2` at **60 deg** to `a1`;
+  the wurtzite fractions first typed were the 120 deg convention's, and
+  lonsdaleite came out one-coordinate (the two "special points" are
+  `(1/3, 1/3)` and `(2/3, 2/3)` at 60 deg).
+* **Per-node fits need starts.** At 4 random starts lonsdaleite's
+  tetrahedral nodes missed by 7.2 deg; at 16 they fit to 0.0. The
+  default is 16.
+
+**A zeolite-templated carbon lines the template's pores, so its net is
+the pore net, not the framework**: FAU's supercages sit on a diamond
+net (so does its framework, which makes the wall between them D-type),
+LTA's alpha cages on a primitive cubic one (P-type), EMT -- FAU's
+hexagonal polytype -- on lonsdaleite, SOD's beta cages on bcc. Measured
+cubic cells of the clean Goldberg families:
+
+| map | GC | atoms | a (Å) | density (g/cm³) |
+|---|---|---|---|---|
+| D | (1,1) = C168 | 672 | 21.80 | 1.29 |
+| **D** | **(2,0)** | **896** | **24.74** | 1.18 |
+| D | (2,1) | 1568 | 32.84 | 0.88 |
+| P | (1,1) | 144 | 12.72 | 1.40 |
+| P | (2,0) | 192 | 14.35 | 1.30 |
+| P | (2,2) | 576 | 24.75 | 0.76 |
+
+**D GC(2,0) relaxes to 24.74 Å, which is FAU's cubic cell** (NaY,
+about 24.7 Å) -- a clean, 96-heptagon D wall commensurate with the
+template, and the `FAU replica` preset. LTA's 12.3 Å pseudo-cell is 3 %
+under P GC(1,1). These are valence-force-field cells; whether a real
+ZTC's wall sits on this surface, at this density, is for comparison with
+the published ZTC models and DFT, not something this table settles.
+
 ### Chiral Goldberg-Coxeter: the consistent cut
 
 `goldberg.chiral_subdivide` builds GC(m, n) for any pair on any closed

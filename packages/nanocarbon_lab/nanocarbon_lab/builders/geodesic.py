@@ -324,10 +324,9 @@ def build_geodesic_superstructure(
         As for the other carrier builders.
     """
     from .hull import equilateralise
-    from .supernetwork import named_graph
 
     if isinstance(graph, str):
-        graph = named_graph(graph, 1.0)
+        graph = _named(graph)
     points, cell = _graph_frame(graph)
     frame, miss = fit_frame(points, graph.edges, freq, cell=cell)
     per_node = miss > tolerance_deg
@@ -399,7 +398,7 @@ def fit_frame(points: np.ndarray, edges, freq: int,
     return _fit_arms(np.array(arms + [-a for a in arms]), freq, starts, seed)
 
 
-def fit_node_frames(points: np.ndarray, edges, freq: int, starts: int = 8,
+def fit_node_frames(points: np.ndarray, edges, freq: int, starts: int = 16,
                     seed: int = 0, cell=None
                     ) -> tuple[np.ndarray, float]:
     """One icosahedral frame per node, each fitted to that node's arms.
@@ -527,15 +526,24 @@ GEODESIC_CAGES: dict[str, dict] = {
     # window exactly.
     "super-hypercube": {"freq": 6, "tolerance_deg": 0.5},
     "super-truncated-cube": {"freq": 4, "tolerance_deg": 2.5},
+    "super-truncated-tetrahedron": {"freq": 4, "tolerance_deg": 2.5},
+    "super-truncated-octahedron": {"freq": 4, "tolerance_deg": 2.5},
+    # GEODESIC_NETS. srs and lonsdaleite have nodes in several
+    # orientations and fit node by node (exactly, at 16 starts; 4 missed
+    # lonsdaleite's by 7 deg); bcc's eight <111> arms are three-fold axes.
+    "super-srs": {"freq": 2, "tolerance_deg": 0.5},
+    "super-srs-mirror": {"freq": 2, "tolerance_deg": 0.5},
+    "super-bcc": {"freq": 3, "tolerance_deg": 0.5},
+    "super-kagome": {"freq": 2, "tolerance_deg": 0.5},
+    "super-lonsdaleite": {"freq": 3, "tolerance_deg": 0.5},
 }
 
 
 def geodesic_atom_count(graph: str = "super-icosahedron", m: int = 2,
                         freq: int = 2, rows: int = 1, n: int = 0) -> int:
     """Atoms the build will have: coarse triangles times ``m^2+mn+n^2``."""
-    from .supernetwork import named_graph
 
-    g = named_graph(graph, 1.0)
+    g = _named(graph)
     points, cell = _graph_frame(g)
     tolerance = GEODESIC_CAGES.get(graph, {}).get("tolerance_deg", 2.5)
     frame, miss = fit_frame(points, g.edges, freq, starts=8, cell=cell)
@@ -556,3 +564,81 @@ def describe_geodesic(atoms: Atoms) -> str:
             f"{{{census}}}, sum(6-n) = {info['ring_deficit']:+d} = 12(V - E) "
             f"for V = {info['n_nodes']}, E = {info['n_struts']}; worst arm "
             f"miss {info['worst_arm_miss_deg']} deg")
+
+
+def _fold_orthohexagonal(basis: np.ndarray, c: float = 1.0) -> tuple:
+    """A hexagonal lattice's sites in its orthohexagonal (a, a*sqrt3, c) cell.
+
+    ``basis`` is in fractions of the hexagonal cell (a = 1, a2 at 60 deg
+    to a1 -- not the 120 deg convention, whose special points differ). The
+    orthorhombic cell holds two hexagonal ones, and it is what
+    ``minimum_image`` can measure.
+    """
+    a1 = np.array([1.0, 0.0, 0.0])
+    a2 = np.array([0.5, np.sqrt(3.0) / 2.0, 0.0])
+    a3 = np.array([0.0, 0.0, c])
+    shape = np.array([1.0, np.sqrt(3.0), c])
+    sites = []
+    for i in range(-2, 3):
+        for j in range(-2, 4):
+            for f in basis:
+                p = (f[0] + i) * a1 + (f[1] + j) * a2 + f[2] * a3
+                q = p / shape
+                if np.all(q >= -1e-9) and np.all(q < 1 - 1e-9):
+                    sites.append(np.round(q, 12) % 1.0)
+    return np.unique(np.round(sites, 10), axis=0), tuple(shape)
+
+
+def _geodesic_nets() -> dict:
+    """Periodic nets the geodesic carrier adds to the shared catalogue.
+
+    Kept here rather than in ``supernetwork.SUPERLATTICES`` on purpose:
+    that catalogue feeds the meshed and knee modes too, and these nets have
+    only been measured on this route.
+    """
+    from .knee import _srs_sites
+    from .supernetwork import _periodic_graph
+
+    kagome, kshape = _fold_orthohexagonal(
+        np.array([[0.0, 0.0, 0.5], [0.5, 0.0, 0.5], [0.0, 0.5, 0.5]]))
+    c = float(np.sqrt(8.0 / 3.0))
+    # Wurtzite positions with a2 at 60 deg to a1, so the two special
+    # points are (1/3, 1/3) and (2/3, 2/3); ideal c/a and u = 3/8 make all
+    # four bonds equal.
+    lon, lshape = _fold_orthohexagonal(np.array([
+        [1 / 3, 1 / 3, 0.0], [2 / 3, 2 / 3, 0.5],
+        [1 / 3, 1 / 3, 3 / 8], [2 / 3, 2 / 3, 7 / 8]]), c)
+    srs = _srs_sites()
+    return {
+        # The gyroid's skeleton: three arms at 120 deg, in planes normal
+        # to the four <111>. srs is chiral; the mirror is its own entry so
+        # that net and wall handedness can be chosen independently.
+        "super-srs": _periodic_graph(
+            "super-srs", srs, (1.0, 1.0, 1.0), (True, True, True),
+            "The Laves graph (gyroid skeleton), chiral."),
+        "super-srs-mirror": _periodic_graph(
+            "super-srs-mirror", (1.0 - srs) % 1.0, (1.0, 1.0, 1.0),
+            (True, True, True), "The Laves graph, the other hand."),
+        # Eight <111> arms per node: the replica of sodalite's beta cages.
+        "super-bcc": _periodic_graph(
+            "super-bcc", [(0.0, 0.0, 0.0), (0.5, 0.5, 0.5)], (1.0, 1.0, 1.0),
+            (True, True, True), "bcu: eight <111> arms per node."),
+        "super-kagome": _periodic_graph(
+            "super-kagome", kagome, kshape, (True, True, False),
+            "2D, four arms per node at 60 and 120 deg."),
+        # Hexagonal diamond: the replica of EMT, FAU's hexagonal polytype.
+        "super-lonsdaleite": _periodic_graph(
+            "super-lonsdaleite", lon, lshape, (True, True, True),
+            "lon: tetrahedral nodes, eclipsed along c."),
+    }
+
+
+#: Nets only this carrier builds (see :func:`_geodesic_nets`).
+GEODESIC_NETS: dict = _geodesic_nets()
+
+
+def _named(graph: str):
+    from .supernetwork import named_graph
+
+    return GEODESIC_NETS[graph] if graph in GEODESIC_NETS \
+        else named_graph(graph, 1.0)
