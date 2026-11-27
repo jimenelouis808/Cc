@@ -1636,11 +1636,18 @@ m = 1 or 2 and one or two antiprism rows:
 | truncated octahedron | 4 | 1, 1 | 7680 | 1.319-1.522 | strained |
 | truncated octahedron | 4 | 1, 2 | 8112 | 1.346-1.512 | clean |
 
-All 100 % placed. The pattern of the hypercube and the truncated cube
-holds everywhere: **a cage that is strained at one row is clean at two**
--- the census is fixed by the graph, and only the room between nodes
-changes. The rhombicuboctahedron misses its windows by 2.8 deg at
-frequency 4 and is refused at the 2.5 deg tolerance (see below).
+| rhombicuboctahedron | 4 | 1, 2 | 8256 | 1.323-1.512 | strained (3 deg miss) |
+| rhombicuboctahedron | 4 | 1, 3 | 8832 | 1.296-1.526 | **broken** |
+| rhombicuboctahedron, per node | **6** | 1, 2 | 17856 | 1.338-1.492 | clean |
+
+All 100 % placed where clean. The pattern of the hypercube and the
+truncated cube holds: **a cage that is strained at one row is clean at
+two** -- the census is fixed by the graph, and only the room between
+nodes changes. **The exception is a miss.** The rhombicuboctahedron's
+arms miss their frequency-4 windows by about 3 deg, and a third row made
+it broken rather than clean: an arm that leaves its window obliquely
+shears more the longer it is. The cure is a finer sphere (1.9 deg at
+frequency 6), not a longer arm.
 
 ### New periodic nets, and zeolite-templated carbon
 

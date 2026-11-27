@@ -306,6 +306,8 @@ PRESETS: dict[str, dict[str, object]] = {
             "super-truncated-tetrahedron", 1, 4, 2),
            ("Truncated-octahedral cage (geodesic, clean)",
             "super-truncated-octahedron", 1, 4, 2),
+           ("Rhombicuboctahedral cage (geodesic, clean)",
+            "super-rhombicuboctahedron", 1, 6, 2),
        )},
     # Nets only the geodesic carrier builds (geodesic.GEODESIC_NETS), and
     # the supertube. Measured clean, 100 % placed:

@@ -528,6 +528,9 @@ GEODESIC_CAGES: dict[str, dict] = {
     "super-truncated-cube": {"freq": 4, "tolerance_deg": 2.5},
     "super-truncated-tetrahedron": {"freq": 4, "tolerance_deg": 2.5},
     "super-truncated-octahedron": {"freq": 4, "tolerance_deg": 2.5},
+    # At frequency 4 its arms miss by 2.8-3.0 deg, and more rows make it
+    # worse (broken at three); node by node at 6 they miss by 1.9.
+    "super-rhombicuboctahedron": {"freq": 6, "tolerance_deg": 2.5},
     # Rolled super-graphene: no shared frame, per-node misses up to
     # 3.7 deg at frequency 4. Clean at two rows (measured on (4,4) only).
     "supertube-(4,4)": {"freq": 4, "tolerance_deg": 4.5},
