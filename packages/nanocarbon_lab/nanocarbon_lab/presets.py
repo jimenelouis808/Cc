@@ -275,7 +275,7 @@ PRESETS: dict[str, dict[str, object]] = {
     #   tetrahedron   freq 4   5120        1.371-1.494
     #   octahedron    freq 4   7680        1.361-1.498
     #   C60 of tubes  freq 2  23520        1.391-1.465
-    **{label: {"mode_kind": "superstructure (geodesic)", "gd_n": 0, "gd_graph": graph,
+    **{label: {"mode_kind": "superstructure (geodesic)", "gd_n": 0, "gd_wr": 1, "gd_graph": graph,
                "gd_m": 2, "gd_freq": freq, "gd_rows": 1, "anneal": 0}
        for label, graph, freq in (
            ("Icosahedral cage (geodesic, clean)", "super-icosahedron", 2),
@@ -289,14 +289,14 @@ PRESETS: dict[str, dict[str, object]] = {
     # two antiprism rows: 14784 atoms, {5: 192, 7: 384}, 1.403-1.439 A,
     # clean and 100 % placed. The octahedral frame was broken at every size.
     "Hypercube cage (geodesic, clean)": {
-        "mode_kind": "superstructure (geodesic)", "gd_n": 0,
+        "mode_kind": "superstructure (geodesic)", "gd_n": 0, "gd_wr": 1,
         "gd_graph": "super-hypercube", "gd_m": 1, "gd_freq": 6,
         "gd_rows": 2, "anneal": 0},
     # The Archimedean audit, every one clean and 100 % placed:
     #   icosidodecahedron      freq 2, m=2, 1 row   12480  1.393-1.449 A
     #   truncated tetrahedron  freq 4, m=1, 2 rows   4056  1.336-1.500
     #   truncated octahedron   freq 4, m=1, 2 rows   8112  1.346-1.512
-    **{label: {"mode_kind": "superstructure (geodesic)", "gd_n": 0,
+    **{label: {"mode_kind": "superstructure (geodesic)", "gd_n": 0, "gd_wr": 1,
                "gd_graph": graph, "gd_m": m, "gd_freq": freq,
                "gd_rows": rows, "anneal": 0}
        for label, graph, m, freq, rows in (
@@ -329,7 +329,7 @@ PRESETS: dict[str, dict[str, object]] = {
     #   super-kagome    freq 2, m=2, 1 row    2496  1.388-1.450      7 min
     #   super-srs       freq 2, m=2, 1 row    3136  1.367-1.475     12 min
     #   supertube-(4,4) freq 4, m=1, 2 rows  10816  1.358-1.483     45 min
-    **{label: {"mode_kind": "superstructure (geodesic)", "gd_n": 0,
+    **{label: {"mode_kind": "superstructure (geodesic)", "gd_n": 0, "gd_wr": 1,
                "gd_graph": graph, "gd_m": m, "gd_freq": freq,
                "gd_rows": rows, "anneal": 0}
        for label, graph, m, freq, rows in (
@@ -341,12 +341,35 @@ PRESETS: dict[str, dict[str, object]] = {
            ("Super-lonsdaleite (geodesic, clean, slow)",
             "super-lonsdaleite", 2, 3, 1),
        )},
+    # Compact nodes: windows of radius 2 at m=1 make the same 12-ring tube
+    # as radius 1 at m=2, on a node that is mostly mouth. Measured clean:
+    #   super-cubic   f4  320 atoms (464 before)   1.405-1.443 A  100 %
+    #   super-square  f4  320 (416)                1.381-1.454    100 %
+    #   super-graphene f4 1280 (1568)              1.394-1.447    100 %
+    #   super-srs     f4  2560 (3136)              1.366-1.473    100 %
+    #   cube cage     f4  2560 (3136)              1.391-1.443    100 %
+    #   dodecahedron  f4  6400 (7840)              1.393-1.442    100 %
+    #   tetrahedron   f6  2874 (5120)              1.376-1.480     99 %
+    #   octahedron    f6  4308 (7680)              1.352-1.490     98 %
+    **{label: {"mode_kind": "superstructure (geodesic)", "gd_n": 0,
+               "gd_wr": 2, "gd_graph": graph, "gd_m": 1, "gd_freq": freq,
+               "gd_rows": 1, "anneal": 0}
+       for label, graph, freq in (
+           ("Super-cubic (geodesic, compact)", "super-cubic", 4),
+           ("Super-square (geodesic, compact)", "super-square", 4),
+           ("Super-graphene (geodesic, compact)", "super-graphene", 4),
+           ("Super-srs (geodesic, compact)", "super-srs", 4),
+           ("Cubic cage (geodesic, compact)", "super-cube", 4),
+           ("Dodecahedral cage (geodesic, compact)", "super-dodecahedron", 4),
+           ("Tetrahedral cage (geodesic, compact)", "super-tetrahedron", 6),
+           ("Octahedral cage (geodesic, compact)", "super-octahedron", 6),
+       )},
     # m=1, two rows: 4128 atoms, {5: 96, 7: 240}, 1.345-1.504 A, clean.
     # One row measured clean once (1.355-1.483) and strained (1.325-1.523)
     # after the frame fit's starts changed: at one row the verdict
     # depends on the fit, at two it does not.
     "Cuboctahedral cage (geodesic, clean)": {
-        "mode_kind": "superstructure (geodesic)", "gd_n": 0,
+        "mode_kind": "superstructure (geodesic)", "gd_n": 0, "gd_wr": 1,
         "gd_graph": "super-cuboctahedron", "gd_m": 1, "gd_freq": 4,
         "gd_rows": 2, "anneal": 0},
     # The same carrier in a periodic cell, scanned. m=2, rows=1, measured
@@ -356,7 +379,7 @@ PRESETS: dict[str, dict[str, object]] = {
     #   super-graphene freq 2  1568        1.342-1.506    {5:24, 7:48}
     #   super-diamond  freq 3  5760        1.341-1.511    18 min
     #   super-fcc      freq 4  5120        1.340-1.505    13 min
-    **{label: {"mode_kind": "superstructure (geodesic)", "gd_n": 0, "gd_graph": graph,
+    **{label: {"mode_kind": "superstructure (geodesic)", "gd_n": 0, "gd_wr": 1, "gd_graph": graph,
                "gd_m": 2, "gd_freq": freq, "gd_rows": 1, "anneal": 0}
        for label, graph, freq in (
            ("Super-cubic (geodesic, clean)", "super-cubic", 2),

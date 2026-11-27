@@ -1215,6 +1215,7 @@ def _cmd_geodesic(args):
     freq = args.freq if args.freq is not None else own.get("freq", 2)
     atoms = build_geodesic_superstructure(
         graph=args.graph, m=args.m, n=args.n, freq=freq, rows=args.rows,
+        window_radius=args.window_radius,
         tolerance_deg=tolerance, bond=args.bond, vacuum=args.vacuum,
         relax=not args.no_relax)
     atoms = _maybe_dope(atoms, args)
@@ -2921,6 +2922,11 @@ def build_parser() -> argparse.ArgumentParser:
     gd.add_argument("--freq", type=int, default=None,
                     help="Node sphere frequency; left out, the cage's own "
                          "(2, or 4 for the tetrahedron and octahedron).")
+    gd.add_argument("--window-radius", type=int, default=1,
+                    help="Rings of the node sphere each window takes; the "
+                         "tube is 6*r*m rings round, so a larger window at a "
+                         "smaller --m gives the same tube on a node that is "
+                         "mostly mouth instead of mostly ball.")
     gd.add_argument("--rows", type=int, default=1,
                     help="Antiprism rows on the shortest arm.")
     gd.add_argument("--bond", type=float, default=1.42)

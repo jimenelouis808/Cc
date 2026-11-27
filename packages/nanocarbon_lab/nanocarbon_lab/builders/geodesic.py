@@ -107,6 +107,53 @@ def _star(tris: np.ndarray, centre: int) -> tuple[list[int], list[int]]:
     return around, rim
 
 
+def _patch(tris: np.ndarray, centre: int, radius: int
+           ) -> tuple[list[int], list[int]]:
+    """A hexagonal window of ``radius`` rings round ``centre``, and its rim.
+
+    ``radius = 1`` is :func:`_star`. Larger windows take every triangle
+    within ``radius`` edges of the centre (all corners at distance
+    ``<= radius``, one strictly inside), so the mouth grows with the
+    sphere instead of staying one edge across while the node swells
+    around it. The rim is the patch's boundary, ordered with the
+    triangles' own winding.
+    """
+    if radius == 1:
+        return _star(tris, centre)
+    neighbours: dict[int, set[int]] = {}
+    for a, b, c in tris:
+        for u, v in ((a, b), (b, c), (c, a)):
+            neighbours.setdefault(int(u), set()).add(int(v))
+            neighbours.setdefault(int(v), set()).add(int(u))
+    dist = {int(centre): 0}
+    frontier = [int(centre)]
+    for d in range(1, radius + 1):
+        nxt = []
+        for u in frontier:
+            for v in neighbours[u]:
+                if v not in dist:
+                    dist[v] = d
+                    nxt.append(v)
+        frontier = nxt
+    inside = [k for k, t in enumerate(tris)
+              if all(int(x) in dist for x in t)
+              and min(dist[int(x)] for x in t) < radius]
+    directed = set()
+    for k in inside:
+        a, b, c = (int(x) for x in tris[k])
+        directed |= {(a, b), (b, c), (c, a)}
+    nxt = {u: v for u, v in directed if (v, u) not in directed}
+    start = next(iter(nxt))
+    rim = [start]
+    while nxt[rim[-1]] != start:
+        rim.append(nxt[rim[-1]])
+        if len(rim) > len(nxt):
+            raise ValueError("a window's rim is not one loop.")
+    if len(rim) != len(nxt):
+        raise ValueError("a window's rim is not one loop.")
+    return inside, rim
+
+
 def _arm_vectors(points: np.ndarray, edges, cell=None) -> list[np.ndarray]:
     """Each edge's vector from its start node to its end node's image.
 
@@ -120,7 +167,8 @@ def _arm_vectors(points: np.ndarray, edges, cell=None) -> list[np.ndarray]:
 
 def geodesic_map(points: np.ndarray, edges, frame: np.ndarray,
                  freq: int = 4, rows: int = 2, tolerance_deg: float = 2.0,
-                 cell=None, window: int = 6) -> tuple[Mesh, int, float, dict]:
+                 cell=None, window: int = 6, window_radius: int = 1
+                 ) -> tuple[Mesh, int, float, dict]:
     """The coarse carrier of a finite graph of tubes on geodesic nodes.
 
     Parameters
@@ -194,12 +242,19 @@ def geodesic_map(points: np.ndarray, edges, frame: np.ndarray,
     for node in range(len(points)):
         sphere_v, sphere_t = spheres[node]
         removed: set[int] = set()
+        rim_vertices: set[int] = set()
         for key, k in windows[node].items():
-            around, rim = _star(sphere_t, k)
-            if removed & set(around):
+            around, rim = _patch(sphere_t, k, window_radius)
+            # Radius-1 rims may share a vertex (the frequency-2 icosahedron
+            # does, and is clean with an octagon there); a larger window
+            # touching another leaves no closed row between them.
+            touching = window_radius > 1 and rim_vertices & set(rim)
+            if removed & set(around) or touching:
                 raise ValueError("two windows on one node overlap; raise "
-                                 "the geodesic frequency.")
+                                 "the geodesic frequency or shrink the "
+                                 "window radius.")
             removed |= set(around)
+            rim_vertices |= set(rim)
             rims[key] = [sphere_v[r] for r in rim]
         for t, (a, b, c) in enumerate(sphere_t):
             if t in removed:
@@ -303,6 +358,7 @@ def build_geodesic_superstructure(
     relax_iterations: int = 3000,
     seed: int = 0,
     window: int | None = None,
+    window_radius: int = 1,
 ) -> Atoms:
     """A cage or periodic net of tubes on geodesic nodes, as graphene.
 
@@ -333,6 +389,11 @@ def build_geodesic_superstructure(
         cubic cages fit exactly.
     smooth, bond, vacuum, relax, relax_iterations
         As for the other carrier builders.
+    window_radius
+        Rings of the sphere each window takes (:func:`_patch`): the tube's
+        circumference is ``6 * window_radius * m``, so for one tube
+        diameter a larger window means a smaller ``m`` and a node that is
+        mostly mouth instead of mostly ball. Six-fold windows only.
     window
         Degree of the sphere vertices windows open on, by preference: 6
         (hexagonal mouths) or 5. ``None`` takes the catalogue entry's own,
@@ -356,7 +417,8 @@ def build_geodesic_superstructure(
         graph, points, cell, freq, tolerance_deg, seed, window=window)
     coarse, budget, scale, report = geodesic_map(
         points, graph.edges, frame, freq=freq, rows=rows,
-        tolerance_deg=tolerance_deg, cell=cell, window=window)
+        tolerance_deg=tolerance_deg, cell=cell, window=window,
+        window_radius=window_radius)
     box = report.pop("box")
     live = box if np.any(box > 0) else None
     if equilateral:
@@ -379,6 +441,7 @@ def build_geodesic_superstructure(
                         "per node" if per_node else "shared"),
         "frame_seed": int(seed),
         "window_degree": int(window),
+        "window_radius": int(window_radius),
         "arm_rows": int(rows),
         "n_nodes": len(points),
         "n_struts": len(graph.edges),
@@ -628,7 +691,8 @@ GEODESIC_CAGES: dict[str, dict] = {
 
 
 def geodesic_atom_count(graph: str = "super-icosahedron", m: int = 2,
-                        freq: int = 2, rows: int = 1, n: int = 0) -> int:
+                        freq: int = 2, rows: int = 1, n: int = 0,
+                        window_radius: int = 1) -> int:
     """Atoms the build will have: coarse triangles times ``m^2+mn+n^2``."""
 
     g = _named(graph)
@@ -639,6 +703,7 @@ def geodesic_atom_count(graph: str = "super-icosahedron", m: int = 2,
                                          window=window)
     (_, tris), _, _, _ = geodesic_map(points, g.edges, frame, freq=freq,
                                       window=window,
+                                      window_radius=window_radius,
                                       rows=rows, tolerance_deg=tolerance,
                                       cell=cell)
     return len(tris) * (m * m + m * n + n * n)

@@ -801,6 +801,7 @@ class NanocarbonGUI:
         self.var_gd_m = self._var("gd_m", tk.IntVar(value=2))
         self.var_gd_freq = self._var("gd_freq", tk.IntVar(value=2))
         self.var_gd_rows = self._var("gd_rows", tk.IntVar(value=1))
+        self.var_gd_wr = self._var("gd_wr", tk.IntVar(value=1))
         self.var_fr_kind = self._var("fr_kind",
                                      tk.StringVar(value="cube cage"))
         self.var_fr_m = self._var("fr_m", tk.IntVar(value=3))
@@ -1206,7 +1207,10 @@ class NanocarbonGUI:
         self._param(self.frame_gd, "Index n (chiral GC(m, n))",
                     self.var_gd_n, 0, 4, 7, integer=True, hard_lo=0,
                     hard_hi=8, command=self._update_gd_hint)
-        self.lbl_gd.grid(row=9, column=0, columnspan=2, sticky="w")
+        self._param(self.frame_gd, "Window radius (tube = 6·r·m rings)",
+                    self.var_gd_wr, 1, 3, 9, integer=True, hard_lo=1,
+                    hard_hi=6, command=self._update_gd_hint)
+        self.lbl_gd.grid(row=11, column=0, columnspan=2, sticky="w")
         self.var_gd_graph.trace_add("write", lambda *_: self._gd_cage_changed())
 
         # --- frame route: octahedral nodes and prism arms
@@ -3312,7 +3316,8 @@ class NanocarbonGUI:
             atoms = geodesic_atom_count(graph, int(self.var_gd_m.get()),
                                         int(self.var_gd_freq.get()),
                                         int(self.var_gd_rows.get()),
-                                        int(self.var_gd_n.get()))
+                                        int(self.var_gd_n.get()),
+                                        int(self.var_gd_wr.get()))
         except ValueError as problem:
             self.lbl_gd.config(text=f"✗ {problem}")
             return
@@ -4137,6 +4142,7 @@ class NanocarbonGUI:
             params = dict(graph=graph, m=int(self.var_gd_m.get()),
                           freq=int(self.var_gd_freq.get()),
                           rows=int(self.var_gd_rows.get()),
+                          window_radius=int(self.var_gd_wr.get()),
                           n=int(self.var_gd_n.get()),
                           tolerance_deg=GEODESIC_CAGES.get(graph, {}).get(
                               "tolerance_deg", 2.5))

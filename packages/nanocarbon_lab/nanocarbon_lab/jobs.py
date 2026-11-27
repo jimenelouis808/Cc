@@ -835,7 +835,8 @@ def estimate_atoms(job: Job) -> int:
         return geodesic_atom_count(str(p.get("graph", "super-icosahedron")),
                                    int(p.get("m", 2)), int(p.get("freq", 2)),
                                    int(p.get("rows", 1)),
-                                   int(p.get("n", 0)))
+                                   int(p.get("n", 0)),
+                                   int(p.get("window_radius", 1)))
 
     if mode == "superstructure (frame)":
         from .builders.frame import frame_atom_count
@@ -1283,7 +1284,7 @@ _CLI_MAP: dict[str, tuple[str, dict[str, str]]] = {
     }),
     "superstructure (geodesic)": ("geodesic", {
         "graph": "--graph", "m": "--m", "n": "--n", "freq": "--freq",
-        "rows": "--rows",
+        "rows": "--rows", "window_radius": "--window-radius",
         "bond": "--bond", "vacuum": "--vacuum",
     }),
     "superstructure (frame)": ("frame", {

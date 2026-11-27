@@ -1723,6 +1723,54 @@ and m = 1 would still be about 18 % large: no EMT match yet. These are valence-f
 ZTC's wall sits on this surface, at this density, is for comparison with
 the published ZTC models and DFT, not something this table settles.
 
+### Compact nodes: the window grows with the sphere
+
+The catalogue image made the cost visible: every node a ball. Measured,
+the closed sphere between windows is **94 %** of a tetrahedral cage's
+coarse triangles (frequency 4), 87 % of super-diamond's (3), 63 % of the
+cube cage's, 45 % of the icosahedral cage's. The reason is that a window
+was always the star of one vertex -- a mouth one edge across -- while the
+frequency the arm angles need sets the sphere's radius (3.35 edges at
+frequency 4). The tube stays thin and the node swells around it.
+
+`window_radius` (`_patch`) takes every triangle within `r` rings of the
+window vertex: a hexagonal mouth of `6r` rim vertices. The tube is
+`6 * r * m` rings round, so for one tube diameter a larger `r` means a
+smaller `m`, and the node becomes mostly mouth. The census is unchanged
+-- no octagons appear at the hexagon's corners, measured -- and the
+budget is met exactly. Windows of radius > 1 whose rims would touch are
+refused; radius-1 rims may share a vertex (the frequency-2 icosahedron
+does, cleanly).
+
+At the same 12-ring tube (radius 2 at m = 1 against radius 1 at m = 2),
+every row CLEAN:
+
+| structure | freq | before | compact | bonds (Å) | placed |
+|---|---|---|---|---|---|
+| super-cubic | 4 | 464 | **320** | 1.405-1.443 | 100 % |
+| super-square | 4 | 416 | **320** | 1.381-1.454 | 100 % |
+| super-graphene | 4 | 1568 | **1280** | 1.394-1.447 | 100 % |
+| super-srs | 4 | 3136 | **2560** | 1.366-1.473 | 100 % |
+| cube cage | 4 | 3136 | **2560** | 1.391-1.443 | 100 % |
+| dodecahedral cage | 4 | 7840 | **6400** | 1.393-1.442 | 100 % |
+| tetrahedral cage | 6 | 5120 | **2874** | 1.376-1.480 | 99 % |
+| octahedral cage | 6 | 7680 | **4308** | 1.352-1.490 | 98 % |
+| super-diamond | 3 | 5760 | **1824** | 1.336-1.503 | **79 %** |
+
+The diamond is the warning: at a third of the atoms the node has so
+little sphere left that part of it saddles, and a fifth of its pentagons
+sit in negative curvature. It is clean and it is not the right D -- the
+knee D (1440 atoms, heptagons only) and the Goldberg D (896) are both
+smaller and better placed. The icosahedral cage gains nothing (its best
+compact option, frequency 6, is larger than frequency 2 at m = 2). The
+presets carry a "compact" entry for every row but the diamond.
+
+**Same tube, fewer atoms, is the comparison that matters.** At fixed `r`
+the construction is self-similar -- doubling the frequency and the
+window together changes nothing -- so the saving comes only from the
+window taking a larger share of the sphere, which the arm angles bound:
+the tetrahedron needs frequency 6 before radius-2 windows stop touching.
+
 ### Chiral Goldberg-Coxeter: the consistent cut
 
 `goldberg.chiral_subdivide` builds GC(m, n) for any pair on any closed

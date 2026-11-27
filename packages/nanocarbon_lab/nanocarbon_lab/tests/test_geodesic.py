@@ -96,3 +96,26 @@ def test_the_enantiomer_is_exact_and_swaps_the_handedness():
         return np.mean([np.dot(a[0], np.cross(a[1], a[2]))
                         for a in arms.values() if len(a) == 3])
     assert handedness(mirror) == pytest.approx(-handedness(built))
+
+
+def test_a_larger_window_keeps_the_budget_and_saves_atoms():
+    graph = named_graph("super-cube", 1.0)
+    points = np.asarray(graph.nodes, float)
+    frame, _ = G.fit_frame(points, graph.edges, 4, starts=8)
+    (vertices, tris), budget, _, _ = G.geodesic_map(
+        points, graph.edges, frame, freq=4, rows=1, window_radius=2)
+    degree = np.bincount(tris.ravel(), minlength=len(vertices))
+    assert int((6 - degree).sum()) == budget
+    assert set(degree.tolist()) <= {5, 6, 7}
+    # Same 12-ring tube: radius 2 at m=1 against radius 1 at m=2.
+    assert G.geodesic_atom_count("super-cube", 1, 4, 1, 0, 2) \
+        < G.geodesic_atom_count("super-cube", 2, 2, 1, 0, 1)
+
+
+def test_windows_that_would_touch_are_refused():
+    graph = named_graph("super-cube", 1.0)
+    points = np.asarray(graph.nodes, float)
+    frame, _ = G.fit_frame(points, graph.edges, 2, starts=8)
+    with pytest.raises(ValueError, match="overlap"):
+        G.geodesic_map(points, graph.edges, frame, freq=2, rows=1,
+                       window_radius=2)
