@@ -73,14 +73,23 @@ def geodesic_sphere(directions: np.ndarray, freq: int) -> Mesh:
     return vertices / mean, tris
 
 
-def _six_fold(tris: np.ndarray, n: int) -> np.ndarray:
-    """Mask of the sphere vertices of degree six -- the only window sites.
+def _six_fold(tris: np.ndarray, n: int, window: int = 6) -> np.ndarray:
+    """Mask of the sphere vertices allowed as window sites.
 
-    A window on a five-fold vertex rims a pentagonal mouth, and a tube
-    cannot join it to a hexagonal one at the far end; the twelve five-fold
-    vertices are kept closed (they are the node's pentagons).
+    Both ends of an arm must rim the same polygon. With **one shared
+    frame** that is automatic: the sphere is centrosymmetric, so the
+    vertices nearest ``d`` and ``-d`` are antipodes of the same degree,
+    and ``window = 0`` lets every vertex be a site. Differently oriented
+    spheres (per-node or group frames) have no such guarantee -- one end
+    of the first per-node supertube arm landed on a five-fold vertex and
+    the other on a six-fold one -- so there windows open on degree-6
+    vertices only (``window = 6``). Restricting the shared case as well
+    is what lost super-fcc: its <110> arms fit mixed sites to 2.1 deg at
+    frequency 4, six-fold ones only to 4.7.
     """
-    return np.bincount(np.asarray(tris).ravel(), minlength=n) == 6
+    if window == 0:
+        return np.ones(n, dtype=bool)
+    return np.bincount(np.asarray(tris).ravel(), minlength=n) == window
 
 
 def _star(tris: np.ndarray, centre: int) -> tuple[list[int], list[int]]:
@@ -111,7 +120,7 @@ def _arm_vectors(points: np.ndarray, edges, cell=None) -> list[np.ndarray]:
 
 def geodesic_map(points: np.ndarray, edges, frame: np.ndarray,
                  freq: int = 4, rows: int = 2, tolerance_deg: float = 2.0,
-                 cell=None) -> tuple[Mesh, int, float, dict]:
+                 cell=None, window: int = 6) -> tuple[Mesh, int, float, dict]:
     """The coarse carrier of a finite graph of tubes on geodesic nodes.
 
     Parameters
@@ -159,7 +168,7 @@ def geodesic_map(points: np.ndarray, edges, frame: np.ndarray,
         for end, node, vec in ((0, i, d), (1, j, -d)):
             sv, st = spheres[node]
             cos = (sv / np.linalg.norm(sv, axis=1, keepdims=True)) @ vec
-            cos = np.where(_six_fold(st, len(sv)), cos, -2.0)
+            cos = np.where(_six_fold(st, len(sv), window), cos, -2.0)
             k = int(np.argmax(cos))
             miss = float(np.degrees(np.arccos(np.clip(cos[k], -1, 1))))
             worst = max(worst, miss)
@@ -293,6 +302,7 @@ def build_geodesic_superstructure(
     relax: bool = True,
     relax_iterations: int = 3000,
     seed: int = 0,
+    window: int | None = None,
 ) -> Atoms:
     """A cage or periodic net of tubes on geodesic nodes, as graphene.
 
@@ -323,6 +333,12 @@ def build_geodesic_superstructure(
         cubic cages fit exactly.
     smooth, bond, vacuum, relax, relax_iterations
         As for the other carrier builders.
+    window
+        Degree of the sphere vertices windows may open on when the node
+        frames differ (per-node or group frames): 6, or 5. ``None`` takes
+        the catalogue entry's own, else 6. A shared frame opens windows on
+        any vertex, which is safe there (see :func:`_six_fold`) and is
+        recorded as ``window_degree = 0``.
     seed
         Seed of the frame fit's random starts. Different seeds can land
         on different, equally good frames, and so on measurably different
@@ -333,12 +349,17 @@ def build_geodesic_superstructure(
 
     if isinstance(graph, str):
         graph = _named(graph)
+    if window is None:
+        window = GEODESIC_CAGES.get(graph.name, {}).get("window", 6)
     points, cell = _graph_frame(graph)
     frame, miss, per_node = _choose_frames(graph, points, cell, freq,
-                                           tolerance_deg, seed)
+                                           tolerance_deg, seed,
+                                           window=window)
+    if per_node is False:
+        window = 0
     coarse, budget, scale, report = geodesic_map(
         points, graph.edges, frame, freq=freq, rows=rows,
-        tolerance_deg=tolerance_deg, cell=cell)
+        tolerance_deg=tolerance_deg, cell=cell, window=window)
     box = report.pop("box")
     live = box if np.any(box > 0) else None
     if equilateral:
@@ -360,6 +381,7 @@ def build_geodesic_superstructure(
         "node_frames": ("group" if per_node == "group" else
                         "per node" if per_node else "shared"),
         "frame_seed": int(seed),
+        "window_degree": int(window),
         "arm_rows": int(rows),
         "n_nodes": len(points),
         "n_struts": len(graph.edges),
@@ -373,7 +395,7 @@ def build_geodesic_superstructure(
 
 
 def _choose_frames(graph, points, cell, freq: int, tolerance_deg: float,
-                   seed: int = 0, starts: int = 24):
+                   seed: int = 0, starts: int = 24, window: int = 6):
     """Node frames for a build, and which kind: shared, group or per node.
 
     One shared frame first: every window rim then has the same
@@ -384,21 +406,25 @@ def _choose_frames(graph, points, cell, freq: int, tolerance_deg: float,
     makes the arm choose a twist (the Wythoff cube's mirror pair came out
     1.9 % apart that way). Per-node fits are last.
 
+    A shared frame may open windows on any vertex (see :func:`_six_fold`);
+    group and per-node frames only on degree-``window`` ones.
+
     Returns ``(frame, worst_miss_deg, kind)`` with kind ``False``
     (shared), ``"group"`` or ``True`` (per node).
     """
     frame, miss = fit_frame(points, graph.edges, freq, starts=starts,
-                            seed=seed, cell=cell)
+                            seed=seed, cell=cell, window=0)
     if miss <= tolerance_deg:
         return frame, miss, False
     if graph.name.startswith("wythoff-"):
         from .wythoff import wythoff_frames
 
-        group_frame, group_miss = wythoff_frames(graph.name, freq, seed=seed)
+        group_frame, group_miss = wythoff_frames(graph.name, freq, seed=seed,
+                                                 window=window)
         if group_miss <= tolerance_deg:
             return group_frame, group_miss, "group"
     frame, miss = fit_node_frames(points, graph.edges, freq, cell=cell,
-                                  seed=seed)
+                                  seed=seed, window=window)
     return frame, miss, True
 
 
@@ -419,7 +445,7 @@ def _graph_frame(graph) -> tuple[np.ndarray, np.ndarray | None]:
 
 def fit_frame(points: np.ndarray, edges, freq: int,
               starts: int = 24, seed: int = 0,
-              cell=None) -> tuple[np.ndarray, float]:
+              cell=None, window: int = 6) -> tuple[np.ndarray, float]:
     """The icosahedral frame whose geodesic vertices best fit every arm.
 
     The worst arm's miss from its nearest sphere vertex is minimised over
@@ -431,11 +457,12 @@ def fit_frame(points: np.ndarray, edges, freq: int,
     Returns ``(frame, worst_miss_deg)``.
     """
     arms = [v / np.linalg.norm(v) for v in _arm_vectors(points, edges, cell)]
-    return _fit_arms(np.array(arms + [-a for a in arms]), freq, starts, seed)
+    return _fit_arms(np.array(arms + [-a for a in arms]), freq, starts, seed,
+                     window)
 
 
 def fit_node_frames(points: np.ndarray, edges, freq: int, starts: int = 16,
-                    seed: int = 0, cell=None
+                    seed: int = 0, cell=None, window: int = 6
                     ) -> tuple[np.ndarray, float]:
     """One icosahedral frame per node, each fitted to that node's arms.
 
@@ -459,14 +486,14 @@ def fit_node_frames(points: np.ndarray, edges, freq: int, starts: int = 16,
         per_node[j].append(-u)
     frames, worst = [], 0.0
     for arms in per_node:
-        frame, miss = _fit_arms(np.array(arms), freq, starts, seed)
+        frame, miss = _fit_arms(np.array(arms), freq, starts, seed, window)
         frames.append(frame)
         worst = max(worst, miss)
     return np.array(frames), worst
 
 
-def _fit_arms(arms: np.ndarray, freq: int, starts: int, seed: int
-              ) -> tuple[np.ndarray, float]:
+def _fit_arms(arms: np.ndarray, freq: int, starts: int, seed: int,
+              window: int = 6) -> tuple[np.ndarray, float]:
     """The rotated golden icosahedron whose sphere best fits ``arms``."""
     from scipy.optimize import minimize
     from scipy.spatial.transform import Rotation
@@ -474,7 +501,7 @@ def _fit_arms(arms: np.ndarray, freq: int, starts: int, seed: int
     golden = _icosahedral_frame(np.zeros((1, 3)))
     sphere, sphere_t = geodesic_sphere(golden, freq)
     dirs = sphere / np.linalg.norm(sphere, axis=1, keepdims=True)
-    dirs = dirs[_six_fold(sphere_t, len(sphere))]
+    dirs = dirs[_six_fold(sphere_t, len(sphere), window)]
 
     def worst(rotvec):
         rotated = Rotation.from_rotvec(rotvec).apply(dirs)
@@ -494,7 +521,7 @@ def _fit_arms(arms: np.ndarray, freq: int, starts: int, seed: int
         # frequency's, so its fit is always a candidate -- and the
         # optimiser on the finer sphere, with more local minima, measurably
         # misses it (dodecahedron: 0 deg at frequency 2, 6 at 4).
-        coarse_frame, _ = _fit_arms(arms, 2, starts, seed)
+        coarse_frame, _ = _fit_arms(arms, 2, starts, seed, window)
         candidates.append(Rotation.align_vectors(coarse_frame,
                                                  golden)[0].as_rotvec())
     best = None
@@ -593,8 +620,13 @@ def geodesic_atom_count(graph: str = "super-icosahedron", m: int = 2,
     g = _named(graph)
     points, cell = _graph_frame(g)
     tolerance = GEODESIC_CAGES.get(graph, {}).get("tolerance_deg", 2.5)
-    frame, _, _ = _choose_frames(g, points, cell, freq, tolerance, starts=8)
+    window = GEODESIC_CAGES.get(graph, {}).get("window", 6)
+    frame, _, kind = _choose_frames(g, points, cell, freq, tolerance,
+                                    window=window)
+    if kind is False:
+        window = 0
     (_, tris), _, _, _ = geodesic_map(points, g.edges, frame, freq=freq,
+                                      window=window,
                                       rows=rows, tolerance_deg=tolerance,
                                       cell=cell)
     return len(tris) * (m * m + m * n + n * n)

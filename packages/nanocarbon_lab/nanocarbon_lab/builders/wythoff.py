@@ -143,8 +143,8 @@ def wythoff_cage(name: str, strut: float = 1.0) -> SuperGraph:
     return graph
 
 
-def wythoff_frames(name: str, freq: int, starts: int = 32, seed: int = 0
-                   ) -> tuple[np.ndarray, float]:
+def wythoff_frames(name: str, freq: int, starts: int = 32, seed: int = 0,
+                   window: int = 6) -> tuple[np.ndarray, float]:
     """One node-sphere frame per vertex, carried by the group itself.
 
     The frame is fitted **once**, at the generator, to that vertex's own
@@ -177,7 +177,7 @@ def wythoff_frames(name: str, freq: int, starts: int = 32, seed: int = 0
         elif j == start:
             arms.append(graph.nodes[i] - centre)
     arms = np.array([a / np.linalg.norm(a) for a in arms])
-    frame, miss = _fit_arms(arms, freq, starts, seed)
+    frame, miss = _fit_arms(arms, freq, starts, seed, window)
     base = maps[order[start]]
     frames = np.array([(maps[k] @ base.T) @ frame.T for k in order])
     return np.transpose(frames, (0, 2, 1)), miss
