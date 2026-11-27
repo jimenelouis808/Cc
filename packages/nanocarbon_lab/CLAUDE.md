@@ -1615,8 +1615,11 @@ the arm, and either works.
 **The supertube was broken by the equalise bug above**, not by its
 frames, its rows or its seam: at one row and at two it relaxed to
 1.00-2.22 and 0.75-2.65 Å, uniformly along the axis, and the coarse map
-going *into* `equilateralise` was sound. See the supertube row below for
-the rebuild after the fix.
+going *into* `equilateralise` was sound. Rebuilt after the fix, same
+parameters (per-node freq 4, m = 1, one row): 10240 atoms,
+`{5: 320, 7: 512}`, **1.309-1.537 Å, strained, 99.5 % placed**, 50 min
+-- from broken to strained on that one change. Not in the catalogue
+yet.
 
 ### Chiral Goldberg-Coxeter: the consistent cut
 
