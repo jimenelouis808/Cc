@@ -1634,6 +1634,7 @@ broken to strained on that one change. **At two rows it is clean**:
 | (8,8) | 21632 | `{5: 616, 7: 1000}` | 1.296-1.527 | broken |
 | (8,0) | 21632 | `{5: 756, 7: 1140}` | 1.334-1.503 | clean |
 | (10,0) | 27040 | `{5: 848, 7: 1328}` | 1.321-1.514 | strained |
+| (10,0), three rows | 28480 | `{5: 848, 7: 1328}` | 1.320-1.525 | strained |
 
 Neither chirality decides it: (5,5), (6,6) and (8,0) are clean at
 frequency 4, (6,0) and (10,0) strained and (8,8) broken. The (6,0) is
@@ -1641,7 +1642,8 @@ clean at frequency 6 (radius-1 windows, two rows), at more than twice
 the atoms: the rule of the Archimedean audit again, a finer sphere for
 arms that miss. A per-node frame fits each node to its own
 arms within the 4.5 deg tolerance, and how far the arms miss differs
-roll by roll. Frequency 6 with radius-2 windows is refused on both
+roll by roll. A third row does not help the (10,0): its arms miss, and a
+longer oblique arm only shears more. Frequency 6 with radius-2 windows is refused on both
 (an arm joins windows of different sizes).
 
 ### The Archimedean audit: room, not frames
