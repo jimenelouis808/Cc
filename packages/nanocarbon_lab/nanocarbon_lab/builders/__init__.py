@@ -37,6 +37,7 @@ from .periodic_coil import build_periodic_coil
 from .supernetwork import SUPERLATTICES, build_supernetwork, icosahedral_cage, supergraph_from_atoms
 from .swept import build_coil, build_swept_tube
 from .toroid import build_polyhex_toroid, build_toroid, describe_toroid
+from .wythoff import WYTHOFF_CAGES, wythoff_cage
 
 __all__ = [
     "build_bundle",
@@ -53,6 +54,8 @@ __all__ = [
     "build_geodesic_superstructure",
     "describe_geodesic",
     "GEODESIC_CAGES",
+    "WYTHOFF_CAGES",
+    "wythoff_cage",
     "build_frame",
     "describe_frame",
     "FRAMES",

@@ -292,6 +292,7 @@ def build_geodesic_superstructure(
     vacuum: float = 12.0,
     relax: bool = True,
     relax_iterations: int = 3000,
+    seed: int = 0,
 ) -> Atoms:
     """A cage or periodic net of tubes on geodesic nodes, as graphene.
 
@@ -322,16 +323,35 @@ def build_geodesic_superstructure(
         cubic cages fit exactly.
     smooth, bond, vacuum, relax, relax_iterations
         As for the other carrier builders.
+    seed
+        Seed of the frame fit's random starts. Different seeds can land
+        on different, equally good frames, and so on measurably different
+        relaxed cells -- which is the construction's own noise, and the
+        yardstick any comparison between two builds has to clear.
     """
     from .hull import equilateralise
 
     if isinstance(graph, str):
         graph = _named(graph)
     points, cell = _graph_frame(graph)
-    frame, miss = fit_frame(points, graph.edges, freq, cell=cell)
+    # One shared frame first: every window rim then has the same
+    # orientation and the carrier is mirror-exact (super-cube's GC(2,1)
+    # and GC(1,2) agree to 2e-9). Frames carried by a group come next,
+    # for Wythoff cages -- exact for [5,3], but a [4,3] mirror is not a
+    # symmetry of the icosahedral sphere, turns a two-fold rim 90 deg and
+    # makes the arm choose a twist (the Wythoff cube's mirror pair came
+    # out 1.9 % apart). Per-node fits are last.
+    frame, miss = fit_frame(points, graph.edges, freq, cell=cell, seed=seed)
     per_node = miss > tolerance_deg
-    if per_node:
-        frame, miss = fit_node_frames(points, graph.edges, freq, cell=cell)
+    if per_node and graph.name.startswith("wythoff-"):
+        from .wythoff import wythoff_frames
+
+        group_frame, group_miss = wythoff_frames(graph.name, freq, seed=seed)
+        if group_miss <= tolerance_deg:
+            frame, miss, per_node = group_frame, group_miss, "group"
+    if per_node is True:
+        frame, miss = fit_node_frames(points, graph.edges, freq, cell=cell,
+                                      seed=seed)
     coarse, budget, scale, report = geodesic_map(
         points, graph.edges, frame, freq=freq, rows=rows,
         tolerance_deg=tolerance_deg, cell=cell)
@@ -353,7 +373,9 @@ def build_geodesic_superstructure(
         "kind": graph.name,
         "gc_indices": (int(m), int(n)),
         "node_frequency": int(freq),
-        "node_frames": "per node" if per_node else "shared",
+        "node_frames": ("group" if per_node == "group" else
+                        "per node" if per_node else "shared"),
+        "frame_seed": int(seed),
         "arm_rows": int(rows),
         "n_nodes": len(points),
         "n_struts": len(graph.edges),
@@ -645,6 +667,84 @@ GEODESIC_NETS: dict = _geodesic_nets()
 
 def _named(graph: str):
     from .supernetwork import named_graph
+    from .wythoff import WYTHOFF_CAGES
 
-    return GEODESIC_NETS[graph] if graph in GEODESIC_NETS \
-        else named_graph(graph, 1.0)
+    if graph in GEODESIC_NETS:
+        return GEODESIC_NETS[graph]
+    if graph in WYTHOFF_CAGES:
+        return WYTHOFF_CAGES[graph]
+    return named_graph(graph, 1.0)
+
+
+def enantiomer(atoms: Atoms) -> Atoms:
+    """The exact mirror image of a built structure, by reflecting atoms.
+
+    Rebuilding the mirror-image graph is not the same thing: the frame fit
+    and the arms' reference axes are not mirrored with the net, and the
+    srs control measured the two builds 4 % apart in cell. Reflecting the
+    finished atoms through the plane ``x = L/2`` (``x = 0`` for a finite
+    structure) gives the enantiomer exactly -- the same bonds, rings and
+    strain, every length and angle identical -- and swaps the labels that
+    carry handedness: ``gc_indices`` ``(m, n) -> (n, m)`` and an srs net
+    for its mirror.
+
+    Returns a new ``Atoms``; ``info`` is copied, not shared.
+    """
+    import copy
+
+    mirrored = atoms.copy()
+    mirrored.info = copy.deepcopy(atoms.info)
+    positions = mirrored.get_positions()
+    if mirrored.pbc[0] and mirrored.cell.lengths()[0] > 0:
+        positions[:, 0] = mirrored.cell.lengths()[0] - positions[:, 0]
+    else:
+        positions[:, 0] = -positions[:, 0]
+    mirrored.set_positions(positions)
+    if mirrored.pbc[0]:
+        mirrored.wrap()
+    info = mirrored.info
+    if "gc_indices" in info:
+        m, n = info["gc_indices"]
+        info["gc_indices"] = (n, m)
+    kind = str(info.get("kind", ""))
+    if kind.endswith("-mirror"):
+        info["kind"] = kind[: -len("-mirror")]
+    elif kind == "super-srs":
+        info["kind"] = "super-srs-mirror"
+    info["enantiomer_of"] = kind
+    return mirrored
+
+
+def strain_energy(atoms: Atoms, k_bond: float = 40.0, k_angle: float = 15.0,
+                  bond: float = CC_BOND) -> float:
+    """Valence-force-field strain per atom, from the recorded bond graph.
+
+    ``1/2 k_bond (r - bond)^2`` per bond plus ``1/2 k_angle (theta -
+    120 deg)^2`` (radians) per angle, under the minimum image -- the
+    relaxer's own bond and angle terms, without its repulsion. A
+    comparison number for structures of one family, not an energy of
+    formation, and mirror-invariant by construction.
+    """
+    from .fullerene_mesh import minimum_image
+
+    pos = atoms.get_positions()
+    box = None
+    if any(atoms.pbc):
+        box = np.where(atoms.pbc, atoms.cell.lengths(), 0.0)
+    pairs = np.asarray(sorted(atoms.info["bonds"]), dtype=int)
+    vec = minimum_image(pos[pairs[:, 1]] - pos[pairs[:, 0]], box)
+    r = np.linalg.norm(vec, axis=1)
+    energy = 0.5 * k_bond * float(((r - bond) ** 2).sum())
+    neighbours: dict[int, list[np.ndarray]] = {}
+    for (i, j), v in zip(pairs, vec, strict=True):
+        neighbours.setdefault(int(i), []).append(v)
+        neighbours.setdefault(int(j), []).append(-v)
+    target = np.radians(120.0)
+    for arms in neighbours.values():
+        for a in range(len(arms)):
+            for b in range(a + 1, len(arms)):
+                c = np.dot(arms[a], arms[b]) / (np.linalg.norm(arms[a])
+                                                 * np.linalg.norm(arms[b]))
+                theta = np.arccos(np.clip(c, -1.0, 1.0))
+                energy += 0.5 * k_angle * (theta - target) ** 2
+    return energy / len(atoms)

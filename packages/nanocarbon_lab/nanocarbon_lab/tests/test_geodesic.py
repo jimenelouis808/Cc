@@ -74,3 +74,25 @@ def test_windows_open_only_on_six_fold_vertices():
         cell=cell)
     degree = np.bincount(tris.ravel(), minlength=len(vertices))
     assert int((6 - degree).sum()) == budget
+
+
+def test_the_enantiomer_is_exact_and_swaps_the_handedness():
+    built = G.build_geodesic_superstructure("super-cube", m=2, n=1, freq=2,
+                                            rows=1, relax=False)
+    mirror = G.enantiomer(built)
+    assert mirror.info["gc_indices"] == (1, 2)
+    assert G.strain_energy(mirror) == pytest.approx(G.strain_energy(built),
+                                                    rel=1e-12)
+    back = G.enantiomer(mirror)
+    assert np.allclose(back.get_positions(), built.get_positions())
+    # A pseudoscalar flips sign under reflection: the mean triple product
+    # of each atom's three bond vectors.
+    def handedness(atoms):
+        pos = atoms.get_positions()
+        arms = {}
+        for i, j in atoms.info["bonds"]:
+            arms.setdefault(i, []).append(pos[j] - pos[i])
+            arms.setdefault(j, []).append(pos[i] - pos[j])
+        return np.mean([np.dot(a[0], np.cross(a[1], a[2]))
+                        for a in arms.values() if len(a) == 3])
+    assert handedness(mirror) == pytest.approx(-handedness(built))
