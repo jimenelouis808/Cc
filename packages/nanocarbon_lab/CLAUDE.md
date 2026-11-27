@@ -1982,15 +1982,17 @@ super-square, super-graphene and super-kagome already).
 | cantitruncated cubic | truncated cuboctahedra, ... | 4, 2, 1 | 7680 | 1.377-1.464 | clean, 96 % |
 | omnitruncated cubic | truncated cuboctahedra + octagonal prisms | 4, 2, 1 | 15360 | 1.356-1.488 | clean, 95 % |
 | cantellated cubic | rhombicuboctahedra, cuboctahedra, cubes | 4, 1, 1-2 | 3840-4248 | 1.294-1.535 | broken |
-| runcitruncated cubic | truncated cubes, rhombicuboctahedra, ... | 4, 1, 2 | 8376 | 1.306-1.526 | strained |
-| 3.4.6.4 | -- | 4, 1, 1-2 | 3840-4112 | 1.296-1.538 | broken |
+| runcitruncated cubic | truncated cubes, rhombicuboctahedra, ... | **6, 2, 1** | 17280 | 1.361-1.481 | clean, 99.9 % (strained at f4) |
+| 3.4.6.4 | -- | **6, 2, 1** | 8616 | 1.377-1.465 | clean (broken at f4) |
 All at m = 1 and the largest window that fits, so each node is as small
 as its arms allow. The truncated-octahedron cage tiles space face to face
 -- its periodic version is the **sodalite net**, and it is clean.
 The rule of the Archimedean audit holds again: strained at one row,
 clean at two; and where the arms miss the frequency-4 windows (the
 nets that hold rhombicuboctahedra or 3.4.6.4 vertices) more rows do not
-help, a finer sphere does. The tetrahedral cages' honeycombs (the
+help, a finer sphere does: at frequency 6 the 3.4.6.4 sheet and the
+runcitruncated honeycomb are clean. The cantellated honeycomb still
+misses its frequency-6 windows by 3.2 deg. The tetrahedral cages' honeycombs (the
 quarter-cubic and alternated ones) need the `[3^[4]]` group and are not
 built.
 

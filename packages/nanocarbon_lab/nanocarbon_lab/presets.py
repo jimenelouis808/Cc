@@ -772,6 +772,8 @@ PRESETS: dict[str, dict[str, object]] = {
 #   bitruncated (SOD)     f4 r2  1 row   3792        1.353-1.493
 #   cantitruncated cubic  f4 r2  1 row   7680        1.377-1.464  (96 %)
 #   omnitruncated cubic   f4 r2  1 row  15360        1.356-1.488  (95 %)
+#   3.4.6.4               f6 r2  1 row   8616        1.377-1.465
+#   runcitruncated cubic  f6 r2  1 row  17280        1.361-1.481
 PRESETS.update({
     label: {"mode_kind": "superstructure (geodesic)", "gd_n": 0,
             "gd_wr": wr, "gd_graph": graph, "gd_m": 1, "gd_freq": freq,
@@ -795,6 +797,10 @@ PRESETS.update({
          "wythoff-cantitruncated-cubic", 4, 2, 1),
         ("Omnitruncated-cubic honeycomb (Wythoff, clean, slow)",
          "wythoff-omnitruncated-cubic", 4, 2, 1),
+        ("Super-3.4.6.4 sheet (Wythoff, clean, slow)",
+         "wythoff-rhombitrihexagonal", 6, 2, 1),
+        ("Runcitruncated-cubic honeycomb (Wythoff, clean, slow)",
+         "wythoff-runcitruncated-cubic", 6, 2, 1),
     )
 })
 

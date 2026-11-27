@@ -803,14 +803,14 @@ GEODESIC_CAGES: dict[str, dict] = {
     "wythoff-triangular": {"freq": 2, "tolerance_deg": 2.5},
     "wythoff-truncated-square": {"freq": 4, "tolerance_deg": 2.5},
     "wythoff-truncated-hexagonal": {"freq": 4, "tolerance_deg": 2.5},
-    "wythoff-rhombitrihexagonal": {"freq": 4, "tolerance_deg": 2.5},
+    "wythoff-rhombitrihexagonal": {"freq": 6, "tolerance_deg": 2.5},
     "wythoff-truncated-trihexagonal": {"freq": 4, "tolerance_deg": 2.5},
     "wythoff-rectified-cubic": {"freq": 6, "tolerance_deg": 2.5},
     "wythoff-truncated-cubic": {"freq": 4, "tolerance_deg": 2.5},
     "wythoff-bitruncated-cubic": {"freq": 4, "tolerance_deg": 2.5},
     "wythoff-cantellated-cubic": {"freq": 4, "tolerance_deg": 2.5},
     "wythoff-cantitruncated-cubic": {"freq": 4, "tolerance_deg": 2.5},
-    "wythoff-runcitruncated-cubic": {"freq": 4, "tolerance_deg": 2.5},
+    "wythoff-runcitruncated-cubic": {"freq": 6, "tolerance_deg": 2.5},
     "wythoff-omnitruncated-cubic": {"freq": 4, "tolerance_deg": 2.5},
 }
 
