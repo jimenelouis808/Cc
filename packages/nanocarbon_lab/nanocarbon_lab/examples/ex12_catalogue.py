@@ -276,9 +276,13 @@ def _panel(ax, record: dict, label: str, lang: str = "es",
         for image in images:
             polygons.append(corners + image)
             colours.append(RING_COLOURS.get(len(ring), "#000000"))
-    ax.add_collection3d(Poly3DCollection(
+    collection = Poly3DCollection(
         polygons, facecolors=colours, edgecolors="#333333",
-        linewidths=linewidth, alpha=1.0))
+        linewidths=linewidth, alpha=1.0)
+    # A 3D axes clips to its square box; a zoomed panel spills past it
+    # into the rest of a wide frame, so it is not clipped.
+    collection.set_clip_on(zoom == 1.0)
+    ax.add_collection3d(collection)
     every = np.vstack(polygons)
     centre = every.mean(axis=0)
     half = float(np.ptp(every, axis=0).max()) / 2.0
@@ -346,7 +350,7 @@ def render_panels(entries: list[tuple], cache: Path, folder: Path,
         # of it, so the panel zooms in; a sheet is tilted further down so
         # its tubes read as tubes rather than as holes in a plane.
         _panel(ax, record, label(entry, lang), lang, fontsize=14,
-               linewidth=0.08, zoom=1.45, sheet_elevation=40)
+               linewidth=0.08, zoom=1.3, sheet_elevation=40)
         path = folder / f"{entry[0]}.png"
         fig.savefig(path, dpi=300)
         plt.close(fig)
