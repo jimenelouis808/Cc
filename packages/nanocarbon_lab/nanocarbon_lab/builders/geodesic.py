@@ -781,7 +781,7 @@ GEODESIC_CAGES: dict[str, dict] = {
     "supertube-(5,5)": {"freq": 4, "tolerance_deg": 4.5},
     "supertube-(6,6)": {"freq": 4, "tolerance_deg": 4.5},
     "supertube-(8,8)": {"freq": 4, "tolerance_deg": 4.5},
-    "supertube-(6,0)": {"freq": 4, "tolerance_deg": 4.5},
+    "supertube-(6,0)": {"freq": 6, "tolerance_deg": 4.5},
     "supertube-(8,0)": {"freq": 4, "tolerance_deg": 4.5},
     "supertube-(10,0)": {"freq": 4, "tolerance_deg": 4.5},
     # GEODESIC_NETS. srs and lonsdaleite have nodes in several
