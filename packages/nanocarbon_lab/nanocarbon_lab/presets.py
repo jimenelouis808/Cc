@@ -761,6 +761,40 @@ PRESETS: dict[str, dict[str, object]] = {
         "het_third": "none", "het_nx": 2, "het_ny": 2},
 }
 
+# Periodic Wythoff nets (builders/wythoff.py), each at its most compact
+# clean build, m = 1 (measured; every one 100 % placed unless noted):
+#   triangular 3^6        f2 r1  1 row    232 atoms  1.367-1.439 A
+#   4.8.8                 f4 r2  1 row   1272        1.363-1.476
+#   3.12.12               f4 r3  1 row   4272        1.385-1.462
+#   truncated cubic       f4 r1  2 rows  2100        1.341-1.502
+#   rectified cubic       f6 r2  1 row   2148        1.347-1.491  (99 %)
+#   bitruncated (SOD)     f4 r2  1 row   3792        1.353-1.493
+#   cantitruncated cubic  f4 r2  1 row   7680        1.377-1.464  (96 %)
+#   omnitruncated cubic   f4 r2  1 row  15360        1.356-1.488  (95 %)
+PRESETS.update({
+    label: {"mode_kind": "superstructure (geodesic)", "gd_n": 0,
+            "gd_wr": wr, "gd_graph": graph, "gd_m": 1, "gd_freq": freq,
+            "gd_rows": rows, "anneal": 0}
+    for label, graph, freq, wr, rows in (
+        ("Super-triangular sheet (Wythoff, clean)",
+         "wythoff-triangular", 2, 1, 1),
+        ("Super-4.8.8 sheet (Wythoff, clean)",
+         "wythoff-truncated-square", 4, 2, 1),
+        ("Super-3.12.12 sheet (Wythoff, clean)",
+         "wythoff-truncated-hexagonal", 4, 3, 1),
+        ("Truncated-cubic honeycomb (Wythoff, clean)",
+         "wythoff-truncated-cubic", 4, 1, 2),
+        ("Rectified-cubic honeycomb (Wythoff, clean)",
+         "wythoff-rectified-cubic", 6, 2, 1),
+        ("Sodalite net, bitruncated cubic (Wythoff, clean)",
+         "wythoff-bitruncated-cubic", 4, 2, 1),
+        ("Cantitruncated-cubic honeycomb (Wythoff, clean, slow)",
+         "wythoff-cantitruncated-cubic", 4, 2, 1),
+        ("Omnitruncated-cubic honeycomb (Wythoff, clean, slow)",
+         "wythoff-omnitruncated-cubic", 4, 2, 1),
+    )
+})
+
 # A geodesic preset names the structure, not the last enantiomer or frame
 # seed someone picked: without these the window would carry a ticked
 # mirror box from one preset into the next.
