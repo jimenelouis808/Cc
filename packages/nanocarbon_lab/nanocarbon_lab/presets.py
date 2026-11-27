@@ -331,6 +331,7 @@ PRESETS: dict[str, dict[str, object]] = {
     #   supertube-(4,4) freq 4, m=1, 2 rows  10816  1.358-1.483     45 min
     #   supertube-(5,5) freq 4, m=1, 2 rows  13520  1.381-1.448    1.7 h
     #   supertube-(6,6) freq 4, m=1, 2 rows  16224  1.346-1.505    2.6 h
+    #   supertube-(8,0) freq 4, m=1, 2 rows  21632  1.334-1.503    2.4 h
     **{label: {"mode_kind": "superstructure (geodesic)", "gd_n": 0, "gd_wr": 1,
                "gd_graph": graph, "gd_m": m, "gd_freq": freq,
                "gd_rows": rows, "anneal": 0}
@@ -343,6 +344,8 @@ PRESETS: dict[str, dict[str, object]] = {
            ("Supertube (5,5) (geodesic, clean, slow)", "supertube-(5,5)",
             1, 4, 2),
            ("Supertube (6,6) (geodesic, clean, slow)", "supertube-(6,6)",
+            1, 4, 2),
+           ("Supertube (8,0) (geodesic, clean, slow)", "supertube-(8,0)",
             1, 4, 2),
            ("Super-lonsdaleite (geodesic, clean, slow)",
             "super-lonsdaleite", 2, 3, 1),
