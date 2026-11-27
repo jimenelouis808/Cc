@@ -1,4 +1,4 @@
-"""Write every geodesic and Goldberg superstructure preset as extended XYZ.
+"""Write every geodesic, Goldberg and knee superstructure preset as extxyz.
 
     python -m nanocarbon_lab.examples.ex13_export_structures <folder>
     python -m nanocarbon_lab.examples.ex13_export_structures <folder> \\
@@ -29,12 +29,21 @@ import numpy as np
 
 GEODESIC = "superstructure (geodesic)"
 GOLDBERG = "superstructure (Goldberg)"
+#: Knee modes -> the `builders.knee` function that builds them. Their
+#: nodes are the junction of the tubes, with no sphere.
+KNEE = {"schwarzite (knees)": "knee_schwarzite",
+        "junction (knees)": "knee_junction",
+        "supernetwork (knees)": "knee_supernetwork"}
 
 
 def _key(spec: dict) -> str:
     """File stem naming one build by its parameters."""
     if spec["builder"] == "goldberg":
         return f"goldberg-{spec['kind']}_m{spec['m']}n{spec['n']}"
+    if spec["builder"].startswith("knee_"):
+        kind = spec.get("kind", spec.get("net"))
+        return (f"{spec['builder'].replace('_', '-')}-{kind}"
+                f"_k{spec['circumference']}_r{spec['arm_rows']}")
     return (f"{spec['graph']}_m{spec['m']}n{spec['n']}_f{spec['freq']}"
             f"_r{spec['rows']}_w{spec['window_radius']}")
 
@@ -42,7 +51,7 @@ def _key(spec: dict) -> str:
 def preset_specs() -> dict[str, dict]:
     """Every geodesic and Goldberg preset, as builder arguments, by file stem."""
     from nanocarbon_lab.builders.geodesic import GEODESIC_CAGES
-    from nanocarbon_lab.presets import PRESETS
+    from nanocarbon_lab.presets import PRESETS, knee_params
 
     specs: dict[str, dict] = {}
     for label, p in PRESETS.items():
@@ -57,6 +66,9 @@ def preset_specs() -> dict[str, dict]:
             m = int(p["gb_m"])
             spec = {"builder": "goldberg", "kind": p["gb_kind"], "m": m,
                     "n": m if p.get("gb_class2") else int(p.get("gb_n", 0))}
+        elif p.get("mode_kind") in KNEE:
+            spec = {"builder": KNEE[p["mode_kind"]],
+                    **knee_params(p["mode_kind"], p)}
         else:
             continue
         specs.setdefault(_key(spec), {**spec, "presets": []})
@@ -109,9 +121,14 @@ def build_one(stem: str, spec: dict, out: Path) -> dict:
                 spec["graph"], m=spec["m"], n=spec["n"], freq=spec["freq"],
                 rows=spec["rows"], window_radius=spec["window_radius"],
                 tolerance_deg=spec["tolerance_deg"])
-        else:
+        elif spec["builder"] == "goldberg":
             from nanocarbon_lab.builders.goldberg import build_goldberg
             atoms = build_goldberg(kind=spec["kind"], m=spec["m"], n=spec["n"])
+        else:
+            from nanocarbon_lab.builders import knee
+            atoms = getattr(knee, f"build_{spec['builder']}")(
+                **{k: v for k, v in spec.items()
+                   if k not in ("builder", "presets")})
     except Exception as exc:  # recorded, so one failure does not stop the rest
         return {"file": path.name, "status": f"failed: {exc}"[:200]}
     geometry = atoms.info["geometry"]
@@ -119,7 +136,8 @@ def build_one(stem: str, spec: dict, out: Path) -> dict:
                       sorted(atoms.info["ring_counts"].items()))
     info = {k: v for k, v in spec.items() if k not in ("presets",)}
     info.update(census=census, verdict=str(sp2_quality(geometry)[0]),
-                placed=float(atoms.info.get("disclinations_placed", 0.0)),
+                # -1 where the builder does not measure the placement.
+                placed=float(atoms.info.get("disclinations_placed", -1.0)),
                 bond_min=float(geometry["bond_min"]),
                 bond_max=float(geometry["bond_max"]),
                 seconds=round(time.time() - started))
@@ -143,6 +161,8 @@ def convert_cache(cache: Path, out: Path) -> list[dict]:
                     "freq": kwargs.get("freq", 2),
                     "rows": kwargs.get("rows", 1),
                     "window_radius": kwargs.get("window_radius", 1)}
+        elif builder.startswith("knee_"):
+            spec = {"builder": builder, **kwargs}
         else:
             spec = {"builder": "goldberg", "kind": kwargs["kind"],
                     "m": kwargs["m"], "n": kwargs.get("n", 0)}
@@ -152,7 +172,8 @@ def convert_cache(cache: Path, out: Path) -> list[dict]:
         census = " ".join(f"{k}:{v}" for k, v in sorted(
             record["census"].items(), key=lambda kv: int(kv[0])))
         info = {**spec, "census": census, "verdict": record["verdict"],
-                "placed": record["placed"], "bond_min": record["bonds"][0],
+                "placed": (-1.0 if record["placed"] is None
+                           else record["placed"]), "bond_min": record["bonds"][0],
                 "bond_max": record["bonds"][1], "label": label}
         _write(path, record["positions"], record["cell"], record["pbc"], info)
         rows.append({"file": path.name, "status": "from cache",

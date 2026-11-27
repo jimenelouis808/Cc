@@ -6,10 +6,24 @@ CLAUDE.md give as clean, cached as JSON so a second run only re-renders,
 and drawn with each ring filled by its size -- pentagons red, hexagons
 grey, heptagons blue, octagons green -- because the point of these
 structures is *where* the non-hexagons sit, which an atoms-and-bonds view
-does not show. Labels are in Spanish, like the window.
+does not show. Labels are in Spanish by default (``--lang en`` for
+English).
 
     python -m nanocarbon_lab.examples.ex12_catalogue --out catalogo/
     python -m nanocarbon_lab.examples.ex12_catalogue --out catalogo/ --quick
+    python -m nanocarbon_lab.examples.ex12_catalogue --out catalogo/ \\
+        --lang en --dpi 400 --panels
+
+``--dpi`` sets the grid's resolution (170 gives about 2700 px across, 400
+about 6400). ``--panels`` also writes one 3840 x 2160 (4K) image per
+structure into ``panels_<lang>/``, which is what to open to zoom in on a
+node.
+
+The knee and Goldberg entries have **no sphere at the nodes**: the node
+is the junction of the tubes itself, a saddle paid in heptagons (and, on
+a planar crossing, four pentagons at its poles). They exist only for
+periodic nets -- a finite cage's corner is convex and cannot be built that
+way -- and are the fewest-atom route to the same net.
 
 ``--quick`` keeps the entries that build in under about two minutes.
 Builds run in ``--jobs`` processes.
@@ -102,7 +116,75 @@ ENTRIES: list[tuple[str, str, str, dict, bool]] = [
      {"kind": "diamond", "m": 2, "n": 0}, True),
     ("dchiral", "Schwarz D quiral GC(2,1)", "goldberg",
      {"kind": "diamond", "m": 2, "n": 1}, True),
+    ("pgc11", "Schwarz P GC(1,1), sin esferas", "goldberg",
+     {"kind": "primitive", "m": 1, "n": 1}, True),
+    ("dgc10", "Schwarz D GC(1,0), solo heptágonos", "goldberg",
+     {"kind": "diamond", "m": 1, "n": 0}, True),
+    ("kneep", "Schwarz P (codos, sin esferas)", "knee_schwarzite",
+     {"kind": "primitive", "circumference": 20, "arm_rows": 9}, True),
+    ("kneed", "Schwarz D (codos, sin esferas)", "knee_schwarzite",
+     {"kind": "diamond", "circumference": 18, "arm_rows": 5}, True),
+    ("kneeg", "Giroide (codos, sin esferas)", "knee_schwarzite",
+     {"kind": "gyroid", "circumference": 20, "arm_rows": 5}, True),
+    ("kneesg", "Súper-grafeno (codos, sin esferas)", "knee_supernetwork",
+     {"net": "super-graphene", "circumference": 22, "arm_rows": 5}, True),
+    ("kneess", "Súper-cuadrada (codos, sin esferas)", "knee_supernetwork",
+     {"net": "super-square", "circumference": 12, "arm_rows": 5}, True),
+    ("kneey", "Unión Y (codos, sin esfera)", "knee_junction",
+     {"kind": "y", "circumference": 14, "arm_rows": 9}, True),
+    ("kneet", "Unión tetraédrica (codos, sin esfera)", "knee_junction",
+     {"kind": "tetrahedral", "circumference": 18, "arm_rows": 9}, True),
 ]
+
+#: English labels, by entry key. A key missing here falls back to the
+#: Spanish label, and a test keeps the two tables in step.
+LABELS_EN: dict[str, str] = {
+    "cube": "Cube cage", "tetra": "Tetrahedral cage",
+    "octa": "Octahedral cage", "ico": "Icosahedral cage",
+    "dodeca": "Dodecahedral cage", "cubocta": "Cuboctahedron",
+    "icosido": "Icosidodecahedron", "ttetra": "Truncated tetrahedron",
+    "tocta": "Truncated octahedron", "rhombi": "Rhombicuboctahedron",
+    "hyper": "Hypercube (tesseract)",
+    "wtico": "Truncated icosidodecahedron (Wythoff)",
+    "wtcubo": "Truncated cuboctahedron (Wythoff)",
+    "wrico": "Rhombicosidodecahedron (Wythoff)",
+    "wtdod": "Truncated dodecahedron (Wythoff)",
+    "c60": "C60 of tubes", "scubic": "Super-cubic", "ssquare": "Super-square",
+    "sbcc": "Super-bcc", "sgraph": "Super-graphene",
+    "skagome": "Super-kagome", "ssrs": "Super-srs (gyroid)",
+    "sdia": "Super-diamond", "sfcc": "Super-fcc",
+    "slon": "Super-lonsdaleite", "stube": "Supertube (4,4)",
+    "pchiral": "Chiral Schwarz P GC(3,1)",
+    "fau": "Schwarz D GC(2,0), FAU-commensurate",
+    "dchiral": "Chiral Schwarz D GC(2,1)",
+    "pgc11": "Schwarz P GC(1,1), no spheres",
+    "dgc10": "Schwarz D GC(1,0), heptagons only",
+    "kneep": "Schwarz P (knees, no spheres)",
+    "kneed": "Schwarz D (knees, no spheres)",
+    "kneeg": "Gyroid (knees, no spheres)",
+    "kneesg": "Super-graphene (knees, no spheres)",
+    "kneess": "Super-square (knees, no spheres)",
+    "kneey": "Y junction (knees, no sphere)",
+    "kneet": "Tetrahedral junction (knees, no sphere)",
+}
+
+#: Every string the image draws besides the labels, per language.
+TEXT: dict[str, dict[str, str]] = {
+    "es": {"atoms": "átomos", "cell": "celda",
+           "title": "Superestructuras de carbono cristalinas — "
+                    "nanocarbon_lab (pentágonos rojo, heptágonos azul, "
+                    "octágonos verde)",
+           "clean": "limpio", "strained": "tensionado", "broken": "roto"},
+    "en": {"atoms": "atoms", "cell": "cell",
+           "title": "Crystalline carbon superstructures — nanocarbon_lab "
+                    "(pentagons red, heptagons blue, octagons green)",
+           "clean": "clean", "strained": "strained", "broken": "broken"},
+}
+
+
+def label(entry: tuple, lang: str) -> str:
+    """The entry's label in `lang` ("es" or "en")."""
+    return LABELS_EN.get(entry[0], entry[1]) if lang == "en" else entry[1]
 
 #: Ring fill by size; anything else is drawn black so it cannot hide.
 RING_COLOURS = {5: "#d62728", 6: "#bdbdbd", 7: "#1f5fbf", 8: "#2ca02c"}
@@ -125,10 +207,14 @@ def _build(entry: tuple, cache: Path) -> Path:
             "tolerance_deg", 2.5)
         atoms = build_geodesic_superstructure(tolerance_deg=tolerance,
                                               **kwargs)
-    else:
+    elif builder == "goldberg":
         from nanocarbon_lab.builders.goldberg import build_goldberg
 
         atoms = build_goldberg(**kwargs)
+    else:
+        from nanocarbon_lab.builders import knee
+
+        atoms = getattr(knee, f"build_{builder}")(**kwargs)
     from nanocarbon_lab.validation.quality import sp2_quality
 
     geometry = atoms.info["geometry"]
@@ -140,7 +226,9 @@ def _build(entry: tuple, cache: Path) -> Path:
         "census": {str(k): int(v)
                    for k, v in atoms.info["ring_counts"].items()},
         "verdict": str(sp2_quality(geometry)[0]),
-        "placed": float(atoms.info.get("disclinations_placed", 0.0)),
+        # None when the builder does not measure it (the knee schwarzite).
+        "placed": (None if atoms.info.get("disclinations_placed") is None
+                   else float(atoms.info["disclinations_placed"])),
         "bonds": [float(geometry["bond_min"]), float(geometry["bond_max"])],
         "seconds": round(time.time() - started, 1),
     }
@@ -160,7 +248,8 @@ def _unwrap(points: np.ndarray, cell: np.ndarray, pbc: list[bool]
     return out
 
 
-def _panel(ax, record: dict, label: str) -> None:
+def _panel(ax, record: dict, label: str, lang: str = "es",
+           fontsize: float = 7, linewidth: float = 0.05) -> None:
     from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 
     positions = np.asarray(record["positions"])
@@ -188,7 +277,7 @@ def _panel(ax, record: dict, label: str) -> None:
             colours.append(RING_COLOURS.get(len(ring), "#000000"))
     ax.add_collection3d(Poly3DCollection(
         polygons, facecolors=colours, edgecolors="#333333",
-        linewidths=0.05, alpha=1.0))
+        linewidths=linewidth, alpha=1.0))
     every = np.vstack(polygons)
     centre = every.mean(axis=0)
     half = float(np.ptp(every, axis=0).max()) / 2.0
@@ -202,15 +291,20 @@ def _panel(ax, record: dict, label: str) -> None:
     census = " ".join(f"{k}:{v}" for k, v in sorted(
         record["census"].items(), key=lambda kv: int(kv[0])) if k != "6")
     lo, hi = record["bonds"]
-    tiled = "" if not live.any() else " (celda ×" + "×".join(
+    text = TEXT[lang]
+    tiled = "" if not live.any() else f" ({text['cell']} ×" + "×".join(
         str(r) for r, on in zip(reps, live, strict=True) if on) + ")"
-    ax.set_title(f"{label}{tiled}\n{len(positions)} átomos · {census}\n"
-                 f"{lo:.3f}–{hi:.3f} Å · {record['verdict']} · "
-                 f"{record['placed']:.0%}", fontsize=7)
+    verdict = text.get(record["verdict"], record["verdict"])
+    placed = record.get("placed")
+    placed = "" if placed is None else f" · {placed:.0%}"
+    number = f"{len(positions):,}".replace(",", " ")
+    ax.set_title(f"{label}{tiled}\n{number} {text['atoms']} · {census}\n"
+                 f"{lo:.3f}–{hi:.3f} Å · {verdict}{placed}",
+                 fontsize=fontsize)
 
 
 def render(entries: list[tuple], cache: Path, out: Path,
-           columns: int = 5) -> Path:
+           columns: int = 5, lang: str = "es", dpi: int = 170) -> Path:
     """Draw every cached entry into one grid image; returns its path."""
     import matplotlib
 
@@ -219,17 +313,41 @@ def render(entries: list[tuple], cache: Path, out: Path,
 
     rows = int(np.ceil(len(entries) / columns))
     fig = plt.figure(figsize=(3.2 * columns, 3.4 * rows))
+    # Edges are drawn in points, so they thin out as the dpi rises; keep
+    # them about the same number of pixels wide.
+    width = 0.05 * max(1.0, dpi / 170)
     for k, entry in enumerate(entries):
         record = json.loads((cache / f"{entry[0]}.json").read_text())
         ax = fig.add_subplot(rows, columns, k + 1, projection="3d")
-        _panel(ax, record, entry[1])
-    fig.suptitle("Superestructuras de carbono cristalinas — nanocarbon_lab "
-                 "(pentágonos rojo, heptágonos azul, octágonos verde)",
-                 fontsize=11)
+        _panel(ax, record, label(entry, lang), lang, linewidth=width)
+    fig.suptitle(TEXT[lang]["title"], fontsize=11)
     fig.tight_layout(rect=(0, 0, 1, 0.97))
-    fig.savefig(out, dpi=170)
+    fig.savefig(out, dpi=dpi)
     plt.close(fig)
     return out
+
+
+def render_panels(entries: list[tuple], cache: Path, folder: Path,
+                  lang: str = "es") -> list[Path]:
+    """One 3840 x 2160 image per entry, for zooming into a node."""
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    folder.mkdir(parents=True, exist_ok=True)
+    paths = []
+    for entry in entries:
+        record = json.loads((cache / f"{entry[0]}.json").read_text())
+        fig = plt.figure(figsize=(12.8, 7.2))
+        ax = fig.add_axes((0.0, 0.0, 1.0, 0.9), projection="3d")
+        _panel(ax, record, label(entry, lang), lang, fontsize=14,
+               linewidth=0.08)
+        path = folder / f"{entry[0]}.png"
+        fig.savefig(path, dpi=300)
+        plt.close(fig)
+        paths.append(path)
+    return paths
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -238,16 +356,31 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--quick", action="store_true",
                         help="Only the entries that build in minutes.")
     parser.add_argument("--jobs", type=int, default=2)
+    parser.add_argument("--lang", choices=sorted(TEXT), default="es")
+    parser.add_argument("--dpi", type=int, default=170,
+                        help="Grid resolution (400 is about 6400 px wide).")
+    parser.add_argument("--panels", action="store_true",
+                        help="Also one 4K image per structure.")
+    parser.add_argument("--only-render", action="store_true",
+                        help="Draw the cached entries; build nothing.")
     args = parser.parse_args(argv)
     out = Path(args.out)
     cache = out / "cache"
     cache.mkdir(parents=True, exist_ok=True)
     entries = [e for e in ENTRIES if e[4] or not args.quick]
-    with ProcessPoolExecutor(max_workers=args.jobs) as pool:
-        for path in pool.map(_build, entries, [cache] * len(entries)):
-            print(f"  built {path.name}", flush=True)
-    image = render(entries, cache, out / "catalogo.png")
+    if args.only_render:
+        entries = [e for e in entries if (cache / f"{e[0]}.json").exists()]
+    else:
+        with ProcessPoolExecutor(max_workers=args.jobs) as pool:
+            for path in pool.map(_build, entries, [cache] * len(entries)):
+                print(f"  built {path.name}", flush=True)
+    name = "catalogo.png" if args.lang == "es" else "catalogue.png"
+    image = render(entries, cache, out / name, lang=args.lang, dpi=args.dpi)
     print(f"catalogue: {image}")
+    if args.panels:
+        folder = out / f"panels_{args.lang}"
+        print(f"panels: {len(render_panels(entries, cache, folder, args.lang))}"
+              f" in {folder}")
     return 0
 
 
