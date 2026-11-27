@@ -1808,7 +1808,24 @@ module. `wythoff_frames` fits the node frame once at the generator and
 carries it by the group element that carries the vertex, which fits
 every [5,3] solid **exactly** at frequency 2 -- including the three no
 other catalogue here had: the truncated dodecahedron, the
-rhombicosidodecahedron and the truncated icosidodecahedron. GC(3,1) Schwarz P is the tightest P cell in the package. `n` is
+rhombicosidodecahedron and the truncated icosidodecahedron. Built, all
+CLEAN and 100 % placed:
+
+| cage | freq | m, rows | frames | atoms | bonds (Å) |
+|---|---|---|---|---|---|
+| truncated icosidodecahedron | 2 | 1, 1 | shared | 11760 | 1.361-1.450 |
+| truncated cuboctahedron | 4 | 1, 2 | group | 16224 | 1.375-1.457 |
+| rhombicosidodecahedron | 2 | 2, 1 | shared | 24960 | 1.387-1.458 |
+| truncated dodecahedron | 2 | 2, 1 | shared | 23520 | 1.393-1.451 |
+
+**Shared frames open windows on any sphere vertex.** A shared frame is
+centrosymmetric, so the two ends of an arm sit on antipodes of one
+degree; only differently oriented spheres need the six-fold rule. The
+rule had been applied to the shared case too, and it lost super-fcc (its
+<110> arms fit mixed sites to 2.1 deg at frequency 4, six-fold ones to
+4.7) and changed the census of the 2.1-deg cages (tetrahedron
+`{5: 40, 7: 64}` against `{5: 42, 7: 66}` without it). Fixed; the
+catalogue entries built under it were rebuilt. GC(3,1) Schwarz P is the tightest P cell in the package. `n` is
 in the Goldberg and geodesic frames of the window and on both
 subcommands; `(m, n)` and `(n, m)` are mirror images.
 
