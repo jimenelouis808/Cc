@@ -334,11 +334,11 @@ def build_geodesic_superstructure(
     smooth, bond, vacuum, relax, relax_iterations
         As for the other carrier builders.
     window
-        Degree of the sphere vertices windows may open on when the node
-        frames differ (per-node or group frames): 6, or 5. ``None`` takes
-        the catalogue entry's own, else 6. A shared frame opens windows on
-        any vertex, which is safe there (see :func:`_six_fold`) and is
-        recorded as ``window_degree = 0``.
+        Degree of the sphere vertices windows open on, by preference: 6
+        (hexagonal mouths) or 5. ``None`` takes the catalogue entry's own,
+        else 6. Only when no frame fits that way does a shared frame fall
+        back to any vertex (see :func:`_choose_frames`), recorded as
+        ``window_degree = 0``.
     seed
         Seed of the frame fit's random starts. Different seeds can land
         on different, equally good frames, and so on measurably different
@@ -352,11 +352,8 @@ def build_geodesic_superstructure(
     if window is None:
         window = GEODESIC_CAGES.get(graph.name, {}).get("window", 6)
     points, cell = _graph_frame(graph)
-    frame, miss, per_node = _choose_frames(graph, points, cell, freq,
-                                           tolerance_deg, seed,
-                                           window=window)
-    if per_node is False:
-        window = 0
+    frame, miss, per_node, window = _choose_frames(
+        graph, points, cell, freq, tolerance_deg, seed, window=window)
     coarse, budget, scale, report = geodesic_map(
         points, graph.edges, frame, freq=freq, rows=rows,
         tolerance_deg=tolerance_deg, cell=cell, window=window)
@@ -396,36 +393,53 @@ def build_geodesic_superstructure(
 
 def _choose_frames(graph, points, cell, freq: int, tolerance_deg: float,
                    seed: int = 0, starts: int = 24, window: int = 6):
-    """Node frames for a build, and which kind: shared, group or per node.
+    """Node frames for a build, which kind they are, and the window rule.
 
-    One shared frame first: every window rim then has the same
-    orientation and the carrier is mirror-exact (super-cube's GC(2,1)
-    and GC(1,2) agree to 2e-9). Frames carried by a group come next, for
-    Wythoff cages -- exact for [5,3], but a [4,3] mirror is not a
-    symmetry of the icosahedral sphere, turns a two-fold rim 90 deg and
-    makes the arm choose a twist (the Wythoff cube's mirror pair came out
-    1.9 % apart that way). Per-node fits are last.
+    Tried in order, the first within ``tolerance_deg`` wins:
 
-    A shared frame may open windows on any vertex (see :func:`_six_fold`);
-    group and per-node frames only on degree-``window`` ones.
+    1. **One shared frame, windows on degree-``window`` vertices.** Every
+       rim has the same orientation, so the carrier is mirror-exact
+       (super-cube's GC(2,1) and GC(1,2) agree to 2e-9), and every mouth
+       is the same polygon.
+    2. **Frames carried by the Wythoff group.** Exact under [5,3], whose
+       every element is a symmetry of the sphere; a [4,3] mirror is not,
+       turns a two-fold rim 90 deg and makes the arm pick a twist.
+    3. **One frame per node**, degree-``window`` windows.
+    4. **One shared frame, windows on any vertex.** Still safe, since a
+       shared frame is centrosymmetric and an arm's two ends are
+       antipodes of one degree; but it mixes pentagonal and hexagonal
+       mouths, which measured worse wherever 1 or 3 fits (cuboctahedron
+       and the truncated cages went strained or broken that way). It is
+       here for super-fcc, whose <110> arms fit mixed sites to 2.1 deg
+       and six-fold ones only to 4.7.
 
-    Returns ``(frame, worst_miss_deg, kind)`` with kind ``False``
-    (shared), ``"group"`` or ``True`` (per node).
+    If none fits, the per-node frames are returned and the map refuses.
+
+    Returns ``(frame, worst_miss_deg, kind, window)`` with kind ``False``
+    (shared), ``"group"`` or ``True`` (per node), and ``window = 0`` when
+    any vertex may open.
     """
     frame, miss = fit_frame(points, graph.edges, freq, starts=starts,
-                            seed=seed, cell=cell, window=0)
+                            seed=seed, cell=cell, window=window)
     if miss <= tolerance_deg:
-        return frame, miss, False
+        return frame, miss, False, window
     if graph.name.startswith("wythoff-"):
         from .wythoff import wythoff_frames
 
         group_frame, group_miss = wythoff_frames(graph.name, freq, seed=seed,
                                                  window=window)
         if group_miss <= tolerance_deg:
-            return group_frame, group_miss, "group"
-    frame, miss = fit_node_frames(points, graph.edges, freq, cell=cell,
-                                  seed=seed, window=window)
-    return frame, miss, True
+            return group_frame, group_miss, "group", window
+    node_frame, node_miss = fit_node_frames(points, graph.edges, freq,
+                                            cell=cell, seed=seed,
+                                            window=window)
+    if node_miss <= tolerance_deg:
+        return node_frame, node_miss, True, window
+    frame, miss = fit_frame(points, graph.edges, freq, starts=starts,
+                            seed=seed, cell=cell, window=0)
+    if miss <= tolerance_deg:
+        return frame, miss, False, 0
+    return node_frame, node_miss, True, window
 
 
 def _graph_frame(graph) -> tuple[np.ndarray, np.ndarray | None]:
@@ -621,10 +635,8 @@ def geodesic_atom_count(graph: str = "super-icosahedron", m: int = 2,
     points, cell = _graph_frame(g)
     tolerance = GEODESIC_CAGES.get(graph, {}).get("tolerance_deg", 2.5)
     window = GEODESIC_CAGES.get(graph, {}).get("window", 6)
-    frame, _, kind = _choose_frames(g, points, cell, freq, tolerance,
-                                    window=window)
-    if kind is False:
-        window = 0
+    frame, _, _, window = _choose_frames(g, points, cell, freq, tolerance,
+                                         window=window)
     (_, tris), _, _, _ = geodesic_map(points, g.edges, frame, freq=freq,
                                       window=window,
                                       rows=rows, tolerance_deg=tolerance,
