@@ -1773,6 +1773,24 @@ enantiomer built by reflecting atoms rather than rebuilding, and an
 energy from something better than a fixed-cell VFF scan whose own step
 is 1 %.
 
+**Measured: the diastereomers are indistinguishable at this level.**
+Three frame seeds each, strain per atom (`strain_energy`):
+
+| seed | srs (2,1) | srs (1,2) | difference |
+|---|---|---|---|
+| 0 | 0.03704 | 0.03614 | +2.5 % |
+| 1 | 0.04132 | 0.04123 | +0.2 % |
+| 2 | 0.04125 | 0.04133 | -0.2 % |
+
+The seed moves the strain by 14 % (0.036-0.041) and the cell by 5 %;
+at a fixed seed the two diastereomers agree to 0.2 % and the sign of the
+difference changes. So **wall handedness against net handedness costs
+nothing a valence force field can see**, and the 2.5 % of seed 0 was a
+better frame, not a better diastereomer. If the two differ, the
+difference is electronic -- the pi system's response to a helical wall
+on a helical net -- and that is a question for tbkit (through an
+extxyz exchange, never an import), not for this relaxer.
+
 **Exact enantiomers, and the carrier's own handedness.**
 `geodesic.enantiomer` reflects a finished structure through `x = L/2`:
 every length and angle identical, `gc_indices` and the srs label swapped,
