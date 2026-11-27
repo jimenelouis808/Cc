@@ -47,3 +47,45 @@ def test_a_shared_frame_makes_the_carrier_mirror_exact():
         "wythoff-cube", m=m, n=n, freq=2, rows=1, tolerance_deg=0.5,
         relax=False)) for m, n in ((2, 1), (1, 2))]
     assert strains[0] == pytest.approx(strains[1], rel=1e-9)
+
+
+#: Nodes per cell, coordination and edges per cell of the Euclidean
+#: Wythoff nets, against the uniform honeycomb and tiling tables. The
+#: [6,3] tilings sit in the orthohexagonal cell, two primitive cells.
+EUCLIDEAN = {
+    ("[4,3,4]", (1, 0, 0, 0)): (1, 6),
+    ("[4,3,4]", (0, 1, 0, 0)): (3, 8),
+    ("[4,3,4]", (1, 1, 0, 0)): (6, 5),
+    ("[4,3,4]", (0, 1, 1, 0)): (12, 4),
+    ("[4,3,4]", (1, 0, 1, 0)): (12, 6),
+    ("[4,3,4]", (1, 1, 1, 0)): (24, 4),
+    ("[4,3,4]", (1, 1, 0, 1)): (24, 5),
+    ("[4,3,4]", (1, 1, 1, 1)): (48, 4),
+    ("[4,4]", (1, 0, 0)): (1, 4),
+    ("[4,4]", (0, 1, 1)): (4, 3),
+    ("[6,3]", (0, 0, 1)): (2, 6),
+    ("[6,3]", (1, 0, 0)): (4, 3),
+    ("[6,3]", (0, 1, 0)): (6, 4),
+    ("[6,3]", (1, 0, 1)): (12, 4),
+    ("[6,3]", (1, 1, 1)): (24, 3),
+}
+
+
+@pytest.mark.parametrize("key", sorted(EUCLIDEAN))
+def test_the_uniform_honeycombs_and_tilings_come_out_of_mirrors(key):
+    from nanocarbon_lab.builders.supernetwork import _periodic_graph
+
+    group, rings = key
+    nodes, shape, pbc = W.euclidean_wythoff(group, rings)
+    graph = _periodic_graph("t", nodes, shape, pbc, "")
+    vertices, degree = EUCLIDEAN[key]
+    assert len(graph.nodes) == vertices
+    assert graph.coordination == degree
+    assert 2 * len(graph.edges) == vertices * degree
+
+
+def test_the_named_nets_are_on_the_geodesic_lookup():
+    for name in W.WYTHOFF_NETS:
+        assert G._named(name) is W.WYTHOFF_NETS[name]
+    sodalite = W.WYTHOFF_NETS["wythoff-bitruncated-cubic"]
+    assert sodalite.ring_budget == 12 * (12 - 24)

@@ -1211,13 +1211,14 @@ def _cmd_geodesic(args):
     from ..builders.geodesic import describe_geodesic
 
     own = GEODESIC_CAGES.get(args.graph, {})
-    tolerance = own.get("tolerance_deg", 2.5)
+    tolerance = (args.tolerance if args.tolerance is not None
+                 else own.get("tolerance_deg", 2.5))
     freq = args.freq if args.freq is not None else own.get("freq", 2)
     atoms = build_geodesic_superstructure(
         graph=args.graph, m=args.m, n=args.n, freq=freq, rows=args.rows,
         window_radius=args.window_radius,
         tolerance_deg=tolerance, bond=args.bond, vacuum=args.vacuum,
-        relax=not args.no_relax)
+        relax=not args.no_relax, seed=args.frame_seed, mirror=args.mirror)
     atoms = _maybe_dope(atoms, args)
     _report_structure(atoms, *write_render_bundle(atoms, Path(args.out)))
     print(f"  structure   = {describe_geodesic(atoms)}")
@@ -2926,7 +2927,16 @@ def build_parser() -> argparse.ArgumentParser:
                     help="Rings of the node sphere each window takes; the "
                          "tube is 6*r*m rings round, so a larger window at a "
                          "smaller --m gives the same tube on a node that is "
-                         "mostly mouth instead of mostly ball.")
+                         "mostly mouth instead of mostly ball. 0 takes the "
+                         "largest the arm angles allow.")
+    gd.add_argument("--tolerance", type=float, default=None,
+                    help="Degrees an arm may miss its window vertex; left "
+                         "out, the graph's own.")
+    gd.add_argument("--frame-seed", type=int, default=0,
+                    help="Seed of the node-frame fit's random starts.")
+    gd.add_argument("--mirror", action="store_true",
+                    help="Write the exact enantiomer: the finished atoms "
+                         "reflected, (m, n) becoming (n, m).")
     gd.add_argument("--rows", type=int, default=1,
                     help="Antiprism rows on the shortest arm.")
     gd.add_argument("--bond", type=float, default=1.42)

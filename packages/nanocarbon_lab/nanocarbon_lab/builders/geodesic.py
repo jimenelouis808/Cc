@@ -452,6 +452,7 @@ def build_geodesic_superstructure(
     seed: int = 0,
     window: int | None = None,
     window_radius: int = 1,
+    mirror: bool = False,
 ) -> Atoms:
     """A cage or periodic net of tubes on geodesic nodes, as graphene.
 
@@ -499,6 +500,10 @@ def build_geodesic_superstructure(
         on different, equally good frames, and so on measurably different
         relaxed cells -- which is the construction's own noise, and the
         yardstick any comparison between two builds has to clear.
+    mirror
+        Return the exact enantiomer (:func:`enantiomer`): the finished
+        atoms reflected, not the mirror graph rebuilt, so every length
+        and angle is the same and only the handedness labels change.
     """
     from .hull import equilateralise
 
@@ -548,7 +553,7 @@ def build_geodesic_superstructure(
                           for d in sorted(set(degree))},
         **report,
     })
-    return atoms
+    return enantiomer(atoms) if mirror else atoms
 
 
 def _choose_frames(graph, points, cell, freq: int, tolerance_deg: float,
@@ -583,7 +588,9 @@ def _choose_frames(graph, points, cell, freq: int, tolerance_deg: float,
                             seed=seed, cell=cell, window=window)
     if miss <= tolerance_deg:
         return frame, miss, False, window
-    if graph.name.startswith("wythoff-"):
+    from .wythoff import WYTHOFF_SOLIDS
+
+    if graph.name.removeprefix("wythoff-") in WYTHOFF_SOLIDS:
         from .wythoff import wythoff_frames
 
         group_frame, group_miss = wythoff_frames(graph.name, freq, seed=seed,
@@ -771,6 +778,12 @@ GEODESIC_CAGES: dict[str, dict] = {
     # Rolled super-graphene: no shared frame, per-node misses up to
     # 3.7 deg at frequency 4. Clean at two rows (measured on (4,4) only).
     "supertube-(4,4)": {"freq": 4, "tolerance_deg": 4.5},
+    "supertube-(5,5)": {"freq": 4, "tolerance_deg": 4.5},
+    "supertube-(6,6)": {"freq": 4, "tolerance_deg": 4.5},
+    "supertube-(8,8)": {"freq": 4, "tolerance_deg": 4.5},
+    "supertube-(6,0)": {"freq": 4, "tolerance_deg": 4.5},
+    "supertube-(8,0)": {"freq": 4, "tolerance_deg": 4.5},
+    "supertube-(10,0)": {"freq": 4, "tolerance_deg": 4.5},
     # GEODESIC_NETS. srs and lonsdaleite have nodes in several
     # orientations and fit node by node (exactly, at 16 starts; 4 missed
     # lonsdaleite's by 7 deg); bcc's eight <111> arms are three-fold axes.
@@ -789,15 +802,17 @@ GEODESIC_CAGES: dict[str, dict] = {
 
 def geodesic_atom_count(graph: str = "super-icosahedron", m: int = 2,
                         freq: int = 2, rows: int = 1, n: int = 0,
-                        window_radius: int = 1) -> int:
+                        window_radius: int = 1,
+                        tolerance_deg: float | None = None) -> int:
     """Atoms the build will have: coarse triangles times ``m^2+mn+n^2``.
 
     ``window_radius = 0`` resolves to the largest that fits, as the
-    builder does.
+    builder does; ``tolerance_deg`` left out is the catalogue entry's.
     """
     g = _named(graph)
     points, cell = _graph_frame(g)
-    tolerance = GEODESIC_CAGES.get(graph, {}).get("tolerance_deg", 2.5)
+    tolerance = (tolerance_deg if tolerance_deg is not None else
+                 GEODESIC_CAGES.get(graph, {}).get("tolerance_deg", 2.5))
     window = GEODESIC_CAGES.get(graph, {}).get("window", 6)
     frame, _, _, window = _choose_frames(g, points, cell, freq, tolerance,
                                          window=window)
@@ -896,12 +911,14 @@ GEODESIC_NETS: dict = _geodesic_nets()
 
 def _named(graph: str):
     from .supernetwork import named_graph
-    from .wythoff import WYTHOFF_CAGES
+    from .wythoff import WYTHOFF_CAGES, WYTHOFF_NETS
 
     if graph in GEODESIC_NETS:
         return GEODESIC_NETS[graph]
     if graph in WYTHOFF_CAGES:
         return WYTHOFF_CAGES[graph]
+    if graph in WYTHOFF_NETS:
+        return WYTHOFF_NETS[graph]
     return named_graph(graph, 1.0)
 
 

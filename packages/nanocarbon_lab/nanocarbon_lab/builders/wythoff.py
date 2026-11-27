@@ -186,3 +186,188 @@ def wythoff_frames(name: str, freq: int, starts: int = 32, seed: int = 0,
 #: Every Wythoff cage under the catalogue name the carriers look up.
 WYTHOFF_CAGES: dict[str, SuperGraph] = {
     f"wythoff-{key}": wythoff_cage(key) for key in WYTHOFF_SOLIDS}
+
+
+# --------------------------------------------------------------------------
+# Euclidean kaleidoscopes: periodic nets
+# --------------------------------------------------------------------------
+#
+# The cubic-family cages stack face to face and fill space, and the edge
+# skeletons of those stackings are the uniform honeycombs: Wythoff's
+# construction again, over the affine group [4,3,4] (four mirrors
+# bounding a tetrahedron in the cube) instead of a spherical one. The
+# plane's [4,4] and [6,3] give the uniform tilings. The icosahedral cages
+# have no periodic version: five-fold symmetry does not tile space.
+#
+# Each group is a list of mirrors (inward unit normal, offset) bounding
+# its fundamental simplex, in a cell that the group's translations tile:
+# the unit cube for [4,3,4] and [4,4], the orthohexagonal (1, sqrt 3)
+# rectangle for [6,3].
+
+_S2 = np.sqrt(2.0)
+_S3 = np.sqrt(3.0)
+
+#: group -> (mirrors as (normal, offset) with n.x + d >= 0 inside, cell,
+#: periodic axes). Mirrors are listed along the Coxeter diagram.
+EUCLIDEAN_GROUPS: dict[str, tuple[list[tuple[np.ndarray, float]],
+                                  tuple[float, float, float],
+                                  tuple[bool, bool, bool]]] = {
+    # [4,3,4]: tetrahedron (0,0,0), (1/2,0,0), (1/2,1/2,0), (1/2,1/2,1/2).
+    "[4,3,4]": ([(np.array([-1.0, 0.0, 0.0]), 0.5),
+                 (np.array([1.0, -1.0, 0.0]) / _S2, 0.0),
+                 (np.array([0.0, 1.0, -1.0]) / _S2, 0.0),
+                 (np.array([0.0, 0.0, 1.0]), 0.0)],
+                (1.0, 1.0, 1.0), (True, True, True)),
+    # [4,4]: triangle (0,0), (1/2,0), (1/2,1/2).
+    "[4,4]": ([(np.array([-1.0, 0.0, 0.0]), 0.5),
+               (np.array([1.0, -1.0, 0.0]) / _S2, 0.0),
+               (np.array([0.0, 1.0, 0.0]), 0.0)],
+              (1.0, 1.0, 1.0), (True, True, False)),
+    # [6,3]: triangle (0,0) [six-fold], (1/2,0) [two-fold],
+    # (1/2, sqrt3/6) [three-fold], on the unit triangular lattice.
+    "[6,3]": ([(np.array([0.0, 1.0, 0.0]), 0.0),
+               (np.array([1.0, -_S3, 0.0]) / 2.0, 0.0),
+               (np.array([-1.0, 0.0, 0.0]), 0.5)],
+              (1.0, _S3, 1.0), (True, True, False)),
+}
+
+
+def euclidean_wythoff(group: str, rings: tuple[int, ...]) -> tuple:
+    """Vertices (fractional) and cell of a uniform tiling or honeycomb.
+
+    The generator lies on every unringed mirror and at one distance from
+    every ringed one; its orbit under the reflections, folded into the
+    group's cell, is the vertex set. Returns ``(fractional_nodes, shape,
+    pbc)`` for a :class:`~.supernetwork.SuperGraph`.
+    """
+    mirrors, shape, pbc = EUCLIDEAN_GROUPS[group]
+    if len(rings) != len(mirrors) or not any(rings):
+        raise ValueError(f"{group} takes {len(mirrors)} rings, one at least "
+                         "set.")
+    live = [k for k in range(3) if pbc[k]]
+    dim = len(live)
+    # Solve n_i . x + d_i = rings_i * t in the live coordinates.
+    a = np.zeros((len(mirrors), dim + 1))
+    b = np.zeros(len(mirrors))
+    for i, (normal, offset) in enumerate(mirrors):
+        a[i, :dim] = normal[live]
+        a[i, dim] = -float(rings[i])
+        b[i] = -offset
+    solution = np.linalg.solve(a, b)
+    seed = np.zeros(3)
+    seed[live] = solution[:dim]
+    box = np.array(shape)
+
+    # The orbit is grown unfolded inside a window a few cells wide and
+    # only then cut to the cell. Folding after every reflection is wrong
+    # for [6,3]: its rotations do not preserve the orthohexagonal cell's
+    # translations ((1, 0) turns into (1/2, sqrt3/2)), and the folded
+    # orbit came out with half its points.
+    low = -2.0 * box
+    high = 3.0 * box
+
+    def key(x):
+        return tuple(np.round(x[live], 7))
+
+    found = {key(seed): seed}
+    frontier = [seed]
+    while frontier:
+        nxt = []
+        for x in frontier:
+            for normal, offset in mirrors:
+                y = x - 2.0 * (np.dot(normal, x) + offset) * normal
+                if np.any(y[live] < low[live]) or np.any(y[live] > high[live]):
+                    continue
+                k_ = key(y)
+                if k_ not in found:
+                    found[k_] = y
+                    nxt.append(y)
+        frontier = nxt
+        if len(found) > 200000:
+            raise ValueError("orbit did not close in the window.")
+    inside = {}
+    for x in found.values():
+        y = x.copy()
+        if np.all(y[live] >= -1e-9) and np.all(y[live] < box[live] - 1e-9):
+            y[live] = np.clip(y[live], 0.0, None)
+            inside[key(y)] = y
+    found = inside
+    nodes = np.array(list(found.values())) / box
+    nodes[:, [k for k in range(3) if not pbc[k]]] = 0.5
+    return nodes, tuple(shape), pbc
+
+
+def _euclidean_names() -> dict[str, tuple[str, tuple[int, ...]]]:
+    """Every distinct ring pattern of the three groups, by its own name."""
+    from itertools import product
+
+    names = {}
+    for group, (mirrors, _, _) in EUCLIDEAN_GROUPS.items():
+        for rings in product((0, 1), repeat=len(mirrors)):
+            if any(rings):
+                code = "".join(str(r) for r in rings)
+                names[f"wythoff-{group}-{code}"] = (group, rings)
+    return names
+
+
+def euclidean_net(name: str) -> SuperGraph:
+    """A uniform tiling or honeycomb as a periodic superstructure graph."""
+    from .supernetwork import _periodic_graph
+
+    group, rings = _euclidean_names()[name]
+    nodes, shape, pbc = euclidean_wythoff(group, rings)
+    graph = _periodic_graph(name, nodes, shape, pbc,
+                            f"Wythoff {group} rings {rings}.")
+    _ = graph.coordination
+    return graph
+
+
+#: The distinct Euclidean Wythoff nets the other catalogues do not
+#: already hold, by name -> (group, rings). Cubic (1000), square (100),
+#: honeycomb ([6,3] 100) and kagome ([6,3] 010) are super-cubic,
+#: super-square, super-graphene and super-kagome already; the rest of
+#: the patterns repeat these (0001 is 1000 seen from the other end).
+#: Each 3D honeycomb is the periodic version of the cages it is made of.
+WYTHOFF_NET_PATTERNS: dict[str, tuple[str, tuple[int, ...], str]] = {
+    "wythoff-rectified-cubic": (
+        "[4,3,4]", (0, 1, 0, 0), "octahedra and cuboctahedra, 8 arms"),
+    "wythoff-truncated-cubic": (
+        "[4,3,4]", (1, 1, 0, 0), "truncated cubes and octahedra"),
+    "wythoff-bitruncated-cubic": (
+        "[4,3,4]", (0, 1, 1, 0),
+        "truncated octahedra face to face: the sodalite net"),
+    "wythoff-cantellated-cubic": (
+        "[4,3,4]", (1, 0, 1, 0),
+        "rhombicuboctahedra, cuboctahedra and cubes"),
+    "wythoff-cantitruncated-cubic": (
+        "[4,3,4]", (1, 1, 1, 0),
+        "truncated cuboctahedra, truncated octahedra and cubes"),
+    "wythoff-runcitruncated-cubic": (
+        "[4,3,4]", (1, 1, 0, 1),
+        "truncated cubes, rhombicuboctahedra, octagonal prisms, cubes"),
+    "wythoff-omnitruncated-cubic": (
+        "[4,3,4]", (1, 1, 1, 1),
+        "truncated cuboctahedra and octagonal prisms"),
+    "wythoff-truncated-square": ("[4,4]", (0, 1, 1), "4.8.8 tiling"),
+    "wythoff-triangular": ("[6,3]", (0, 0, 1), "3^6 tiling, 6 arms"),
+    "wythoff-truncated-hexagonal": ("[6,3]", (0, 1, 1), "3.12.12 tiling"),
+    "wythoff-rhombitrihexagonal": ("[6,3]", (1, 0, 1), "3.4.6.4 tiling"),
+    "wythoff-truncated-trihexagonal": ("[6,3]", (1, 1, 1), "4.6.12 tiling"),
+}
+
+
+def wythoff_net(name: str) -> SuperGraph:
+    """A named uniform honeycomb or tiling as a periodic graph."""
+    from .supernetwork import _periodic_graph
+
+    group, rings, note = WYTHOFF_NET_PATTERNS[name]
+    nodes, shape, pbc = euclidean_wythoff(group, rings)
+    graph = _periodic_graph(name, nodes, shape, pbc,
+                            f"Wythoff {group} {rings}: {note}.")
+    _ = graph.coordination
+    return graph
+
+
+#: Every named Euclidean Wythoff net, built once.
+WYTHOFF_NETS: dict[str, SuperGraph] = {
+    name: wythoff_net(name) for name in WYTHOFF_NET_PATTERNS}

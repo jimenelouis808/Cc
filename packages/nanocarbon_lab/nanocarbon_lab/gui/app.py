@@ -815,6 +815,10 @@ class NanocarbonGUI:
                                        tk.BooleanVar(value=False))
         self.var_gb_n = self._var("gb_n", tk.IntVar(value=0))
         self.var_gd_n = self._var("gd_n", tk.IntVar(value=0))
+        self.var_gd_tol = self._var("gd_tol", tk.DoubleVar(value=0.5))
+        self.var_gd_seed = self._var("gd_seed", tk.IntVar(value=0))
+        self.var_gd_mirror = self._var("gd_mirror",
+                                       tk.BooleanVar(value=False))
         self.var_nc_pent = self._var("nc_pent", tk.IntVar(value=1))
         self.var_nc_radius = self._var("nc_radius",
                                        tk.DoubleVar(value=22.0))
@@ -1207,10 +1211,20 @@ class NanocarbonGUI:
         self._param(self.frame_gd, "Index n (chiral GC(m, n))",
                     self.var_gd_n, 0, 4, 7, integer=True, hard_lo=0,
                     hard_hi=8, command=self._update_gd_hint)
-        self._param(self.frame_gd, "Window radius (tube = 6·r·m rings)",
-                    self.var_gd_wr, 1, 3, 9, integer=True, hard_lo=1,
-                    hard_hi=6, command=self._update_gd_hint)
-        self.lbl_gd.grid(row=11, column=0, columnspan=2, sticky="w")
+        self._param(self.frame_gd,
+                    "Window radius (tube = 6·r·m rings; 0 = largest)",
+                    self.var_gd_wr, 0, 4, 9, integer=True, hard_lo=0,
+                    hard_hi=8, command=self._update_gd_hint)
+        self._param(self.frame_gd, "Arm miss tolerance (deg)",
+                    self.var_gd_tol, 0.5, 5.0, 11, resolution=0.5,
+                    hard_lo=0.1, hard_hi=15.0, command=self._update_gd_hint)
+        self._param(self.frame_gd, "Frame-fit seed", self.var_gd_seed,
+                    0, 9, 13, integer=True, hard_lo=0, hard_hi=9999)
+        ttk.Checkbutton(self.frame_gd,
+                        text="Enantiomer (reflect the finished atoms)",
+                        variable=self.var_gd_mirror).grid(
+            row=15, column=0, columnspan=2, sticky="w")
+        self.lbl_gd.grid(row=16, column=0, columnspan=2, sticky="w")
         self.var_gd_graph.trace_add("write", lambda *_: self._gd_cage_changed())
 
         # --- frame route: octahedral nodes and prism arms
@@ -3305,6 +3319,7 @@ class NanocarbonGUI:
         own = GEODESIC_CAGES.get(self.var_gd_graph.get())
         if own:
             self.var_gd_freq.set(own["freq"])
+            self.var_gd_tol.set(own["tolerance_deg"])
         self._update_gd_hint()
 
     def _update_gd_hint(self) -> None:
@@ -3317,8 +3332,9 @@ class NanocarbonGUI:
                                         int(self.var_gd_freq.get()),
                                         int(self.var_gd_rows.get()),
                                         int(self.var_gd_n.get()),
-                                        int(self.var_gd_wr.get()))
-        except ValueError as problem:
+                                        int(self.var_gd_wr.get()),
+                                        float(self.var_gd_tol.get()))
+        except (ValueError, tk.TclError) as problem:
             self.lbl_gd.config(text=f"✗ {problem}")
             return
         self.lbl_gd.config(text=(
@@ -4144,8 +4160,9 @@ class NanocarbonGUI:
                           rows=int(self.var_gd_rows.get()),
                           window_radius=int(self.var_gd_wr.get()),
                           n=int(self.var_gd_n.get()),
-                          tolerance_deg=GEODESIC_CAGES.get(graph, {}).get(
-                              "tolerance_deg", 2.5))
+                          tolerance_deg=float(self.var_gd_tol.get()),
+                          seed=int(self.var_gd_seed.get()),
+                          mirror=bool(self.var_gd_mirror.get()))
         elif mode == "superstructure (frame)":
             params = dict(kind=self.var_fr_kind.get(),
                           m=int(self.var_fr_m.get()),

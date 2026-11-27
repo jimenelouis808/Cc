@@ -142,3 +142,15 @@ def test_the_largest_window_is_found():
     points = np.asarray(graph.nodes, float)
     frame, _ = G.fit_frame(points, graph.edges, 4, starts=8)
     assert G.largest_window(points, graph.edges, frame, 4) == 2
+
+
+def test_mirror_returns_the_reflected_build():
+    from nanocarbon_lab.builders import geodesic as Gd
+
+    kwargs = dict(m=2, n=1, freq=2, rows=1, tolerance_deg=0.5, relax=False)
+    plain = Gd.build_geodesic_superstructure("super-cube", **kwargs)
+    mirrored = Gd.build_geodesic_superstructure("super-cube", mirror=True,
+                                                **kwargs)
+    assert mirrored.info["gc_indices"] == (1, 2)
+    assert np.allclose(mirrored.get_positions(),
+                       Gd.enantiomer(plain).get_positions())

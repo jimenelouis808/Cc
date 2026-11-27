@@ -760,3 +760,11 @@ PRESETS: dict[str, dict[str, object]] = {
         "mode_kind": "vdW stack", "het_bottom": "MoS2", "het_top": "WS2",
         "het_third": "none", "het_nx": 2, "het_ny": 2},
 }
+
+# A geodesic preset names the structure, not the last enantiomer or frame
+# seed someone picked: without these the window would carry a ticked
+# mirror box from one preset into the next.
+for _values in PRESETS.values():
+    if _values.get("mode_kind") == "superstructure (geodesic)":
+        _values.setdefault("gd_seed", 0)
+        _values.setdefault("gd_mirror", False)
