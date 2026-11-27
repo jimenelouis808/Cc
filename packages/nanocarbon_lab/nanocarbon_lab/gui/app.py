@@ -812,6 +812,8 @@ class NanocarbonGUI:
         self.var_gb_m = self._var("gb_m", tk.IntVar(value=4))
         self.var_gb_class2 = self._var("gb_class2",
                                        tk.BooleanVar(value=False))
+        self.var_gb_n = self._var("gb_n", tk.IntVar(value=0))
+        self.var_gd_n = self._var("gd_n", tk.IntVar(value=0))
         self.var_nc_pent = self._var("nc_pent", tk.IntVar(value=1))
         self.var_nc_radius = self._var("nc_radius",
                                        tk.DoubleVar(value=22.0))
@@ -1173,9 +1175,12 @@ class NanocarbonGUI:
                         variable=self.var_gb_class2,
                         command=self._update_gb_hint).grid(
             row=3, column=0, columnspan=2, sticky="w")
+        self._param(self.frame_gb, "Index n (chiral; class II overrides)",
+                    self.var_gb_n, 0, 6, 5, integer=True, hard_lo=0,
+                    hard_hi=16, command=self._update_gb_hint)
         self.lbl_gb = ttk.Label(self.frame_gb, text="", foreground=MUTED,
                                 wraplength=260, justify="left")
-        self.lbl_gb.grid(row=4, column=0, columnspan=2, sticky="w")
+        self.lbl_gb.grid(row=7, column=0, columnspan=2, sticky="w")
         self.var_gb_kind.trace_add("write", lambda *_: self._update_gb_hint())
 
         # --- geodesic route: deltahedral cages
@@ -1198,7 +1203,10 @@ class NanocarbonGUI:
                     command=self._update_gd_hint)
         self.lbl_gd = ttk.Label(self.frame_gd, text="", foreground=MUTED,
                                 wraplength=260, justify="left")
-        self.lbl_gd.grid(row=7, column=0, columnspan=2, sticky="w")
+        self._param(self.frame_gd, "Index n (chiral GC(m, n))",
+                    self.var_gd_n, 0, 4, 7, integer=True, hard_lo=0,
+                    hard_hi=8, command=self._update_gd_hint)
+        self.lbl_gd.grid(row=9, column=0, columnspan=2, sticky="w")
         self.var_gd_graph.trace_add("write", lambda *_: self._gd_cage_changed())
 
         # --- frame route: octahedral nodes and prism arms
@@ -3303,7 +3311,8 @@ class NanocarbonGUI:
         try:
             atoms = geodesic_atom_count(graph, int(self.var_gd_m.get()),
                                         int(self.var_gd_freq.get()),
-                                        int(self.var_gd_rows.get()))
+                                        int(self.var_gd_rows.get()),
+                                        int(self.var_gd_n.get()))
         except ValueError as problem:
             self.lbl_gd.config(text=f"✗ {problem}")
             return
@@ -3340,7 +3349,7 @@ class NanocarbonGUI:
 
         kind = self.var_gb_kind.get()
         m = int(self.var_gb_m.get())
-        n = m if self.var_gb_class2.get() else 0
+        n = m if self.var_gb_class2.get() else int(self.var_gb_n.get())
         if kind not in GOLDBERG_MAPS:
             self.lbl_gb.config(text="")
             return
@@ -3359,7 +3368,8 @@ class NanocarbonGUI:
                              "Tersoff's map; (1,1) is their C168)"}.get(
                       kind, "")
         self.lbl_gb.config(text=(
-            f"GC({m},{n}): {atoms} atoms, {census}; sum(6-n) = {budget} "
+            f"GC({m},{n}){' (chiral)' if n not in (0, m) else ''}: "
+            f"{atoms} atoms, {census}; sum(6-n) = {budget} "
             f"(genus {genus}). Flat graphene patches between the defects, "
             f"{m} rings apart — the literature's construction "
             "(Mackay & Terrones 1991; Koshino & Aoki 2016)."))
@@ -4127,6 +4137,7 @@ class NanocarbonGUI:
             params = dict(graph=graph, m=int(self.var_gd_m.get()),
                           freq=int(self.var_gd_freq.get()),
                           rows=int(self.var_gd_rows.get()),
+                          n=int(self.var_gd_n.get()),
                           tolerance_deg=GEODESIC_CAGES.get(graph, {}).get(
                               "tolerance_deg", 2.5))
         elif mode == "superstructure (frame)":
@@ -4137,7 +4148,8 @@ class NanocarbonGUI:
         elif mode == "superstructure (Goldberg)":
             m = int(self.var_gb_m.get())
             params = dict(kind=self.var_gb_kind.get(), m=m,
-                          n=m if self.var_gb_class2.get() else 0)
+                          n=m if self.var_gb_class2.get()
+                          else int(self.var_gb_n.get()))
         elif mode == "nanocone":
             params = dict(
                 n_pentagons=int(self.var_nc_pent.get()),

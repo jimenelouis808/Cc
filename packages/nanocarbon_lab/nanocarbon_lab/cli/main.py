@@ -1214,7 +1214,7 @@ def _cmd_geodesic(args):
     tolerance = own.get("tolerance_deg", 2.5)
     freq = args.freq if args.freq is not None else own.get("freq", 2)
     atoms = build_geodesic_superstructure(
-        graph=args.graph, m=args.m, freq=freq, rows=args.rows,
+        graph=args.graph, m=args.m, n=args.n, freq=freq, rows=args.rows,
         tolerance_deg=tolerance, bond=args.bond, vacuum=args.vacuum,
         relax=not args.no_relax)
     atoms = _maybe_dope(atoms, args)
@@ -2889,8 +2889,9 @@ def build_parser() -> argparse.ArgumentParser:
                     help="Goldberg-Coxeter index: m rings between defects, "
                          "m^2 times the coarse map's faces.")
     gb.add_argument("--n", type=int, default=0,
-                    help="Second index: 0 or equal to --m (chiral patches "
-                         "are not built).")
+                    help="Second index: 0 for (m,0), equal to --m for "
+                         "class II, anything else for the chiral family "
+                         "(GC(m,n) and GC(n,m) are mirror images).")
     gb.add_argument("--bond", type=float, default=1.42)
     gb.add_argument("--vacuum", type=float, default=12.0,
                     help="Vacuum above and below a sheet (Å).")
@@ -2914,6 +2915,9 @@ def build_parser() -> argparse.ArgumentParser:
     gd.add_argument("--m", type=int, default=2,
                     help="Goldberg-Coxeter index: tube circumference 6m "
                          "rings.")
+    gd.add_argument("--n", type=int, default=0,
+                    help="Second Goldberg-Coxeter index; non-zero and not "
+                         "--m gives the chiral family.")
     gd.add_argument("--freq", type=int, default=None,
                     help="Node sphere frequency; left out, the cage's own "
                          "(2, or 4 for the tetrahedron and octahedron).")

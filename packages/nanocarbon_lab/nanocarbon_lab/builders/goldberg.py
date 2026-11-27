@@ -58,6 +58,206 @@ def _wrap(points: np.ndarray, box: np.ndarray | None) -> np.ndarray:
     return out
 
 
+_OMEGA = complex(0.5, np.sqrt(3.0) / 2.0)
+
+
+def _to_eisenstein(z: complex) -> tuple[int, int]:
+    """Nearest Eisenstein integer ``a + b*omega`` to ``z``, as ``(a, b)``."""
+    b = z.imag / _OMEGA.imag
+    return int(round(z.real - 0.5 * b)), int(round(b))
+
+
+def _from_eisenstein(a: int, b: int) -> complex:
+    return a + b * _OMEGA
+
+
+def orient_mesh(tris) -> list[tuple[int, int, int]]:
+    """Make a closed triangulation's winding consistent, face by face.
+
+    Breadth-first over shared edges: a neighbour that runs the shared edge
+    the same way round as the face already fixed is reversed. Raises if
+    the surface is not orientable (an edge is met in the same sense from
+    two faces both already fixed). The winding of the first face sets the
+    handedness of everything, which matters only for chiral GC.
+    """
+    from collections import deque
+
+    tris = [list(map(int, t)) for t in tris]
+    by_edge: dict[tuple[int, int], list[int]] = {}
+    for f, t in enumerate(tris):
+        for k in range(3):
+            a, b = t[k], t[(k + 1) % 3]
+            by_edge.setdefault((min(a, b), max(a, b)), []).append(f)
+    done = [False] * len(tris)
+    for seed in range(len(tris)):
+        if done[seed]:
+            continue
+        done[seed] = True
+        queue = deque([seed])
+        while queue:
+            f = queue.popleft()
+            t = tris[f]
+            for k in range(3):
+                a, b = t[k], t[(k + 1) % 3]
+                for g in by_edge[(min(a, b), max(a, b))]:
+                    if g == f:
+                        continue
+                    u = tris[g]
+                    same = any(u[j] == a and u[(j + 1) % 3] == b
+                               for j in range(3))
+                    if done[g]:
+                        if same:
+                            raise ValueError("the surface is not orientable.")
+                        continue
+                    if same:
+                        tris[g] = u[::-1]
+                    done[g] = True
+                    queue.append(g)
+    return [tuple(t) for t in tris]
+
+
+def chiral_subdivide(mesh: Mesh, m: int, n: int,
+                     box: np.ndarray | None = None) -> Mesh:
+    """Goldberg-Coxeter ``(m, n)`` of a closed, oriented triangulation.
+
+    Every coarse triangle is laid in the Eisenstein lattice with its
+    corners at ``0``, ``w`` and ``w*omega`` (``w = m + n*omega``), and the
+    lattice's own triangles are given to the coarse face their centroid
+    lies in. For ``n = 0`` (or ``m = 0``) the coarse edges run along
+    lattice lines and this is :func:`subdivide`; for a chiral pair they
+    cut through lattice triangles, which is why chiral GC needed a
+    consistent cut. Here it is: a lattice point outside its face is
+    carried into the neighbour across the edge it left by, by the rotation
+    that unfolds the neighbour onto this face's plane -- a sixth root of
+    unity about the shared edge, so lattice points map to lattice points
+    and both faces agree on every vertex they share. A centroid exactly
+    on a coarse edge (it happens, e.g. at ``(1, 1)``) goes to the face
+    that runs that edge from its lower vertex index to its higher.
+
+    Every new vertex has degree six and every coarse vertex keeps its
+    degree, so the dual's census is the coarse map's, ``T * (m^2 + mn +
+    n^2)`` atoms for ``T`` coarse triangles, and the handedness is
+    ``(m, n)`` against ``(n, m)``.
+
+    Parameters
+    ----------
+    mesh
+        ``(vertices, triangles)``, closed and consistently oriented.
+    m, n
+        Goldberg-Coxeter indices, ``m >= 1``, ``n >= 0``.
+    box
+        As for :func:`subdivide`.
+
+    Returns
+    -------
+    Mesh
+    """
+    if m < 1 or n < 0:
+        raise ValueError("need m >= 1 and n >= 0.")
+    if n == 0:
+        return subdivide(mesh, m, box)
+    vertices, tris = np.asarray(mesh[0], dtype=float), np.asarray(mesh[1])
+    tris = [tuple(int(x) for x in t) for t in tris]
+    w = complex(m) + n * _OMEGA
+    corners = (0j, w, w * _OMEGA)
+    norm = m * m + m * n + n * n
+    face_of: dict[tuple[int, int], tuple[int, int]] = {}
+    for f, t in enumerate(tris):
+        for k in range(3):
+            face_of[(t[k], t[(k + 1) % 3])] = (f, k)
+    if len(face_of) != 3 * len(tris):
+        tris = orient_mesh(tris)
+        face_of = {}
+        for f, t in enumerate(tris):
+            for k in range(3):
+                face_of[(t[k], t[(k + 1) % 3])] = (f, k)
+        if len(face_of) != 3 * len(tris):
+            raise ValueError("the coarse map could not be oriented.")
+    # Barycentric coordinates in the common local frame.
+    frame = np.array([[corners[1].real, corners[2].real],
+                      [corners[1].imag, corners[2].imag]])
+    inverse = np.linalg.inv(frame)
+    eps = 1e-9
+
+    def bary(z: complex) -> np.ndarray:
+        l1, l2 = inverse @ np.array([z.real, z.imag])
+        return np.array([1.0 - l1 - l2, l1, l2])
+
+    def canon(f: int, z: complex) -> tuple:
+        for _ in range(32):
+            lam = bary(z)
+            if lam.min() >= -eps:
+                break
+            k = int(np.argmin(lam))           # outside the edge opposite k
+            a_loc, b_loc = (k + 1) % 3, (k + 2) % 3
+            ga, gb = tris[f][a_loc], tris[f][b_loc]
+            g, j = face_of[(gb, ga)]          # neighbour runs gb -> ga
+            pa, pb = corners[a_loc], corners[b_loc]
+            qb, qa = corners[j], corners[(j + 1) % 3]
+            z = qa + (z - pa) * (qb - qa) / (pb - pa)
+            z = _from_eisenstein(*_to_eisenstein(z))
+            f = g
+        else:
+            raise ValueError("a lattice point did not settle in a face.")
+        t = tris[f]
+        for k in range(3):
+            if abs(z - corners[k]) < 1e-6:
+                return ("v", t[k])
+        for k in range(3):
+            if abs(lam[k]) < eps:
+                a_loc, b_loc = (k + 1) % 3, (k + 2) % 3
+                lo, hi = sorted((a_loc, b_loc), key=lambda c: t[c])
+                along = ((z - corners[lo]) / (corners[hi] - corners[lo])).real
+                return ("e", t[lo], t[hi], int(round(along * norm)))
+        return ("f", f) + _to_eisenstein(z)
+
+    ids: dict[tuple, int] = {}
+    points: list[np.ndarray] = []
+
+    def place(key: tuple, f: int, z: complex) -> int:
+        if key in ids:
+            return ids[key]
+        if key[0] == "v":
+            point = vertices[key[1]]
+        elif key[0] == "e":
+            lo, hi, step = key[1], key[2], key[3]
+            point = vertices[lo] + _offset(vertices, lo, hi, box) * step / norm
+        else:
+            ff = key[1]
+            t = tris[ff]
+            lam = bary(_from_eisenstein(key[2], key[3]))
+            point = (vertices[t[0]] + lam[1] * _offset(vertices, t[0], t[1], box)
+                     + lam[2] * _offset(vertices, t[0], t[2], box))
+        ids[key] = len(points)
+        points.append(point)
+        return ids[key]
+
+    span = int(np.ceil(abs(w))) + 2
+    out: list[tuple[int, int, int]] = []
+    for f, t in enumerate(tris):
+        for a in range(-span, 2 * span):
+            for b in range(-span, 2 * span):
+                z = _from_eisenstein(a, b)
+                for tri in ((z, z + 1, z + _OMEGA),
+                            (z + 1, z + 1 + _OMEGA, z + _OMEGA)):
+                    lam = bary(sum(tri) / 3.0)
+                    if lam.min() < -eps:
+                        continue
+                    if lam.min() < eps:
+                        k = int(np.argmin(lam))
+                        ga, gb = t[(k + 1) % 3], t[(k + 2) % 3]
+                        if ga > gb:
+                            continue
+                    keys = [canon(f, p) for p in tri]
+                    out.append(tuple(place(key, f, p)
+                                     for key, p in zip(keys, tri, strict=True)))
+    expected = len(tris) * norm
+    if len(out) != expected:
+        raise ValueError(f"GC({m},{n}) produced {len(out)} triangles, "
+                         f"expected {expected}.")
+    return _wrap(np.array(points), box), np.array(out, dtype=int)
+
+
 def subdivide(mesh: Mesh, m: int, box: np.ndarray | None = None) -> Mesh:
     """Class-I Goldberg-Coxeter step: every triangle into ``m**2``.
 
@@ -165,17 +365,15 @@ def root_three(mesh: Mesh, box: np.ndarray | None = None) -> Mesh:
 
 def goldberg_coxeter(mesh: Mesh, m: int, n: int = 0,
                      box: np.ndarray | None = None) -> Mesh:
-    """Apply ``GC(m, n)`` for ``n == 0`` or ``n == m``.
+    """Apply ``GC(m, n)``, achiral or chiral.
 
     ``(m, m)`` is ``(1, 1)`` composed with ``(m, 0)``, which is how the
-    Goldberg-Coxeter indices multiply (as Eisenstein integers). The face
+    Goldberg-Coxeter indices multiply (as Eisenstein integers). Any other
+    pair is chiral and goes through :func:`chiral_subdivide`. The face
     count grows by ``T = m**2 + m*n + n**2``.
     """
     if n not in (0, m):
-        raise ValueError(
-            f"GC({m}, {n}) is chiral; only (m, 0) and (m, m) are built here. "
-            "A chiral patch would have to cut the triangular lattice "
-            "consistently across every coarse edge.")
+        return chiral_subdivide(mesh, m, n, box)
     refined = subdivide(mesh, m, box)
     return root_three(refined, box) if n == m and m > 0 else refined
 

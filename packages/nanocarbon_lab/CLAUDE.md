@@ -1544,8 +1544,8 @@ as well. Measured at m = 2, rows = 1, every row CLEAN and 100 % placed:
 | net | freq | atoms | census | bonds (Å) | time |
 |---|---|---|---|---|---|
 | super-cubic | 2 | 464 | `{6: 204, 7: 24}` | **1.401-1.442** | 16 s |
-| super-square | 2 | 416 | `{5: 4, 6: 186, 7: 16}` | 1.367-1.473 | 18 s |
-| super-graphene | 2 | 1568 | `{5: 24, 6: 708, 7: 48}` | 1.342-1.506 | 200 s |
+| super-square | 2 | 416 | `{5: 4, 6: 186, 7: 16}` | 1.381-1.459 | 17 s |
+| super-graphene | 2 | 1568 | `{5: 24, 6: 708, 7: 48}` | 1.393-1.446 | 200 s |
 | super-diamond | 3 | 5760 | `{5: 96, 6: 2576, 7: 192}` | 1.341-1.511 | 18 min |
 | **super-fcc** | 4 | 5120 | `{5: 24, 6: 2232, 7: 264}` | 1.340-1.505 | 13 min |
 
@@ -1564,6 +1564,17 @@ as well. Measured at m = 2, rows = 1, every row CLEAN and 100 % placed:
   1.408-1.436) is still the better sheet; the geodesic one is a
   different, fatter-noded structure.
 * The cell scan dominates the large cells' time.
+* **The two sheets were first measured through a bug**, and the numbers
+  above are after it. `hull.equilateralise` clipped coordinates to the
+  box on *every* axis before its neighbour search, and on an axis that
+  does not repeat (box 0) that sends every coordinate to 0: the tree
+  saw the sheet's thickness as nothing and paired vertices across it,
+  and the "repulsion" -- with a negative gap -- pulled them together.
+  The sheets survived it (1.367-1.473 and 1.342-1.506 before); the
+  supertube, centred on its axis so that x and y both collapsed, did not
+  (coarse edges 0.04-18 from a 0.65-1.90 input). Only the live axes are
+  clipped now, the repulsion acts only inside its range, and
+  `test_hull.py` pins the supertube's equalised edges to 0.8-1.25.
 
 ### Per-node frames, and windows only on six-fold vertices
 
@@ -1601,12 +1612,48 @@ The truncated cube says the same thing differently: broken at one row,
 strained at two, clean at m = 2 -- the room comes from the tube or from
 the arm, and either works.
 
-**The supertube is not fixed.** `supertube-(4,4)` on per-node
-frequency-4 frames (worst miss 3.7 deg), m = 1, one row, periodic along
-its axis: 10240 atoms, the census meets the budget, and the cell relaxes
-**broken**, 1.00-2.22 Å, after 46 minutes. Not diagnosed: the 3.7 deg
-miss, the single row and the axial seam are each candidates, and it is
-not in the catalogue.
+**The supertube was broken by the equalise bug above**, not by its
+frames, its rows or its seam: at one row and at two it relaxed to
+1.00-2.22 and 0.75-2.65 Å, uniformly along the axis, and the coarse map
+going *into* `equilateralise` was sound. See the supertube row below for
+the rebuild after the fix.
+
+### Chiral Goldberg-Coxeter: the consistent cut
+
+`goldberg.chiral_subdivide` builds GC(m, n) for any pair on any closed
+oriented triangulation, so the refusal this file used to describe is
+gone. Each coarse triangle sits in the Eisenstein lattice with corners
+`0, w, w*omega` (`w = m + n*omega`); each lattice triangle goes to the
+face its centroid lies in; a lattice point that falls outside its face
+is carried into the neighbour by the rotation that unfolds the neighbour
+onto this face -- a sixth root of unity about the shared edge, so
+lattice points map to lattice points and both faces name every shared
+vertex the same way. A centroid exactly on a coarse edge (at (1, 1) it
+happens) goes to the face that runs the edge from its lower vertex
+index. The triangle count is checked against `T * (m^2 + mn + n^2)`.
+
+The cut needs a **consistently oriented** map, and C168's Klein map is
+not one -- the class-II note above said it was built "without needing an
+oriented map", and that is exactly why the first chiral D refused.
+`orient_mesh` fixes the winding breadth-first and raises on a
+non-orientable surface; the chiral cut calls it when the directed edges
+do not pair.
+
+| structure | GC | atoms | census | bonds (Å) |
+|---|---|---|---|---|
+| C140 (icosahedron) | (2,1) and (1,2) | 140 | `{5: 12, 6: 60}` | 1.419-1.422 |
+| Schwarz P | (2,1) | 336 | `{6: 152, 8: 12}` | 1.413-1.437 |
+| Schwarz P | (3,1) | 624 | `{6: 296, 8: 12}` | **1.417-1.432** |
+| Schwarz D | (2,1) and (1,2) | 1568 | `{6: 672, 7: 96}` | 1.407-1.468 |
+| Schwarz D | (3,1) | 2912 | `{6: 1344, 7: 96}` | 1.408-1.466 |
+| super-square | (3,1) | 676 | `{5: 4, 6: 324, 8: 8}` | 1.404-1.443 |
+| cube cage, geodesic | (2,1) | 5488 | `{5: 48, 7: 96}` | 1.402-1.454 |
+| icosahedral cage, geodesic | (2,1) | 9240 | `{5: 84, 7: 180, 8: 60}` | 1.377-1.478 |
+
+Every row CLEAN and 100 % placed; the census is the achiral one, as it
+must be. GC(3,1) Schwarz P is the tightest P cell in the package. `n` is
+in the Goldberg and geodesic frames of the window and on both
+subcommands; `(m, n)` and `(n, m)` are mirror images.
 
 
 ## Perfect is two questions, and most builders answer only one

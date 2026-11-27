@@ -379,7 +379,15 @@ def equilateralise(mesh: Mesh, box: np.ndarray | None = None,
         np.add.at(grad, edges[:, 0], -coeff)
         wrapped = x if live is None else _wrap_live(x, live)
         if live is not None:
-            wrapped = np.minimum(wrapped, np.nextafter(live, 0))
+            # Clip the periodic axes only. Clipping every axis to
+            # nextafter(box, 0) sends each coordinate on an axis that does
+            # not repeat (box 0) to 0, which collapsed a supertube's whole
+            # cross-section in the tree: far-apart vertices were found as
+            # pairs and the "repulsion", with a negative gap, pulled them
+            # together -- coarse edges 0.04-18 after a 0.65-1.90 input.
+            on = live > 0
+            wrapped[:, on] = np.minimum(wrapped[:, on],
+                                        np.nextafter(live[on], 0))
         tree = cKDTree(wrapped, boxsize=live) if live is not None \
             else cKDTree(wrapped)
         for i, j in tree.query_pairs(1.4 * edge):
@@ -388,6 +396,8 @@ def equilateralise(mesh: Mesh, box: np.ndarray | None = None,
             dd = minimum_image(x[j] - x[i], live)
             r = float(np.linalg.norm(dd))
             gap = 1.4 * edge - r
+            if gap <= 0.0:
+                continue
             e += k_repel * gap * gap
             g = -2.0 * k_repel * gap * dd / max(r, 1e-12)
             grad[j] += g

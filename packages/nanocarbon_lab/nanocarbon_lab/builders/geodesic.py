@@ -34,7 +34,14 @@ from ase import Atoms
 from scipy.spatial import ConvexHull
 
 from ..utils.constants import CC_BOND
-from .goldberg import Mesh, _Builder, finish_refined, subdivide, taubin_smooth
+from .goldberg import (
+    Mesh,
+    _Builder,
+    finish_refined,
+    goldberg_coxeter,
+    subdivide,
+    taubin_smooth,
+)
 
 _ROW = np.sqrt(3.0) / 2.0
 
@@ -276,6 +283,7 @@ def build_geodesic_superstructure(
     graph="super-icosahedron",
     m: int = 2,
     freq: int = 2,
+    n: int = 0,
     rows: int = 1,
     equilateral: bool = True,
     smooth: int = 10,
@@ -298,6 +306,11 @@ def build_geodesic_superstructure(
         are fitted node by node otherwise (:func:`fit_node_frames`).
     m
         Goldberg-Coxeter index: tube circumference ``6m`` rings.
+    n
+        Second Goldberg-Coxeter index. Non-zero (and not ``m``) gives the
+        chiral family (:func:`.goldberg.chiral_subdivide`): the same
+        census, the patches turned against the coarse edges, and
+        ``(m, n)`` the mirror of ``(n, m)``.
     freq, rows
         Node sphere frequency and antiprism rows on the shortest arm.
     equilateral
@@ -327,7 +340,7 @@ def build_geodesic_superstructure(
     live = box if np.any(box > 0) else None
     if equilateral:
         coarse = equilateralise(coarse, live)
-    fine = subdivide(coarse, m, live)
+    fine = goldberg_coxeter(coarse, m, n, live)
     if smooth:
         fine = taubin_smooth(fine, live, iterations=smooth)
     atoms = finish_refined(fine, live, tuple(bool(x) for x in graph.pbc),
@@ -339,7 +352,7 @@ def build_geodesic_superstructure(
         "builder": "geodesic",
         "structure_type": "supernetwork",
         "kind": graph.name,
-        "gc_indices": (int(m), 0),
+        "gc_indices": (int(m), int(n)),
         "node_frequency": int(freq),
         "node_frames": "per node" if per_node else "shared",
         "arm_rows": int(rows),
@@ -518,8 +531,8 @@ GEODESIC_CAGES: dict[str, dict] = {
 
 
 def geodesic_atom_count(graph: str = "super-icosahedron", m: int = 2,
-                        freq: int = 2, rows: int = 1) -> int:
-    """Atoms the build will have: coarse triangles times ``m**2``, exactly."""
+                        freq: int = 2, rows: int = 1, n: int = 0) -> int:
+    """Atoms the build will have: coarse triangles times ``m^2+mn+n^2``."""
     from .supernetwork import named_graph
 
     g = named_graph(graph, 1.0)
@@ -531,7 +544,7 @@ def geodesic_atom_count(graph: str = "super-icosahedron", m: int = 2,
     (_, tris), _, _, _ = geodesic_map(points, g.edges, frame, freq=freq,
                                       rows=rows, tolerance_deg=tolerance,
                                       cell=cell)
-    return len(tris) * m * m
+    return len(tris) * (m * m + m * n + n * n)
 
 
 def describe_geodesic(atoms: Atoms) -> str:

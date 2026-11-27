@@ -33,10 +33,32 @@ class TestOperations:
         assert len(tris) == 3 * len(coarse[1])
         assert gc.degree_census(tris) == {6: 8 + 48, 8: 12}
 
-    def test_chiral_indices_are_refused(self):
+    def test_chiral_indices_keep_the_census_and_the_count(self):
         coarse, box = gc.primitive_octagon_map()
-        with pytest.raises(ValueError, match="chiral"):
-            gc.goldberg_coxeter(coarse, 2, 1, box)
+        vertices, tris = gc.goldberg_coxeter(coarse, 2, 1, box)
+        assert len(tris) == 7 * len(coarse[1])
+        assert gc.degree_census(tris) == {6: len(vertices) - 12, 8: 12}
+
+    def test_chiral_icosahedron_is_c140_and_its_mirror(self):
+        from nanocarbon_lab.builders.fullerene import icosahedron_mesh
+
+        for m, n in ((2, 1), (1, 2)):
+            vertices, tris = gc.chiral_subdivide(icosahedron_mesh(), m, n)
+            assert len(tris) == 140
+            assert gc.degree_census(tris) == {5: 12, 6: 60}
+
+    def test_chiral_schwarz_p_is_clean(self):
+        from nanocarbon_lab.validation.quality import sp2_quality
+
+        built = gc.build_goldberg("primitive", 2, 1)
+        assert built.info["ring_counts"] == {6: 152, 8: 12}
+        assert str(sp2_quality(built.info["geometry"])[0]) == "clean"
+
+    def test_an_unoriented_map_is_oriented_before_a_chiral_cut(self):
+        coarse, box = gc.diamond_heptagon_map()
+        vertices, tris = gc.goldberg_coxeter(coarse, 2, 1, box)
+        assert len(tris) == 7 * len(coarse[1])
+        assert gc.degree_census(tris)[7] == 96
 
     def test_triangulation_number(self):
         assert gc.triangulation_number(1, 1) == 3
