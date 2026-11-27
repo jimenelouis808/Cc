@@ -1709,7 +1709,14 @@ cubic cells of the clean Goldberg families:
 
 **D GC(2,0) relaxes to 24.74 Å, which is FAU's cubic cell** (NaY,
 about 24.7 Å) -- a clean, 96-heptagon D wall commensurate with the
-template, and the `FAU replica` preset. LTA's 12.3 Å pseudo-cell is 3 %
+template. **It is not a ZTC model, and the carbon count says why**: the
+cubic cell holds eight supercages, so 896 atoms is 112 C per supercage,
+against the 63-72 reported for real FAU-templated carbons (Frontiers in
+Materials 6, 104, 2019). And the field's own review of the atomistic
+ZTC models (Taylor, Garman & Stadie) argues that synthesised ZTCs are
+not schwarzites. No D member matches both: C168 is 84 per supercage at
+21.8 Å, GC(1,0) 28 at 12.9 Å. The preset is called a
+*FAU-commensurate D wall*, not a replica. LTA's 12.3 Å pseudo-cell is 3 %
 under P GC(1,1). The geodesic lonsdaleite has EMT's axial ratio (66.8
 over 40.9 against 28.4 over 17.4) but at m = 2 is 2.35 times its cell,
 and m = 1 would still be about 18 % large: no EMT match yet. These are valence-force-field cells; whether a real
@@ -1749,7 +1756,22 @@ do not pair.
 | icosahedral cage, geodesic | (2,1) | 9240 | `{5: 84, 7: 180, 8: 60}` | 1.377-1.478 |
 
 Every row CLEAN and 100 % placed; the census is the achiral one, as it
-must be. GC(3,1) Schwarz P is the tightest P cell in the package. `n` is
+must be.
+
+**Doubly chiral srs, and what the method cannot yet say.** srs is a
+chiral net and GC(m, n) makes the wall chiral, so srs (2,1) and srs
+(1,2) are diastereomers. Both are clean, 5488 atoms: (2,1) relaxes to
+1.356-1.481 Å in a 77.26 Å cell, (1,2) to 1.373-1.475 in 78.09. The
+control is the enantiomer -- the mirror net at (1,2) is the exact mirror
+of srs (2,1) and must reproduce it -- and it **does not**: 80.57 Å,
+1.359-1.481. The builder is not mirror-equivariant (the frame fit's
+random starts and the arms' fixed reference axis are not mirrored with
+the net), so two builds of mirror-image structures land 4 % apart.
+The diastereomers' 1.1 % is inside that, and **no energetic difference
+between them can be claimed** from these builds. Settling it needs the
+enantiomer built by reflecting atoms rather than rebuilding, and an
+energy from something better than a fixed-cell VFF scan whose own step
+is 1 %. GC(3,1) Schwarz P is the tightest P cell in the package. `n` is
 in the Goldberg and geodesic frames of the window and on both
 subcommands; `(m, n)` and `(n, m)` are mirror images.
 

@@ -235,11 +235,11 @@ PRESETS: dict[str, dict[str, object]] = {
     "Schwarz D (Goldberg, 896 atoms)": {
         "mode_kind": "superstructure (Goldberg)", "gb_n": 0, "gb_kind": "diamond",
         "gb_m": 2, "gb_class2": False, "anneal": 0},
-    # GC(2,0) of the D map relaxes to a = 24.74 A, which is faujasite's
-    # cubic cell: FAU's supercages sit on a diamond net and so does its
-    # framework, so the carbon lining the pores (zeolite-templated carbon)
-    # is a D-type wall, and this one is commensurate with the template.
-    "FAU replica (Schwarz D GC(2,0), a = 24.74 A)": {
+    # GC(2,0) of the D map relaxes to a = 24.74 A, faujasite's cubic cell.
+    # Commensurate, NOT a validated ZTC model: it carries 112 C per
+    # supercage against the 63-72 measured, and the ZTC literature
+    # disputes that real ZTCs are schwarzites at all. See CLAUDE.md.
+    "FAU-commensurate D wall (Goldberg GC(2,0), a = 24.74 A)": {
         "mode_kind": "superstructure (Goldberg)", "gb_n": 0,
         "gb_kind": "diamond", "gb_m": 2, "gb_class2": False, "anneal": 0},
     # Chiral GC (goldberg.chiral_subdivide); (m, n) and (n, m) are mirror

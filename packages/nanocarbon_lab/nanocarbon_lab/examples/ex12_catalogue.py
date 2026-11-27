@@ -77,7 +77,7 @@ ENTRIES: list[tuple[str, str, str, dict, bool]] = [
      {"graph": "supertube-(4,4)", "m": 1, "freq": 4, "rows": 2}, False),
     ("pchiral", "Schwarz P quiral GC(3,1)", "goldberg",
      {"kind": "primitive", "m": 3, "n": 1}, True),
-    ("fau", "Réplica de FAU: Schwarz D GC(2,0)", "goldberg",
+    ("fau", "Schwarz D GC(2,0), conmensurable con FAU", "goldberg",
      {"kind": "diamond", "m": 2, "n": 0}, True),
     ("dchiral", "Schwarz D quiral GC(2,1)", "goldberg",
      {"kind": "diamond", "m": 2, "n": 1}, True),
