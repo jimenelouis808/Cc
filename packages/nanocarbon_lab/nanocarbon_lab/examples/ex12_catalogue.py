@@ -249,7 +249,8 @@ def _unwrap(points: np.ndarray, cell: np.ndarray, pbc: list[bool]
 
 
 def _panel(ax, record: dict, label: str, lang: str = "es",
-           fontsize: float = 7, linewidth: float = 0.05) -> None:
+           fontsize: float = 7, linewidth: float = 0.05, zoom: float = 1.0,
+           sheet_elevation: float = 70) -> None:
     from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 
     positions = np.asarray(record["positions"])
@@ -284,9 +285,9 @@ def _panel(ax, record: dict, label: str, lang: str = "es",
     for setter, c in zip((ax.set_xlim, ax.set_ylim, ax.set_zlim), centre,
                          strict=True):
         setter(c - half, c + half)
-    ax.set_box_aspect((1, 1, 1))
+    ax.set_box_aspect((1, 1, 1), zoom=zoom)
     sheet = int(live.sum()) == 2
-    ax.view_init(elev=70 if sheet else 22, azim=35)
+    ax.view_init(elev=sheet_elevation if sheet else 22, azim=35)
     ax.set_axis_off()
     census = " ".join(f"{k}:{v}" for k, v in sorted(
         record["census"].items(), key=lambda kv: int(kv[0])) if k != "6")
@@ -341,8 +342,11 @@ def render_panels(entries: list[tuple], cache: Path, folder: Path,
         record = json.loads((cache / f"{entry[0]}.json").read_text())
         fig = plt.figure(figsize=(12.8, 7.2))
         ax = fig.add_axes((0.0, 0.0, 1.0, 0.9), projection="3d")
+        # A 16:9 frame leaves a cube-shaped 3D box using less than half
+        # of it, so the panel zooms in; a sheet is tilted further down so
+        # its tubes read as tubes rather than as holes in a plane.
         _panel(ax, record, label(entry, lang), lang, fontsize=14,
-               linewidth=0.08)
+               linewidth=0.08, zoom=1.45, sheet_elevation=40)
         path = folder / f"{entry[0]}.png"
         fig.savefig(path, dpi=300)
         plt.close(fig)
