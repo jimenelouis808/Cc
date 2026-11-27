@@ -119,3 +119,26 @@ def test_windows_that_would_touch_are_refused():
     with pytest.raises(ValueError, match="overlap"):
         G.geodesic_map(points, graph.edges, frame, freq=2, rows=1,
                        window_radius=2)
+
+
+def test_a_bent_arm_keeps_the_budget_where_a_straight_one_would_shear():
+    # The hypercube's arms miss a frequency-4 sphere's windows by ~7 deg;
+    # the arms bend to leave their mouths square, and the map still
+    # meets 12(V - E) exactly.
+    graph = G._named("super-hypercube")
+    points, cell = G._graph_frame(graph)
+    frame, miss, _, window = G._choose_frames(graph, points, cell, 4, 8.0,
+                                              starts=8)
+    assert 2.0 < miss < 8.0
+    (vertices, tris), budget, _, _ = G.geodesic_map(
+        points, graph.edges, frame, freq=4, rows=1, tolerance_deg=8.0,
+        cell=cell, window=window)
+    degree = np.bincount(tris.ravel(), minlength=len(vertices))
+    assert int((6 - degree).sum()) == budget
+
+
+def test_the_largest_window_is_found():
+    graph = named_graph("super-cube", 1.0)
+    points = np.asarray(graph.nodes, float)
+    frame, _ = G.fit_frame(points, graph.edges, 4, starts=8)
+    assert G.largest_window(points, graph.edges, frame, 4) == 2

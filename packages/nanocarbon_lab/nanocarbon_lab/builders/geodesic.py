@@ -165,6 +165,162 @@ def _arm_vectors(points: np.ndarray, edges, cell=None) -> list[np.ndarray]:
             - np.asarray(points[i], float) for i, j, shift in edges]
 
 
+def _hermite(c0, c1, t0, t1, t):
+    """Cubic Hermite point and unit tangent at ``t`` (tangents scaled by
+    the chord, so a straight pair gives a straight, uniform line)."""
+    chord = float(np.linalg.norm(c1 - c0))
+    h00 = 2 * t ** 3 - 3 * t ** 2 + 1
+    h10 = t ** 3 - 2 * t ** 2 + t
+    h01 = -2 * t ** 3 + 3 * t ** 2
+    h11 = t ** 3 - t ** 2
+    point = h00 * c0 + h10 * chord * t0 + h01 * c1 + h11 * chord * t1
+    d00 = 6 * t ** 2 - 6 * t
+    d10 = 3 * t ** 2 - 4 * t + 1
+    d01 = -6 * t ** 2 + 6 * t
+    d11 = 3 * t ** 2 - 2 * t
+    tangent = d00 * c0 + d10 * chord * t0 + d01 * c1 + d11 * chord * t1
+    return point, tangent / np.linalg.norm(tangent)
+
+
+def _stack_arm(build, start, end, t_start, t_end) -> None:
+    """Stack antiprism rings from one window rim to the other.
+
+    The arm runs along a cubic Hermite curve that leaves the first rim
+    along ``t_start`` (its window's outward normal) and enters the second
+    along ``t_end``, and the rings ride a rotation-minimising frame
+    carried along it (double reflection). When both normals lie on the
+    chord this is the straight antiprism stack exactly; when the sphere's
+    window vertex misses the arm direction, the tube **bends** to leave
+    its mouth square instead of shearing out of it -- which is what lets
+    a node keep a low frequency (a small sphere) whatever the arm angles.
+    Each ring turns half a step on the last, and the residual twist that
+    lands the last ring on the far rim is spread along the arm.
+    """
+    start = list(start)
+    end = list(end)
+    n = len(start)
+    if len(end) != n:
+        raise ValueError("an arm joins windows of different sizes.")
+    c0 = np.mean(start, axis=0)
+    c1 = np.mean(end, axis=0)
+    t_start = np.asarray(t_start, float) / np.linalg.norm(t_start)
+    t_end = np.asarray(t_end, float) / np.linalg.norm(t_end)
+    # Arc length, and the rotation-minimising frame along the curve.
+    samples = 64
+    ts = np.linspace(0.0, 1.0, samples + 1)
+    pts, tans = zip(*(_hermite(c0, c1, t_start, t_end, t) for t in ts),
+                    strict=True)
+    pts, tans = np.array(pts), np.array(tans)
+    arc = np.concatenate([[0.0], np.cumsum(np.linalg.norm(np.diff(pts, axis=0),
+                                                          axis=1))])
+    p = start[0] - c0
+    p = p - np.dot(p, tans[0]) * tans[0]
+    p /= np.linalg.norm(p)
+    frames = [p]
+    for k in range(samples):
+        v1 = pts[k + 1] - pts[k]
+        c1_ = float(np.dot(v1, v1))
+        r_l = p - (2.0 / c1_) * np.dot(v1, p) * v1
+        t_l = tans[k] - (2.0 / c1_) * np.dot(v1, tans[k]) * v1
+        v2 = tans[k + 1] - t_l
+        c2 = float(np.dot(v2, v2))
+        p = r_l if c2 < 1e-18 else r_l - (2.0 / c2) * np.dot(v2, r_l) * v2
+        p = p - np.dot(p, tans[k + 1]) * tans[k + 1]
+        p /= np.linalg.norm(p)
+        frames.append(p)
+    frames = np.array(frames)
+
+    def frame_at(u):
+        """Centre, tangent, p, q at arc fraction ``u``."""
+        s_ = u * arc[-1]
+        k = int(np.clip(np.searchsorted(arc, s_) - 1, 0, samples - 1))
+        w = (s_ - arc[k]) / max(arc[k + 1] - arc[k], 1e-12)
+        centre = (1 - w) * pts[k] + w * pts[k + 1]
+        tangent = (1 - w) * tans[k] + w * tans[k + 1]
+        tangent /= np.linalg.norm(tangent)
+        pp = (1 - w) * frames[k] + w * frames[k + 1]
+        pp = pp - np.dot(pp, tangent) * tangent
+        pp /= np.linalg.norm(pp)
+        return centre, tangent, pp, np.cross(tangent, pp)
+
+    def polar(ring, centre, tangent, pp, qq):
+        rel = [v - centre for v in ring]
+        ang = np.array([np.arctan2(np.dot(r, qq), np.dot(r, pp))
+                        for r in rel])
+        rad = np.array([np.linalg.norm(r - np.dot(r, tangent) * tangent)
+                        for r in rel])
+        return ang, rad
+
+    f0 = (c0,) + frame_at(0.0)[1:]
+    f1 = (c1,) + frame_at(1.0)[1:]
+    a0, r0 = polar(start, *f0)
+    if np.angle(np.exp(1j * (a0[1] - a0[0]))) < 0:
+        start = start[::-1]
+        a0, r0 = polar(start, *f0)
+    a1, r1 = polar(end, *f1)
+    if np.angle(np.exp(1j * (a1[1] - a1[0]))) < 0:
+        end = end[::-1]
+        a1, r1 = polar(end, *f1)
+    count = max(1, int(round(arc[-1] / _ROW)))
+    step = 2.0 * np.pi / n
+    best = None
+    for shift in range(n):
+        target = np.angle(np.exp(1j * (a1[shift] - a0[0]
+                                      - count * step / 2.0)))
+        if best is None or abs(target) < abs(best[1]):
+            best = (shift, target)
+    shift, residual = best
+    end = end[shift:] + end[:shift]
+    layers = [start]
+    for k in range(1, count):
+        t = k / count
+        centre, tangent, pp, qq = frame_at(t)
+        ring = []
+        for a in range(n):
+            ang = a0[a] + k * step / 2.0 + t * residual
+            rad = (1 - t) * r0[a] + t * r1[(a + shift) % n]
+            ring.append(centre + rad * (np.cos(ang) * pp + np.sin(ang) * qq))
+        layers.append(ring)
+    layers.append(end)
+    ids = [[build.vertex(v) for v in ring] for ring in layers]
+    for k in range(count):
+        centre, tangent, _, _ = frame_at(k / count)
+        for a in range(n):
+            b = (a + 1) % n
+            p0 = layers[k][a]
+            out = p0 - centre - np.dot(p0 - centre, tangent) * tangent
+            tri1 = (ids[k][a], ids[k][b], ids[k + 1][a])
+            tri2 = (ids[k + 1][a], ids[k][b], ids[k + 1][b])
+            cross = np.cross(layers[k][b] - p0, layers[k + 1][a] - p0)
+            flip = np.dot(cross, out) < 0
+            for tri in (tri1, tri2):
+                build.tris.append(tri[::-1] if flip else tri)
+
+
+def largest_window(points: np.ndarray, edges, frame: np.ndarray, freq: int,
+                   tolerance_deg: float = 2.0, cell=None, window: int = 6,
+                   limit: int = 8) -> int:
+    """The largest window radius whose windows do not touch, at ``freq``.
+
+    The node is a sphere of about ``0.86 * freq`` edges radius and a
+    window of radius ``r`` is a mouth about ``r`` edges across, so the
+    ball-to-tube ratio is roughly ``0.86 * freq / r``: the largest ``r``
+    the arm angles allow is the most compact node this frequency has.
+    Windows of one node may not share a rim vertex (see
+    :func:`geodesic_map`). Returns at least 1.
+    """
+    best = 1
+    for r in range(2, limit + 1):
+        try:
+            geodesic_map(points, edges, frame, freq=freq, rows=1,
+                         tolerance_deg=tolerance_deg, cell=cell,
+                         window=window, window_radius=r)
+        except ValueError:
+            break
+        best = r
+    return best
+
+
 def geodesic_map(points: np.ndarray, edges, frame: np.ndarray,
                  freq: int = 4, rows: int = 2, tolerance_deg: float = 2.0,
                  cell=None, window: int = 6, window_radius: int = 1
@@ -238,6 +394,7 @@ def geodesic_map(points: np.ndarray, edges, frame: np.ndarray,
     # Rims relative to their node's centre: the far end of a periodic arm
     # is an image of its node, not the node.
     rims: dict[tuple[int, int], list[np.ndarray]] = {}
+    normals: dict[tuple[int, int], np.ndarray] = {}
 
     for node in range(len(points)):
         sphere_v, sphere_t = spheres[node]
@@ -256,6 +413,7 @@ def geodesic_map(points: np.ndarray, edges, frame: np.ndarray,
             removed |= set(around)
             rim_vertices |= set(rim)
             rims[key] = [sphere_v[r] for r in rim]
+            normals[key] = sphere_v[k] / np.linalg.norm(sphere_v[k])
         for t, (a, b, c) in enumerate(sphere_t):
             if t in removed:
                 continue
@@ -266,72 +424,7 @@ def geodesic_map(points: np.ndarray, edges, frame: np.ndarray,
         far = centres[i] + vectors[e] * scale
         start = [centres[i] + v for v in rims[(e, 0)]]
         end = [far + v for v in rims[(e, 1)]]
-        axis = far - centres[i]
-        axis /= np.linalg.norm(axis)
-        p = np.cross(axis, [0.0, 0.0, 1.0])
-        if np.linalg.norm(p) < 0.1:
-            p = np.cross(axis, [1.0, 0.0, 0.0])
-        p /= np.linalg.norm(p)
-        q = np.cross(axis, p)
-        c0 = np.mean(start, axis=0)
-        c1 = np.mean(end, axis=0)
-        n = len(start)
-        if len(end) != n:
-            raise ValueError("an arm joins windows of different sizes.")
-
-        def polar(ring, centre, p=p, q=q, axis=axis):
-            rel = [v - centre for v in ring]
-            ang = np.array([np.arctan2(np.dot(r, q), np.dot(r, p))
-                            for r in rel])
-            rad = np.array([np.linalg.norm(r - np.dot(r, axis) * axis)
-                            for r in rel])
-            return ang, rad
-
-        a0, r0 = polar(start, c0)
-        # Orient both rims the same way round the axis.
-        if ((np.angle(np.exp(1j * (a0[1] - a0[0])))) < 0):
-            start = start[::-1]
-            a0, r0 = polar(start, c0)
-        a1, r1 = polar(end, c1)
-        if ((np.angle(np.exp(1j * (a1[1] - a1[0])))) < 0):
-            end = end[::-1]
-            a1, r1 = polar(end, c1)
-        length = float(np.linalg.norm(c1 - c0))
-        count = max(1, int(round(length / _ROW)))
-        step = 2.0 * np.pi / n
-        # Index shift and residual twist so that ring `count`, turned half
-        # a step per row from the start, lands on the end rim.
-        best = None
-        for shift in range(n):
-            target = np.angle(np.exp(1j * (a1[shift] - a0[0]
-                                          - count * step / 2.0)))
-            if best is None or abs(target) < abs(best[1]):
-                best = (shift, target)
-        shift, residual = best
-        end = end[shift:] + end[:shift]
-        layers = [start]
-        for k in range(1, count):
-            t = k / count
-            ring = []
-            for a in range(n):
-                ang = a0[a] + k * step / 2.0 + t * residual
-                rad = (1 - t) * r0[a] + t * r1[(a + shift) % n]
-                centre = c0 + t * (c1 - c0)
-                ring.append(centre + rad * (np.cos(ang) * p + np.sin(ang) * q))
-            layers.append(ring)
-        layers.append(end)
-        ids = [[build.vertex(v) for v in ring] for ring in layers]
-        for k in range(count):
-            for a in range(n):
-                b = (a + 1) % n
-                p0 = layers[k][a]
-                out = p0 - c0 - np.dot(p0 - c0, axis) * axis
-                tri1 = (ids[k][a], ids[k][b], ids[k + 1][a])
-                tri2 = (ids[k + 1][a], ids[k][b], ids[k + 1][b])
-                cross = np.cross(layers[k][b] - p0, layers[k + 1][a] - p0)
-                flip = np.dot(cross, out) < 0
-                for tri in (tri1, tri2):
-                    build.tris.append(tri[::-1] if flip else tri)
+        _stack_arm(build, start, end, normals[(e, 0)], -normals[(e, 1)])
 
     mesh = build.mesh()
     # Orient the node triangles consistently with the arms: outward from
@@ -393,7 +486,8 @@ def build_geodesic_superstructure(
         Rings of the sphere each window takes (:func:`_patch`): the tube's
         circumference is ``6 * window_radius * m``, so for one tube
         diameter a larger window means a smaller ``m`` and a node that is
-        mostly mouth instead of mostly ball. Six-fold windows only.
+        mostly mouth instead of mostly ball. ``0`` takes the largest the
+        arm angles allow (:func:`largest_window`).
     window
         Degree of the sphere vertices windows open on, by preference: 6
         (hexagonal mouths) or 5. ``None`` takes the catalogue entry's own,
@@ -415,6 +509,9 @@ def build_geodesic_superstructure(
     points, cell = _graph_frame(graph)
     frame, miss, per_node, window = _choose_frames(
         graph, points, cell, freq, tolerance_deg, seed, window=window)
+    if window_radius == 0:
+        window_radius = largest_window(points, graph.edges, frame, freq,
+                                       tolerance_deg, cell, window)
     coarse, budget, scale, report = geodesic_map(
         points, graph.edges, frame, freq=freq, rows=rows,
         tolerance_deg=tolerance_deg, cell=cell, window=window,
@@ -693,14 +790,20 @@ GEODESIC_CAGES: dict[str, dict] = {
 def geodesic_atom_count(graph: str = "super-icosahedron", m: int = 2,
                         freq: int = 2, rows: int = 1, n: int = 0,
                         window_radius: int = 1) -> int:
-    """Atoms the build will have: coarse triangles times ``m^2+mn+n^2``."""
+    """Atoms the build will have: coarse triangles times ``m^2+mn+n^2``.
 
+    ``window_radius = 0`` resolves to the largest that fits, as the
+    builder does.
+    """
     g = _named(graph)
     points, cell = _graph_frame(g)
     tolerance = GEODESIC_CAGES.get(graph, {}).get("tolerance_deg", 2.5)
     window = GEODESIC_CAGES.get(graph, {}).get("window", 6)
     frame, _, _, window = _choose_frames(g, points, cell, freq, tolerance,
                                          window=window)
+    if window_radius == 0:
+        window_radius = largest_window(points, g.edges, frame, freq,
+                                       tolerance, cell, window)
     (_, tris), _, _, _ = geodesic_map(points, g.edges, frame, freq=freq,
                                       window=window,
                                       window_radius=window_radius,
