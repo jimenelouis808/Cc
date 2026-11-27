@@ -1594,7 +1594,8 @@ are the node's pentagons.
 
 | cage | freq | m, rows | atoms | bonds (Å) | verdict |
 |---|---|---|---|---|---|
-| cuboctahedron | 4 | 1, 1 | 3840 | 1.355-1.483 | clean |
+| cuboctahedron | 4 | 1, 1 | 3840 | 1.355-1.483, later 1.325-1.523 | clean, then strained |
+| cuboctahedron | 4 | 1, 2 | 4128 | 1.345-1.504 | clean |
 | hypercube, per node | 4 | 1, 1 | 7136 | 1.320-1.532 | strained, 98 % |
 | hypercube, per node | **6** | 1, 1 | 14256 | 1.324-1.501 | strained, **100 %** |
 | **hypercube, per node** | **6** | **1, 2** | 14784 | **1.403-1.439** | **clean, 100 %** |
@@ -1675,7 +1676,20 @@ one row, CLEAN and 100 % placed:
   `(1/3, 1/3)` and `(2/3, 2/3)` at 60 deg).
 * **Per-node fits need starts.** At 4 random starts lonsdaleite's
   tetrahedral nodes missed by 7.2 deg; at 16 they fit to 0.0. The
-  default is 16.
+  default is 16. Changing it moved a one-row cuboctahedron from clean
+  to strained: **a one-row cage sits on the edge and the frame decides
+  it**, so the presets use two rows wherever one was marginal.
+
+### The catalogue image
+
+`examples/ex12_catalogue.py` builds every clean entry (cached as JSON,
+so a second run only renders) and draws them with each ring filled by
+its size -- pentagons red, heptagons blue, octagons green -- because
+where the non-hexagons sit is the result, and an atoms-and-bonds view
+hides it. Periodic cells are tiled (2x2x2, or 3x3 for a sheet, each ring
+moved whole so its centre lies in the cell): one cell drawn alone looks
+torn at its faces. Labels are in Spanish. `--quick` keeps the entries
+that build in minutes.
 
 **A zeolite-templated carbon lines the template's pores, so its net is
 the pore net, not the framework**: FAU's supercages sit on a diamond

@@ -327,11 +327,14 @@ PRESETS: dict[str, dict[str, object]] = {
            ("Super-lonsdaleite (geodesic, clean, slow)",
             "super-lonsdaleite", 2, 3, 1),
        )},
-    # Measured at m=1: 3840 atoms, {5: 96, 7: 240}, 1.355-1.483 A, clean.
+    # m=1, two rows: 4128 atoms, {5: 96, 7: 240}, 1.345-1.504 A, clean.
+    # One row measured clean once (1.355-1.483) and strained (1.325-1.523)
+    # after the frame fit's starts changed: at one row the verdict
+    # depends on the fit, at two it does not.
     "Cuboctahedral cage (geodesic, clean)": {
         "mode_kind": "superstructure (geodesic)", "gd_n": 0,
         "gd_graph": "super-cuboctahedron", "gd_m": 1, "gd_freq": 4,
-        "gd_rows": 1, "anneal": 0},
+        "gd_rows": 2, "anneal": 0},
     # The same carrier in a periodic cell, scanned. m=2, rows=1, measured
     # clean and 100 % placed:
     #   super-square   freq 2   416 atoms  1.367-1.473 A  {5:4, 7:16}
