@@ -528,6 +528,9 @@ GEODESIC_CAGES: dict[str, dict] = {
     "super-truncated-cube": {"freq": 4, "tolerance_deg": 2.5},
     "super-truncated-tetrahedron": {"freq": 4, "tolerance_deg": 2.5},
     "super-truncated-octahedron": {"freq": 4, "tolerance_deg": 2.5},
+    # Rolled super-graphene: no shared frame, per-node misses up to
+    # 3.7 deg at frequency 4. Clean at two rows (measured on (4,4) only).
+    "supertube-(4,4)": {"freq": 4, "tolerance_deg": 4.5},
     # GEODESIC_NETS. srs and lonsdaleite have nodes in several
     # orientations and fit node by node (exactly, at 16 starts; 4 missed
     # lonsdaleite's by 7 deg); bcc's eight <111> arms are three-fold axes.

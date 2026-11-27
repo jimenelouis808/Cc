@@ -1617,9 +1617,11 @@ frames, its rows or its seam: at one row and at two it relaxed to
 1.00-2.22 and 0.75-2.65 Å, uniformly along the axis, and the coarse map
 going *into* `equilateralise` was sound. Rebuilt after the fix, same
 parameters (per-node freq 4, m = 1, one row): 10240 atoms,
-`{5: 320, 7: 512}`, **1.309-1.537 Å, strained, 99.5 % placed**, 50 min
--- from broken to strained on that one change. Not in the catalogue
-yet.
+`{5: 320, 7: 512}`, 1.309-1.537 Å, strained, 99.5 % placed -- from
+broken to strained on that one change. **At two rows it is clean**:
+10816 atoms, 1.358-1.483 Å, 100 % placed, 45 min. Only (4,4) has been
+measured; the other six supertubes are in `CAGES` but not in
+`GEODESIC_CAGES`.
 
 ### The Archimedean audit: room, not frames
 
@@ -1648,7 +1650,15 @@ modes too: super-srs and its mirror (the gyroid's Laves graph, chiral,
 nodes in four orientations, fitted node by node), super-bcc (eight
 <111> arms, three-fold axes, freq 3), super-kagome (four in-plane arms
 at 60/120 deg, freq 2) and super-lonsdaleite (hexagonal diamond, nodes
-in two orientations, fitted node by node at freq 3).
+in two orientations, fitted node by node at freq 3). Measured at m = 2,
+one row, CLEAN and 100 % placed:
+
+| net | freq | atoms | census | bonds (Å) | time |
+|---|---|---|---|---|---|
+| super-bcc | 3 | 1440 | `{5: 24, 6: 588, 7: 96}` | 1.341-1.496 | 75 s |
+| super-kagome | 2 | 2496 | `{5: 36, 7: 84, 8: 12}` | 1.388-1.450 | 7 min |
+| super-srs | 2 | 3136 | `{5: 48, 6: 1416, 7: 96}` | 1.367-1.475 | 12 min |
+| super-lonsdaleite | 3 | 5760 | `{5: 96, 6: 2576, 7: 192}` | 1.340-1.499 | 23 min |
 
 * **Orthohexagonal cells**: `_fold_orthohexagonal` puts a hexagonal net
   in its `(a, a*sqrt3, c)` cell, because `minimum_image` takes only an
@@ -1679,7 +1689,9 @@ cubic cells of the clean Goldberg families:
 **D GC(2,0) relaxes to 24.74 Å, which is FAU's cubic cell** (NaY,
 about 24.7 Å) -- a clean, 96-heptagon D wall commensurate with the
 template, and the `FAU replica` preset. LTA's 12.3 Å pseudo-cell is 3 %
-under P GC(1,1). These are valence-force-field cells; whether a real
+under P GC(1,1). The geodesic lonsdaleite has EMT's axial ratio (66.8
+over 40.9 against 28.4 over 17.4) but at m = 2 is 2.35 times its cell,
+and m = 1 would still be about 18 % large: no EMT match yet. These are valence-force-field cells; whether a real
 ZTC's wall sits on this surface, at this density, is for comparison with
 the published ZTC models and DFT, not something this table settles.
 

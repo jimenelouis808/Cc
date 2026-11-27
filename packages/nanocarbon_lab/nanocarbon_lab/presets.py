@@ -307,6 +307,24 @@ PRESETS: dict[str, dict[str, object]] = {
            ("Truncated-octahedral cage (geodesic, clean)",
             "super-truncated-octahedron", 1, 4, 2),
        )},
+    # Nets only the geodesic carrier builds (geodesic.GEODESIC_NETS), and
+    # the supertube. Measured clean, 100 % placed:
+    #   super-bcc       freq 3, m=2, 1 row    1440  1.341-1.496 A   75 s
+    #   super-kagome    freq 2, m=2, 1 row    2496  1.388-1.450      7 min
+    #   super-srs       freq 2, m=2, 1 row    3136  1.367-1.475     12 min
+    #   supertube-(4,4) freq 4, m=1, 2 rows  10816  1.358-1.483     45 min
+    **{label: {"mode_kind": "superstructure (geodesic)", "gd_n": 0,
+               "gd_graph": graph, "gd_m": m, "gd_freq": freq,
+               "gd_rows": rows, "anneal": 0}
+       for label, graph, m, freq, rows in (
+           ("Super-bcc (geodesic, clean)", "super-bcc", 2, 3, 1),
+           ("Super-kagome (geodesic, clean)", "super-kagome", 2, 2, 1),
+           ("Super-srs, gyroid net (geodesic, clean)", "super-srs", 2, 2, 1),
+           ("Supertube (4,4) (geodesic, clean, slow)", "supertube-(4,4)",
+            1, 4, 2),
+           ("Super-lonsdaleite (geodesic, clean, slow)",
+            "super-lonsdaleite", 2, 3, 1),
+       )},
     # Measured at m=1: 3840 atoms, {5: 96, 7: 240}, 1.355-1.483 A, clean.
     "Cuboctahedral cage (geodesic, clean)": {
         "mode_kind": "superstructure (geodesic)", "gd_n": 0,
