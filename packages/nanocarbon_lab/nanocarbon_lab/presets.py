@@ -780,6 +780,7 @@ PRESETS: dict[str, dict[str, object]] = {
 #   omnitruncated cubic   f4 r2  1 row  15360        1.356-1.488  (95 %)
 #   3.4.6.4               f6 r2  1 row   8616        1.377-1.465
 #   runcitruncated cubic  f6 r2  1 row  17280        1.361-1.481
+#   cantellated cubic     f6 r2  1 row   8640        1.373-1.460  (4.5 deg)
 PRESETS.update({
     label: {"mode_kind": "superstructure (geodesic)", "gd_n": 0,
             "gd_wr": wr, "gd_graph": graph, "gd_m": 1, "gd_freq": freq,
@@ -807,6 +808,8 @@ PRESETS.update({
          "wythoff-rhombitrihexagonal", 6, 2, 1),
         ("Runcitruncated-cubic honeycomb (Wythoff, clean, slow)",
          "wythoff-runcitruncated-cubic", 6, 2, 1),
+        ("Cantellated-cubic honeycomb (Wythoff, clean, slow)",
+         "wythoff-cantellated-cubic", 6, 2, 1),
     )
 })
 

@@ -808,7 +808,7 @@ GEODESIC_CAGES: dict[str, dict] = {
     "wythoff-rectified-cubic": {"freq": 6, "tolerance_deg": 2.5},
     "wythoff-truncated-cubic": {"freq": 4, "tolerance_deg": 2.5},
     "wythoff-bitruncated-cubic": {"freq": 4, "tolerance_deg": 2.5},
-    "wythoff-cantellated-cubic": {"freq": 4, "tolerance_deg": 2.5},
+    "wythoff-cantellated-cubic": {"freq": 6, "tolerance_deg": 4.5},
     "wythoff-cantitruncated-cubic": {"freq": 4, "tolerance_deg": 2.5},
     "wythoff-runcitruncated-cubic": {"freq": 6, "tolerance_deg": 2.5},
     "wythoff-omnitruncated-cubic": {"freq": 4, "tolerance_deg": 2.5},

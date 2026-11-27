@@ -1990,7 +1990,7 @@ super-square, super-graphene and super-kagome already).
 | **bitruncated cubic (SOD)** | truncated octahedra | 4, 2, 1 | 3792 | 1.353-1.493 | clean (broken at f2) |
 | cantitruncated cubic | truncated cuboctahedra, ... | 4, 2, 1 | 7680 | 1.377-1.464 | clean, 96 % |
 | omnitruncated cubic | truncated cuboctahedra + octagonal prisms | 4, 2, 1 | 15360 | 1.356-1.488 | clean, 95 % |
-| cantellated cubic | rhombicuboctahedra, cuboctahedra, cubes | 4, 1, 1-2 | 3840-4248 | 1.294-1.535 | broken |
+| cantellated cubic | rhombicuboctahedra, cuboctahedra, cubes | **6, 2, 1** | 8640 | 1.373-1.460 | clean (broken at f4; 4.5 deg tolerance, the arms bend) |
 | runcitruncated cubic | truncated cubes, rhombicuboctahedra, ... | **6, 2, 1** | 17280 | 1.361-1.481 | clean, 99.9 % (strained at f4) |
 | 3.4.6.4 | -- | **6, 2, 1** | 8616 | 1.377-1.465 | clean (broken at f4) |
 All at m = 1 and the largest window that fits, so each node is as small
@@ -2001,7 +2001,10 @@ clean at two; and where the arms miss the frequency-4 windows (the
 nets that hold rhombicuboctahedra or 3.4.6.4 vertices) more rows do not
 help, a finer sphere does: at frequency 6 the 3.4.6.4 sheet and the
 runcitruncated honeycomb are clean. The cantellated honeycomb still
-misses its frequency-6 windows by 3.2 deg. The tetrahedral cages' honeycombs (the
+misses its frequency-6 windows by 3.2 deg, and builds clean when the
+tolerance is 4.5 deg: the arms bend into their windows (`_stack_arm`)
+instead of shearing out of them. Every uniform honeycomb of `[4,3,4]`
+and every Wythoff tiling of `[4,4]` and `[6,3]` is now clean. The tetrahedral cages' honeycombs (the
 quarter-cubic and alternated ones) need the `[3^[4]]` group and are not
 built.
 
