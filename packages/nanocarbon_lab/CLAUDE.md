@@ -1841,9 +1841,15 @@ centrosymmetric, so the two ends of an arm sit on antipodes of one
 degree; only differently oriented spheres need the six-fold rule. The
 rule had been applied to the shared case too, and it lost super-fcc (its
 <110> arms fit mixed sites to 2.1 deg at frequency 4, six-fold ones to
-4.7) and changed the census of the 2.1-deg cages (tetrahedron
-`{5: 40, 7: 64}` against `{5: 42, 7: 66}` without it). Fixed; the
-catalogue entries built under it were rebuilt. GC(3,1) Schwarz P is the tightest P cell in the package. `n` is
+4.7). But dropping it everywhere was worse: mixed pentagonal and
+hexagonal mouths left the cuboctahedron and the truncated tetrahedron
+strained and the truncated octahedron broken, where six-fold windows
+had them clean. So `_choose_frames` prefers six-fold windows (shared,
+then group, then per node) and opens any vertex only as a last resort,
+which only super-fcc needs. The tetrahedron and octahedron now take the
+six-fold shared frame, `{5: 40, 7: 64}` and `{5: 48, 7: 120}`, both
+clean -- slightly different from the mixed-window rows in the first
+table, which were built before the rule existed. GC(3,1) Schwarz P is the tightest P cell in the package. `n` is
 in the Goldberg and geodesic frames of the window and on both
 subcommands; `(m, n)` and `(n, m)` are mirror images.
 
