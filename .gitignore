@@ -33,3 +33,6 @@ packages/tbkit/resultados/
 # One is 19 MB and the five together are over 200, which is not what a
 # repository is for.
 packages/nanocarbon_lab/modelos_SEM/blend/
+
+# Catalogue builds (examples/ex12_catalogue.py); the cache is regenerated.
+catalogo/cache/
