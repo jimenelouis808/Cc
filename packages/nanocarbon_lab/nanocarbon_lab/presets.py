@@ -341,28 +341,32 @@ PRESETS: dict[str, dict[str, object]] = {
            ("Super-lonsdaleite (geodesic, clean, slow)",
             "super-lonsdaleite", 2, 3, 1),
        )},
-    # Compact nodes: windows of radius 2 at m=1 make the same 12-ring tube
-    # as radius 1 at m=2, on a node that is mostly mouth. Measured clean:
-    #   super-cubic   f4  320 atoms (464 before)   1.405-1.443 A  100 %
-    #   super-square  f4  320 (416)                1.381-1.454    100 %
-    #   super-graphene f4 1280 (1568)              1.394-1.447    100 %
-    #   super-srs     f4  2560 (3136)              1.366-1.473    100 %
-    #   cube cage     f4  2560 (3136)              1.391-1.443    100 %
-    #   dodecahedron  f4  6400 (7840)              1.393-1.442    100 %
-    #   tetrahedron   f6  2874 (5120)              1.376-1.480     99 %
-    #   octahedron    f6  4308 (7680)              1.352-1.490     98 %
+    # Compact nodes: the largest window the arm angles allow, at m=1, so
+    # the node is about the tube's size (node/tube radius ratio ~0.86 f/r).
+    # Measured clean:
+    #   super-graphene  f6 r5  3048 atoms  ratio 1.03  1.363-1.481 A  100 %
+    #   super-srs       f4 r3  2848        1.15        1.370-1.466    100 %
+    #   cube cage       f6 r4  5616        1.29        1.390-1.457    100 %
+    #   dodecahedron    f6 r4 14040        1.29        1.400-1.465    100 %
+    #   super-cubic     f6 r4   684        1.29        1.394-1.437    100 %
+    #   super-square    f6 r4   696        1.29        1.380-1.457    100 %
+    #   tetrahedron     f8 r3  4902        2.29        1.374-1.464     99 %
+    #   octahedron      f8 r3  7244        2.29        1.354-1.478     99 %
+    #   hypercube       f6 r2 16704        2.58        1.377-1.456    100 %
     **{label: {"mode_kind": "superstructure (geodesic)", "gd_n": 0,
-               "gd_wr": 2, "gd_graph": graph, "gd_m": 1, "gd_freq": freq,
+               "gd_wr": wr, "gd_graph": graph, "gd_m": 1, "gd_freq": freq,
                "gd_rows": 1, "anneal": 0}
-       for label, graph, freq in (
-           ("Super-cubic (geodesic, compact)", "super-cubic", 4),
-           ("Super-square (geodesic, compact)", "super-square", 4),
-           ("Super-graphene (geodesic, compact)", "super-graphene", 4),
-           ("Super-srs (geodesic, compact)", "super-srs", 4),
-           ("Cubic cage (geodesic, compact)", "super-cube", 4),
-           ("Dodecahedral cage (geodesic, compact)", "super-dodecahedron", 4),
-           ("Tetrahedral cage (geodesic, compact)", "super-tetrahedron", 6),
-           ("Octahedral cage (geodesic, compact)", "super-octahedron", 6),
+       for label, graph, freq, wr in (
+           ("Super-graphene (geodesic, compact)", "super-graphene", 6, 5),
+           ("Super-srs (geodesic, compact)", "super-srs", 4, 3),
+           ("Cubic cage (geodesic, compact)", "super-cube", 6, 4),
+           ("Dodecahedral cage (geodesic, compact)", "super-dodecahedron",
+            6, 4),
+           ("Super-cubic (geodesic, compact)", "super-cubic", 6, 4),
+           ("Super-square (geodesic, compact)", "super-square", 6, 4),
+           ("Tetrahedral cage (geodesic, compact)", "super-tetrahedron", 8, 3),
+           ("Octahedral cage (geodesic, compact)", "super-octahedron", 8, 3),
+           ("Hypercube cage (geodesic, compact)", "super-hypercube", 6, 2),
        )},
     # m=1, two rows: 4128 atoms, {5: 96, 7: 240}, 1.345-1.504 A, clean.
     # One row measured clean once (1.355-1.483) and strained (1.325-1.523)

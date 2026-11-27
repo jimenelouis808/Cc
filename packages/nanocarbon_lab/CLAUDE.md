@@ -1771,6 +1771,57 @@ window together changes nothing -- so the saving comes only from the
 window taking a larger share of the sphere, which the arm angles bound:
 the tetrahedron needs frequency 6 before radius-2 windows stop touching.
 
+### The node can only be as small as its narrowest arm pair allows
+
+The super-hypercube showed the problem at its worst: frequency 6 was
+needed for its arms to land on window vertices, so its node was a
+sphere 5.2 tube radii across. Two things fix it, and a third bounds it.
+
+* **The largest window.** `largest_window` (and `window_radius=0`)
+  finds the biggest radius whose windows do not touch. With a hexagonal
+  window of `r` rings on a sphere of about `0.86 f` edges, the node is
+  roughly `0.86 f / r` tube radii: the hypercube at frequency 6 goes
+  from 5.2 (r = 1) to **2.6** (r = 2), clean, 16704 atoms,
+  1.377-1.456 Å.
+* **Bent arms.** `_stack_arm` runs each arm along a cubic Hermite curve
+  that leaves each mouth along its window's own normal, rings on a
+  rotation-minimising frame. A straight pair reproduces the old stack
+  to 1e-6 in unrelaxed strain; a window that misses its arm by a few
+  degrees no longer forces a finer sphere, the tube bends instead of
+  shearing out of its mouth, and the map still meets `12(V - E)`
+  (a test pins the hypercube at frequency 4, 7 deg off).
+* **The bound.** A window's angular radius cannot exceed half the
+  smallest angle between two arms of its node, so the node is at least
+  about `1 / sin(theta_min / 2)` tube radii. The hypercube's projection
+  has 54.7 deg between a radial arm and a cube edge: floor **2.2**, so
+  2.6 is near it. Re-embedding the graph does not help -- it is C4 x C4,
+  every pair of arms at a vertex lies in a square, and the torus
+  placement measured worse (60 deg at best, edges 1:3). Only graphs whose
+  arms are widely spread can have a node the size of the tube.
+
+The most compact clean build of each, at m = 1 (largest window, every
+row 100 % placed unless stated):
+
+| structure | freq, r | node / tube | atoms | bonds (Å) |
+|---|---|---|---|---|
+| super-graphene | 6, 5 | **1.03** | 3048 | 1.363-1.481 |
+| super-srs | 4, 3 | **1.15** | 2848 | 1.370-1.466 |
+| super-cubic | 6, 4 | 1.29 | 684 | 1.394-1.437 |
+| super-square | 6, 4 | 1.29 | 696 | 1.380-1.457 |
+| cube cage | 6, 4 | 1.29 | 5616 | 1.390-1.457 |
+| dodecahedral cage | 6, 4 | 1.29 | 14040 | 1.400-1.465 |
+| tetrahedral cage | 8, 3 | 2.29 | 4902 | 1.374-1.464 (99 %) |
+| octahedral cage | 8, 3 | 2.29 | 7244 | 1.354-1.478 (99 %) |
+| hypercube | 6, 2 | 2.58 | 16704 | 1.377-1.456 |
+
+Refused or worse at their most compact, and left as they were: the
+tetrahedron and octahedron at frequency 2 (broken: their windows share
+rims), the truncated cube at 3 (broken), super-fcc at 2 (broken),
+super-lonsdaleite at (3, 2) (strained, 78 %) and super-diamond at (3, 2)
+(clean, 79 %). The icosahedral cages, C60, the icosidodecahedron and the
+Wythoff cages are already at 1.72, frequency 2 with r = 1, which is as
+compact as their arms allow.
+
 ### Chiral Goldberg-Coxeter: the consistent cut
 
 `goldberg.chiral_subdivide` builds GC(m, n) for any pair on any closed
