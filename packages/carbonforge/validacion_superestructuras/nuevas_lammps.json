@@ -1,0 +1,47 @@
+{
+ "porosity": {
+  "lonsdaleite": {
+   "area_m2_g": 1708.1989049250733,
+   "helium_void_fraction": 0.7218731534887691,
+   "pore_volume_cm3_g": 0.2606603158472069,
+   "largest_free_sphere": 8.157384517734595,
+   "largest_included_sphere": 11.440804806663168
+  },
+  "bcc": {
+   "area_m2_g": 2172.4500934363346,
+   "helium_void_fraction": 0.8578556180970968,
+   "pore_volume_cm3_g": 1.1612625347870906,
+   "largest_free_sphere": 19.977037353789015,
+   "largest_included_sphere": 34.8533848022127
+  },
+  "doble-diamante": {
+   "area_m2_g": 1327.8881634534175,
+   "helium_void_fraction": 0.6328655139874406,
+   "pore_volume_cm3_g": 0.24863856597128006,
+   "largest_free_sphere": 9.691807144657473,
+   "largest_included_sphere": 13.897016553895785
+  },
+  "doble-giroide-geodesico": {
+   "area_m2_g": 2260.049562290829,
+   "helium_void_fraction": 0.7770451176989409,
+   "pore_volume_cm3_g": 0.41530133845284994,
+   "largest_free_sphere": 8.955747535936112,
+   "largest_included_sphere": 11.275884258593392
+  },
+  "doble-giroide-codos": {
+   "area_m2_g": 2718.534642533351,
+   "helium_void_fraction": 0.9272479766354572,
+   "pore_volume_cm3_g": 2.470076266543547,
+   "largest_free_sphere": 24.656568246688767,
+   "largest_included_sphere": 26.05989830345417
+  },
+  "doble-primitiva": {
+   "area_m2_g": 591.6256340185704,
+   "helium_void_fraction": 0.38855313488405213,
+   "pore_volume_cm3_g": 0.025338016756857106,
+   "largest_free_sphere": 2.3809454338026748,
+   "largest_included_sphere": 8.715056512706647
+  }
+ },
+ "points": []
+}
