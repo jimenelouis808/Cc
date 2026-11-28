@@ -1,0 +1,1028 @@
+{
+ "goldberg-diamond_m1n0.xyz": {
+  "file": "goldberg-diamond_m1n0.xyz",
+  "atoms_in_cell": 1792,
+  "periodic_axes": 3,
+  "gap": 3.4,
+  "repeat": [
+   2,
+   2,
+   2
+  ],
+  "density_g_cm3": 2.073111687368945,
+  "area_m2_g": 24.872658379428866,
+  "helium_void_fraction": 0.08139324420683448,
+  "pore_volume_cm3_g": 0.00013667055907292728,
+  "largest_free_sphere": 1.6476921863223586,
+  "largest_included_sphere": 3.1006532163799494,
+  "admits_h2": false,
+  "chahine_wt_pct": 0.04974531675885773
+ },
+ "goldberg-diamond_m1n1.xyz": {
+  "file": "goldberg-diamond_m1n1.xyz",
+  "atoms_in_cell": 5376,
+  "periodic_axes": 3,
+  "gap": 3.4,
+  "repeat": [
+   2,
+   2,
+   2
+  ],
+  "density_g_cm3": 1.2934027990295678,
+  "area_m2_g": 1418.4324348047578,
+  "helium_void_fraction": 0.6917473798092354,
+  "pore_volume_cm3_g": 0.09330684410446717,
+  "largest_free_sphere": 4.329580323737872,
+  "largest_included_sphere": 6.8469239665183075,
+  "admits_h2": true,
+  "chahine_wt_pct": 2.836864869609516
+ },
+ "goldberg-diamond_m2n0.xyz": {
+  "file": "goldberg-diamond_m2n0.xyz",
+  "atoms_in_cell": 896,
+  "periodic_axes": 3,
+  "gap": 3.4,
+  "repeat": [
+   1,
+   1,
+   1
+  ],
+  "density_g_cm3": 1.1795602475560472,
+  "area_m2_g": 1691.340769801115,
+  "helium_void_fraction": 0.7147610747767598,
+  "pore_volume_cm3_g": 0.14943422095808742,
+  "largest_free_sphere": 5.230238148456472,
+  "largest_included_sphere": 7.732548367013408,
+  "admits_h2": true,
+  "chahine_wt_pct": 3.38268153960223
+ },
+ "goldberg-diamond_m2n1.xyz": {
+  "file": "goldberg-diamond_m2n1.xyz",
+  "atoms_in_cell": 1568,
+  "periodic_axes": 3,
+  "gap": 3.4,
+  "repeat": [
+   1,
+   1,
+   1
+  ],
+  "density_g_cm3": 0.8830625084351845,
+  "area_m2_g": 2179.6147420353927,
+  "helium_void_fraction": 0.7868311824252128,
+  "pore_volume_cm3_g": 0.3866845929986957,
+  "largest_free_sphere": 8.177604892913132,
+  "largest_included_sphere": 11.899583996934888,
+  "admits_h2": true,
+  "chahine_wt_pct": 4.359229484070785
+ },
+ "goldberg-primitive_m1n1.xyz": {
+  "file": "goldberg-primitive_m1n1.xyz",
+  "atoms_in_cell": 1152,
+  "periodic_axes": 3,
+  "gap": 3.4,
+  "repeat": [
+   2,
+   2,
+   2
+  ],
+  "density_g_cm3": 1.3966589411439518,
+  "area_m2_g": 1060.7728194041313,
+  "helium_void_fraction": 0.64768804616563,
+  "pore_volume_cm3_g": 0.08337754950010923,
+  "largest_free_sphere": 2.5551291175545234,
+  "largest_included_sphere": 8.179483477895,
+  "admits_h2": false,
+  "chahine_wt_pct": 2.1215456388082625
+ },
+ "goldberg-primitive_m2n0.xyz": {
+  "file": "goldberg-primitive_m2n0.xyz",
+  "atoms_in_cell": 1536,
+  "periodic_axes": 3,
+  "gap": 3.4,
+  "repeat": [
+   2,
+   2,
+   2
+  ],
+  "density_g_cm3": 1.2953534640780997,
+  "area_m2_g": 1303.3963897997712,
+  "helium_void_fraction": 0.6879559294935641,
+  "pore_volume_cm3_g": 0.1209837090899368,
+  "largest_free_sphere": 3.5093467570460852,
+  "largest_included_sphere": 9.392175481925173,
+  "admits_h2": true,
+  "chahine_wt_pct": 2.6067927795995423
+ },
+ "goldberg-primitive_m3n1.xyz": {
+  "file": "goldberg-primitive_m3n1.xyz",
+  "atoms_in_cell": 624,
+  "periodic_axes": 3,
+  "gap": 3.4,
+  "repeat": [
+   1,
+   1,
+   1
+  ],
+  "density_g_cm3": 0.7267013338184408,
+  "area_m2_g": 2340.9795298458766,
+  "helium_void_fraction": 0.8405537456159079,
+  "pore_volume_cm3_g": 0.633501887560433,
+  "largest_free_sphere": 7.226873988289192,
+  "largest_included_sphere": 19.037959766016055,
+  "admits_h2": true,
+  "chahine_wt_pct": 4.681959059691753
+ },
+ "goldberg-primitive_m4n0.xyz": {
+  "file": "goldberg-primitive_m4n0.xyz",
+  "atoms_in_cell": 768,
+  "periodic_axes": 3,
+  "gap": 3.4,
+  "repeat": [
+   1,
+   1,
+   1
+  ],
+  "density_g_cm3": 0.6788128855403994,
+  "area_m2_g": 2367.846850532568,
+  "helium_void_fraction": 0.8535381409688666,
+  "pore_volume_cm3_g": 0.7325533696532518,
+  "largest_free_sphere": 8.004476654001325,
+  "largest_included_sphere": 20.19086479113706,
+  "admits_h2": true,
+  "chahine_wt_pct": 4.735693701065136
+ },
+ "goldberg-super-square_m3n0.xyz": {
+  "file": "goldberg-super-square_m3n0.xyz",
+  "atoms_in_cell": 1872,
+  "periodic_axes": 2,
+  "gap": 3.4,
+  "repeat": [
+   2,
+   2,
+   1
+  ],
+  "density_g_cm3": 0.8683601917195409,
+  "area_m2_g": 2066.981687377677,
+  "helium_void_fraction": 0.7823251231197542,
+  "pore_volume_cm3_g": 0.41943040473267085,
+  "largest_free_sphere": 7.431984602577812,
+  "largest_included_sphere": 15.516611088477589,
+  "admits_h2": true,
+  "chahine_wt_pct": 4.133963374755354
+ },
+ "knee-junction-tetrahedral_k18_r9.xyz": {
+  "file": "knee-junction-tetrahedral_k18_r9.xyz",
+  "atoms_in_cell": 756,
+  "periodic_axes": 0,
+  "gap": 3.4,
+  "repeat": [
+   1,
+   1,
+   1
+  ],
+  "density_g_cm3": 0.49363420297625715,
+  "area_m2_g": 3489.5418496768198,
+  "helium_void_fraction": 0.8664542094003751,
+  "pore_volume_cm3_g": 1.1440995442810324,
+  "largest_free_sphere": 9.180760914973595,
+  "largest_included_sphere": 25.342558276592023,
+  "admits_h2": true,
+  "chahine_wt_pct": 6.979083699353639
+ },
+ "knee-junction-x_k20_r9.xyz": {
+  "file": "knee-junction-x_k20_r9.xyz",
+  "atoms_in_cell": 780,
+  "periodic_axes": 0,
+  "gap": 3.4,
+  "repeat": [
+   1,
+   1,
+   1
+  ],
+  "density_g_cm3": 0.5988432101216469,
+  "area_m2_g": 2830.0833499314217,
+  "helium_void_fraction": 0.8335170441882019,
+  "pore_volume_cm3_g": 0.8352770667607489,
+  "largest_free_sphere": 18.61133165639805,
+  "largest_included_sphere": 23.289395696817056,
+  "admits_h2": true,
+  "chahine_wt_pct": 5.6601666998628435
+ },
+ "knee-junction-y_k14_r9.xyz": {
+  "file": "knee-junction-y_k14_r9.xyz",
+  "atoms_in_cell": 1072,
+  "periodic_axes": 0,
+  "gap": 3.4,
+  "repeat": [
+   1,
+   1,
+   2
+  ],
+  "density_g_cm3": 0.6431525360548582,
+  "area_m2_g": 2670.9646507003267,
+  "helium_void_fraction": 0.8080548221450233,
+  "pore_volume_cm3_g": 0.731863708238338,
+  "largest_free_sphere": 19.686883421116878,
+  "largest_included_sphere": 22.60758953222567,
+  "admits_h2": true,
+  "chahine_wt_pct": 5.341929301400653
+ },
+ "knee-schwarzite-bcc_k36_r13.xyz": {
+  "file": "knee-schwarzite-bcc_k36_r13.xyz",
+  "atoms_in_cell": 3624,
+  "periodic_axes": 3,
+  "gap": 3.4,
+  "repeat": [
+   1,
+   1,
+   1
+  ],
+  "density_g_cm3": 0.527003999239676,
+  "area_m2_g": 2172.4500934363346,
+  "helium_void_fraction": 0.8587592566409952,
+  "pore_volume_cm3_g": 1.162989276901596,
+  "largest_free_sphere": 19.977037353789015,
+  "largest_included_sphere": 34.8533848022127,
+  "admits_h2": true,
+  "chahine_wt_pct": 4.344900186872669
+ },
+ "knee-schwarzite-diamond_k18_r5.xyz": {
+  "file": "knee-schwarzite-diamond_k18_r5.xyz",
+  "atoms_in_cell": 1440,
+  "periodic_axes": 3,
+  "gap": 3.4,
+  "repeat": [
+   1,
+   1,
+   1
+  ],
+  "density_g_cm3": 1.0645655787614292,
+  "area_m2_g": 1717.3879703818006,
+  "helium_void_fraction": 0.7166922765627836,
+  "pore_volume_cm3_g": 0.24899045390426672,
+  "largest_free_sphere": 6.723390758769441,
+  "largest_included_sphere": 11.446640994102008,
+  "admits_h2": true,
+  "chahine_wt_pct": 3.4347759407636014
+ },
+ "knee-schwarzite-diamond_k18_r7_double.xyz": {
+  "file": "knee-schwarzite-diamond_k18_r7_double.xyz",
+  "atoms_in_cell": 7488,
+  "periodic_axes": 3,
+  "gap": 3.4,
+  "repeat": [
+   1,
+   1,
+   1
+  ],
+  "density_g_cm3": 1.0149270247526632,
+  "area_m2_g": 1327.8881634534175,
+  "helium_void_fraction": 0.6253722835973817,
+  "pore_volume_cm3_g": 0.24678293173610705,
+  "largest_free_sphere": 9.691807144657473,
+  "largest_included_sphere": 13.897016553895785,
+  "admits_h2": true,
+  "chahine_wt_pct": 2.655776326906835
+ },
+ "knee-schwarzite-gyroid_k20_r5.xyz": {
+  "file": "knee-schwarzite-gyroid_k20_r5.xyz",
+  "atoms_in_cell": 1744,
+  "periodic_axes": 3,
+  "gap": 3.4,
+  "repeat": [
+   1,
+   1,
+   1
+  ],
+  "density_g_cm3": 0.5847304438956369,
+  "area_m2_g": 2534.4250067356734,
+  "helium_void_fraction": 0.860914563132114,
+  "pore_volume_cm3_g": 0.9326804724468974,
+  "largest_free_sphere": 15.798276790200548,
+  "largest_included_sphere": 16.717336846092234,
+  "admits_h2": true,
+  "chahine_wt_pct": 5.068850013471347
+ },
+ "knee-schwarzite-gyroid_k20_r9_double.xyz": {
+  "file": "knee-schwarzite-gyroid_k20_r9_double.xyz",
+  "atoms_in_cell": 11168,
+  "periodic_axes": 3,
+  "gap": 3.4,
+  "repeat": [
+   1,
+   1,
+   1
+  ],
+  "density_g_cm3": 0.3059622126799932,
+  "area_m2_g": 2718.534642533351,
+  "helium_void_fraction": 0.9255498474034123,
+  "pore_volume_cm3_g": 2.4696404828820104,
+  "largest_free_sphere": 24.656568246688767,
+  "largest_included_sphere": 26.05989830345417,
+  "admits_h2": true,
+  "chahine_wt_pct": 5.437069285066702
+ },
+ "knee-schwarzite-lonsdaleite_k18_r5.xyz": {
+  "file": "knee-schwarzite-lonsdaleite_k18_r5.xyz",
+  "atoms_in_cell": 2880,
+  "periodic_axes": 3,
+  "gap": 3.4,
+  "repeat": [
+   2,
+   1,
+   1
+  ],
+  "density_g_cm3": 1.0645655787613575,
+  "area_m2_g": 1708.1989049250733,
+  "helium_void_fraction": 0.7260386867395601,
+  "pore_volume_cm3_g": 0.2613429104014214,
+  "largest_free_sphere": 8.157384517734595,
+  "largest_included_sphere": 11.440804806663168,
+  "admits_h2": true,
+  "chahine_wt_pct": 3.4163978098501464
+ },
+ "knee-schwarzite-primitive_k20_r7.xyz": {
+  "file": "knee-schwarzite-primitive_k20_r7.xyz",
+  "atoms_in_cell": 3904,
+  "periodic_axes": 3,
+  "gap": 3.4,
+  "repeat": [
+   2,
+   2,
+   2
+  ],
+  "density_g_cm3": 0.8620499335697823,
+  "area_m2_g": 2162.7999706408577,
+  "helium_void_fraction": 0.7976888585714823,
+  "pore_volume_cm3_g": 0.4318775345858345,
+  "largest_free_sphere": 9.16881341568794,
+  "largest_included_sphere": 17.504165112131403,
+  "admits_h2": true,
+  "chahine_wt_pct": 4.325599941281715
+ },
+ "knee-schwarzite-primitive_k20_r9.xyz": {
+  "file": "knee-schwarzite-primitive_k20_r9.xyz",
+  "atoms_in_cell": 968,
+  "periodic_axes": 3,
+  "gap": 3.4,
+  "repeat": [
+   1,
+   1,
+   1
+  ],
+  "density_g_cm3": 0.5958096347684914,
+  "area_m2_g": 2543.2807090865713,
+  "helium_void_fraction": 0.854896573438296,
+  "pore_volume_cm3_g": 0.9025533805087743,
+  "largest_free_sphere": 14.611795238964284,
+  "largest_included_sphere": 25.335642527238324,
+  "admits_h2": true,
+  "chahine_wt_pct": 5.086561418173143
+ },
+ "knee-supernetwork-super-graphene_k22_r5.xyz": {
+  "file": "knee-supernetwork-super-graphene_k22_r5.xyz",
+  "atoms_in_cell": 1840,
+  "periodic_axes": 2,
+  "gap": 3.4,
+  "repeat": [
+   1,
+   1,
+   2
+  ],
+  "density_g_cm3": 0.9620688741596269,
+  "area_m2_g": 1632.7097859545897,
+  "helium_void_fraction": 0.7165421305031185,
+  "pore_volume_cm3_g": 0.3306416084585028,
+  "largest_free_sphere": 10.028707714738172,
+  "largest_included_sphere": 12.128812328148063,
+  "admits_h2": true,
+  "chahine_wt_pct": 3.2654195719091796
+ },
+ "knee-supernetwork-super-square_k12_r5.xyz": {
+  "file": "knee-supernetwork-super-square_k12_r5.xyz",
+  "atoms_in_cell": 1440,
+  "periodic_axes": 2,
+  "gap": 3.4,
+  "repeat": [
+   2,
+   2,
+   2
+  ],
+  "density_g_cm3": 1.1591729187926627,
+  "area_m2_g": 1819.7573838045375,
+  "helium_void_fraction": 0.6830253886839371,
+  "pore_volume_cm3_g": 0.1345930914510718,
+  "largest_free_sphere": 4.743173468348336,
+  "largest_included_sphere": 7.658362262883699,
+  "admits_h2": true,
+  "chahine_wt_pct": 3.639514767609075
+ },
+ "knee-supernetwork-super-square_k12_r7.xyz": {
+  "file": "knee-supernetwork-super-square_k12_r7.xyz",
+  "atoms_in_cell": 2976,
+  "periodic_axes": 2,
+  "gap": 3.4,
+  "repeat": [
+   2,
+   2,
+   2
+  ],
+  "density_g_cm3": 1.0521472100578528,
+  "area_m2_g": 1572.9059072310813,
+  "helium_void_fraction": 0.6606574213004934,
+  "pore_volume_cm3_g": 0.22564966612762508,
+  "largest_free_sphere": 10.49136582166571,
+  "largest_included_sphere": 13.807335309468396,
+  "admits_h2": true,
+  "chahine_wt_pct": 3.1458118144621627
+ },
+ "super-bcc_m2n0_f3_r1_w1.xyz": {
+  "file": "super-bcc_m2n0_f3_r1_w1.xyz",
+  "atoms_in_cell": 1440,
+  "periodic_axes": 3,
+  "gap": 3.4,
+  "repeat": [
+   1,
+   1,
+   1
+  ],
+  "density_g_cm3": 1.2704205498224836,
+  "area_m2_g": 1306.2175941066846,
+  "helium_void_fraction": 0.5803755233944707,
+  "pore_volume_cm3_g": 0.1272544486857178,
+  "largest_free_sphere": 3.520737313775379,
+  "largest_included_sphere": 14.018403763529783,
+  "admits_h2": true,
+  "chahine_wt_pct": 2.6124351882133694
+ },
+ "super-cube_m1n0_f6_r1_w4.xyz": {
+  "file": "super-cube_m1n0_f6_r1_w4.xyz",
+  "atoms_in_cell": 5616,
+  "periodic_axes": 0,
+  "gap": 3.4,
+  "repeat": [
+   1,
+   1,
+   1
+  ],
+  "density_g_cm3": 0.7307128854455859,
+  "area_m2_g": 2322.812214199346,
+  "helium_void_fraction": 0.8173429918987005,
+  "pore_volume_cm3_g": 0.6141719165930227,
+  "largest_free_sphere": 9.966175249670522,
+  "largest_included_sphere": 21.92408850496271,
+  "admits_h2": true,
+  "chahine_wt_pct": 4.645624428398691
+ },
+ "super-cube_m2n0_f2_r1_w1.xyz": {
+  "file": "super-cube_m2n0_f2_r1_w1.xyz",
+  "atoms_in_cell": 3136,
+  "periodic_axes": 0,
+  "gap": 3.4,
+  "repeat": [
+   1,
+   1,
+   1
+  ],
+  "density_g_cm3": 0.817179977584485,
+  "area_m2_g": 2021.0145319821563,
+  "helium_void_fraction": 0.7729876495854217,
+  "pore_volume_cm3_g": 0.4846545569688214,
+  "largest_free_sphere": 11.112228747766544,
+  "largest_included_sphere": 18.422568043273767,
+  "admits_h2": true,
+  "chahine_wt_pct": 4.042029063964312
+ },
+ "super-cubic_m1n0_f6_r1_w4.xyz": {
+  "file": "super-cubic_m1n0_f6_r1_w4.xyz",
+  "atoms_in_cell": 684,
+  "periodic_axes": 3,
+  "gap": 3.4,
+  "repeat": [
+   1,
+   1,
+   1
+  ],
+  "density_g_cm3": 0.9511884408772349,
+  "area_m2_g": 1828.1403908879834,
+  "helium_void_fraction": 0.7290691145075049,
+  "pore_volume_cm3_g": 0.33279420396242554,
+  "largest_free_sphere": 4.882252984801038,
+  "largest_included_sphere": 18.023691568701135,
+  "admits_h2": true,
+  "chahine_wt_pct": 3.656280781775967
+ },
+ "super-cubic_m2n0_f2_r1_w1.xyz": {
+  "file": "super-cubic_m2n0_f2_r1_w1.xyz",
+  "atoms_in_cell": 3712,
+  "periodic_axes": 3,
+  "gap": 3.4,
+  "repeat": [
+   2,
+   2,
+   2
+  ],
+  "density_g_cm3": 0.8759815150745125,
+  "area_m2_g": 1816.3830566828958,
+  "helium_void_fraction": 0.760693969947748,
+  "pore_volume_cm3_g": 0.44875376162082853,
+  "largest_free_sphere": 6.672619526994781,
+  "largest_included_sphere": 17.98987648874488,
+  "admits_h2": true,
+  "chahine_wt_pct": 3.6327661133657916
+ },
+ "super-cubic_m2n0_f2_r2_w1_double.xyz": {
+  "file": "super-cubic_m2n0_f2_r2_w1_double.xyz",
+  "atoms_in_cell": 1216,
+  "periodic_axes": 3,
+  "gap": 3.4,
+  "repeat": [
+   1,
+   1,
+   1
+  ],
+  "density_g_cm3": 1.5743142165696438,
+  "area_m2_g": 591.6256340185704,
+  "helium_void_fraction": 0.3916924132588829,
+  "pore_volume_cm3_g": 0.025566687752907956,
+  "largest_free_sphere": 2.3809454338026748,
+  "largest_included_sphere": 8.715056512706647,
+  "admits_h2": false,
+  "chahine_wt_pct": 1.1832512680371408
+ },
+ "super-cuboctahedron_m1n0_f4_r2_w1.xyz": {
+  "file": "super-cuboctahedron_m1n0_f4_r2_w1.xyz",
+  "atoms_in_cell": 4128,
+  "periodic_axes": 0,
+  "gap": 3.4,
+  "repeat": [
+   1,
+   1,
+   1
+  ],
+  "density_g_cm3": 0.6696581901731244,
+  "area_m2_g": 2209.79028515297,
+  "helium_void_fraction": 0.8334479832652324,
+  "pore_volume_cm3_g": 0.7579488672205252,
+  "largest_free_sphere": 9.582011774066782,
+  "largest_included_sphere": 36.95892140296794,
+  "admits_h2": true,
+  "chahine_wt_pct": 4.419580570305939
+ },
+ "super-diamond_m2n0_f3_r1_w1.xyz": {
+  "file": "super-diamond_m2n0_f3_r1_w1.xyz",
+  "atoms_in_cell": 5760,
+  "periodic_axes": 3,
+  "gap": 3.4,
+  "repeat": [
+   1,
+   1,
+   1
+  ],
+  "density_g_cm3": 0.5517019155278634,
+  "area_m2_g": 2110.8653653608367,
+  "helium_void_fraction": 0.8405182381659464,
+  "pore_volume_cm3_g": 1.0834655149385846,
+  "largest_free_sphere": 20.627540271694556,
+  "largest_included_sphere": 29.060952257252474,
+  "admits_h2": true,
+  "chahine_wt_pct": 4.221730730721673
+ },
+ "super-dodecahedron_m1n0_f6_r1_w4.xyz": {
+  "file": "super-dodecahedron_m1n0_f6_r1_w4.xyz",
+  "atoms_in_cell": 14040,
+  "periodic_axes": 0,
+  "gap": 3.4,
+  "repeat": [
+   1,
+   1,
+   1
+  ],
+  "density_g_cm3": 0.3348237931249693,
+  "area_m2_g": 2521.29272116098,
+  "helium_void_fraction": 0.9235632648432925,
+  "pore_volume_cm3_g": 2.2316215733244373,
+  "largest_free_sphere": 43.937595732988356,
+  "largest_included_sphere": 64.91030770651388,
+  "admits_h2": true,
+  "chahine_wt_pct": 5.042585442321959
+ },
+ "super-dodecahedron_m2n0_f2_r1_w1.xyz": {
+  "file": "super-dodecahedron_m2n0_f2_r1_w1.xyz",
+  "atoms_in_cell": 7840,
+  "periodic_axes": 0,
+  "gap": 3.4,
+  "repeat": [
+   1,
+   1,
+   1
+  ],
+  "density_g_cm3": 0.3236884015110339,
+  "area_m2_g": 2447.2030917676557,
+  "helium_void_fraction": 0.9295290070787411,
+  "pore_volume_cm3_g": 2.342427665394185,
+  "largest_free_sphere": 38.45004531473071,
+  "largest_included_sphere": 53.593207322066114,
+  "admits_h2": true,
+  "chahine_wt_pct": 4.894406183535311
+ },
+ "super-fcc_m2n0_f4_r1_w1.xyz": {
+  "file": "super-fcc_m2n0_f4_r1_w1.xyz",
+  "atoms_in_cell": 5120,
+  "periodic_axes": 3,
+  "gap": 3.4,
+  "repeat": [
+   1,
+   1,
+   1
+  ],
+  "density_g_cm3": 1.0516422816653264,
+  "area_m2_g": 1571.6022378215548,
+  "helium_void_fraction": 0.6707976200254036,
+  "pore_volume_cm3_g": 0.26331830841581966,
+  "largest_free_sphere": 3.7009820162400864,
+  "largest_included_sphere": 18.387526029646278,
+  "admits_h2": true,
+  "chahine_wt_pct": 3.1432044756431097
+ },
+ "super-graphene_m1n0_f6_r1_w5.xyz": {
+  "file": "super-graphene_m1n0_f6_r1_w5.xyz",
+  "atoms_in_cell": 3048,
+  "periodic_axes": 2,
+  "gap": 3.4,
+  "repeat": [
+   1,
+   1,
+   1
+  ],
+  "density_g_cm3": 0.6178575908803344,
+  "area_m2_g": 2416.6137788061374,
+  "helium_void_fraction": 0.8436122916211659,
+  "pore_volume_cm3_g": 0.8629280833258055,
+  "largest_free_sphere": 22.692912684574516,
+  "largest_included_sphere": 29.308565860939282,
+  "admits_h2": true,
+  "chahine_wt_pct": 4.8332275576122745
+ },
+ "super-hypercube_m1n0_f6_r1_w2.xyz": {
+  "file": "super-hypercube_m1n0_f6_r1_w2.xyz",
+  "atoms_in_cell": 16704,
+  "periodic_axes": 0,
+  "gap": 3.4,
+  "repeat": [
+   1,
+   1,
+   1
+  ],
+  "density_g_cm3": 0.4658335545837042,
+  "area_m2_g": 2391.2902939576275,
+  "helium_void_fraction": 0.8928580752120656,
+  "pore_volume_cm3_g": 1.3963499629131724,
+  "largest_free_sphere": 16.485808136583152,
+  "largest_included_sphere": 45.201466269106675,
+  "admits_h2": true,
+  "chahine_wt_pct": 4.7825805879152545
+ },
+ "super-hypercube_m1n0_f6_r2_w1.xyz": {
+  "file": "super-hypercube_m1n0_f6_r2_w1.xyz",
+  "atoms_in_cell": 14784,
+  "periodic_axes": 0,
+  "gap": 3.4,
+  "repeat": [
+   1,
+   1,
+   1
+  ],
+  "density_g_cm3": 0.3605792871717147,
+  "area_m2_g": 2498.2967991245873,
+  "helium_void_fraction": 0.9132843615674093,
+  "pore_volume_cm3_g": 2.017771659524596,
+  "largest_free_sphere": 19.167646963652214,
+  "largest_included_sphere": 49.212994474963644,
+  "admits_h2": true,
+  "chahine_wt_pct": 4.9965935982491745
+ },
+ "super-icosahedron_m2n0_f2_r1_w1.xyz": {
+  "file": "super-icosahedron_m2n0_f2_r1_w1.xyz",
+  "atoms_in_cell": 5280,
+  "periodic_axes": 0,
+  "gap": 3.4,
+  "repeat": [
+   1,
+   1,
+   1
+  ],
+  "density_g_cm3": 0.5897437221966202,
+  "area_m2_g": 1994.4448889288947,
+  "helium_void_fraction": 0.8478484595984543,
+  "pore_volume_cm3_g": 0.9718910860666582,
+  "largest_free_sphere": 19.374992335790438,
+  "largest_included_sphere": 49.62905990691272,
+  "admits_h2": true,
+  "chahine_wt_pct": 3.988889777857789
+ },
+ "super-icosidodecahedron_m2n0_f2_r1_w1.xyz": {
+  "file": "super-icosidodecahedron_m2n0_f2_r1_w1.xyz",
+  "atoms_in_cell": 12480,
+  "periodic_axes": 0,
+  "gap": 3.4,
+  "repeat": [
+   1,
+   1,
+   1
+  ],
+  "density_g_cm3": 0.3108344960874759,
+  "area_m2_g": 2330.5813768291478,
+  "helium_void_fraction": 0.9216590914196929,
+  "pore_volume_cm3_g": 2.470339284512912,
+  "largest_free_sphere": 44.856206375954685,
+  "largest_included_sphere": 74.42528293211639,
+  "admits_h2": true,
+  "chahine_wt_pct": 4.661162753658296
+ },
+ "super-kagome_m2n0_f2_r1_w1.xyz": {
+  "file": "super-kagome_m2n0_f2_r1_w1.xyz",
+  "atoms_in_cell": 4992,
+  "periodic_axes": 2,
+  "gap": 3.4,
+  "repeat": [
+   1,
+   1,
+   2
+  ],
+  "density_g_cm3": 0.6875471976026629,
+  "area_m2_g": 2125.5759306755117,
+  "helium_void_fraction": 0.8204945499828814,
+  "pore_volume_cm3_g": 0.7158538861760709,
+  "largest_free_sphere": 26.905689759812265,
+  "largest_included_sphere": 30.900781313619277,
+  "admits_h2": true,
+  "chahine_wt_pct": 4.2511518613510235
+ },
+ "super-lonsdaleite_m2n0_f3_r1_w1.xyz": {
+  "file": "super-lonsdaleite_m2n0_f3_r1_w1.xyz",
+  "atoms_in_cell": 5760,
+  "periodic_axes": 3,
+  "gap": 3.4,
+  "repeat": [
+   1,
+   1,
+   1
+  ],
+  "density_g_cm3": 0.593249535826415,
+  "area_m2_g": 2142.583762354415,
+  "helium_void_fraction": 0.8329248301877081,
+  "pore_volume_cm3_g": 0.9508646293573432,
+  "largest_free_sphere": 17.930876561873845,
+  "largest_included_sphere": 27.160387403674697,
+  "admits_h2": true,
+  "chahine_wt_pct": 4.28516752470883
+ },
+ "super-octahedron_m1n0_f8_r1_w3.xyz": {
+  "file": "super-octahedron_m1n0_f8_r1_w3.xyz",
+  "atoms_in_cell": 7244,
+  "periodic_axes": 0,
+  "gap": 3.4,
+  "repeat": [
+   1,
+   1,
+   1
+  ],
+  "density_g_cm3": 0.2368608874687224,
+  "area_m2_g": 2514.271877291617,
+  "helium_void_fraction": 0.9488169642196674,
+  "pore_volume_cm3_g": 3.4637068003682256,
+  "largest_free_sphere": 54.66901072123878,
+  "largest_included_sphere": 85.25322958523994,
+  "admits_h2": true,
+  "chahine_wt_pct": 5.028543754583234
+ },
+ "super-octahedron_m2n0_f4_r1_w1.xyz": {
+  "file": "super-octahedron_m2n0_f4_r1_w1.xyz",
+  "atoms_in_cell": 7680,
+  "periodic_axes": 0,
+  "gap": 3.4,
+  "repeat": [
+   1,
+   1,
+   1
+  ],
+  "density_g_cm3": 0.25043090803631923,
+  "area_m2_g": 2486.382772207272,
+  "helium_void_fraction": 0.9449025907175911,
+  "pore_volume_cm3_g": 3.2354233203614466,
+  "largest_free_sphere": 54.52462281779389,
+  "largest_included_sphere": 86.1358856203048,
+  "admits_h2": true,
+  "chahine_wt_pct": 4.9727655444145435
+ },
+ "super-rhombicuboctahedron_m1n0_f6_r2_w1.xyz": {
+  "file": "super-rhombicuboctahedron_m1n0_f6_r2_w1.xyz",
+  "atoms_in_cell": 17856,
+  "periodic_axes": 0,
+  "gap": 3.4,
+  "repeat": [
+   1,
+   1,
+   1
+  ],
+  "density_g_cm3": 0.3662497110570877,
+  "area_m2_g": 2481.0151709944407,
+  "helium_void_fraction": 0.9125362732475888,
+  "pore_volume_cm3_g": 1.9658718580880268,
+  "largest_free_sphere": 46.406694594988025,
+  "largest_included_sphere": 74.45794293142866,
+  "admits_h2": true,
+  "chahine_wt_pct": 4.962030341988881
+ },
+ "super-square_m1n0_f6_r1_w4.xyz": {
+  "file": "super-square_m1n0_f6_r1_w4.xyz",
+  "atoms_in_cell": 696,
+  "periodic_axes": 2,
+  "gap": 3.4,
+  "repeat": [
+   1,
+   1,
+   1
+  ],
+  "density_g_cm3": 0.7738492749876232,
+  "area_m2_g": 2314.2769754016167,
+  "helium_void_fraction": 0.8121466073909642,
+  "pore_volume_cm3_g": 0.5465749989536804,
+  "largest_free_sphere": 9.981503151176998,
+  "largest_included_sphere": 15.621206621167705,
+  "admits_h2": true,
+  "chahine_wt_pct": 4.628553950803234
+ },
+ "super-square_m2n0_f2_r1_w1.xyz": {
+  "file": "super-square_m2n0_f2_r1_w1.xyz",
+  "atoms_in_cell": 3328,
+  "periodic_axes": 2,
+  "gap": 3.4,
+  "repeat": [
+   2,
+   2,
+   2
+  ],
+  "density_g_cm3": 0.8503030343482034,
+  "area_m2_g": 2058.890101398558,
+  "helium_void_fraction": 0.78766236144919,
+  "pore_volume_cm3_g": 0.44721311262655744,
+  "largest_free_sphere": 8.700479750882327,
+  "largest_included_sphere": 16.36286298136703,
+  "admits_h2": true,
+  "chahine_wt_pct": 4.117780202797116
+ },
+ "super-srs_m1n0_f4_r1_w3.xyz": {
+  "file": "super-srs_m1n0_f4_r1_w3.xyz",
+  "atoms_in_cell": 2848,
+  "periodic_axes": 3,
+  "gap": 3.4,
+  "repeat": [
+   1,
+   1,
+   1
+  ],
+  "density_g_cm3": 0.42890543204986314,
+  "area_m2_g": 2446.8535903279057,
+  "helium_void_fraction": 0.896574957873346,
+  "pore_volume_cm3_g": 1.5736957758748955,
+  "largest_free_sphere": 24.4137004514949,
+  "largest_included_sphere": 26.510768983832037,
+  "admits_h2": true,
+  "chahine_wt_pct": 4.893707180655811
+ },
+ "super-srs_m1n0_f4_r1_w3_double.xyz": {
+  "file": "super-srs_m1n0_f4_r1_w3_double.xyz",
+  "atoms_in_cell": 5696,
+  "periodic_axes": 3,
+  "gap": 3.4,
+  "repeat": [
+   1,
+   1,
+   1
+  ],
+  "density_g_cm3": 0.8578108640996972,
+  "area_m2_g": 2260.049562290829,
+  "helium_void_fraction": 0.7810966326671421,
+  "pore_volume_cm3_g": 0.41685568264355066,
+  "largest_free_sphere": 8.955747535936112,
+  "largest_included_sphere": 11.275884258593392,
+  "admits_h2": true,
+  "chahine_wt_pct": 4.520099124581658
+ },
+ "super-srs_m2n0_f2_r1_w1.xyz": {
+  "file": "super-srs_m2n0_f2_r1_w1.xyz",
+  "atoms_in_cell": 3136,
+  "periodic_axes": 3,
+  "gap": 3.4,
+  "repeat": [
+   1,
+   1,
+   1
+  ],
+  "density_g_cm3": 0.27187164719083406,
+  "area_m2_g": 2415.3868162571935,
+  "helium_void_fraction": 0.9315905725463253,
+  "pore_volume_cm3_g": 2.9248483302680426,
+  "largest_free_sphere": 33.73469271652989,
+  "largest_included_sphere": 36.58686572544384,
+  "admits_h2": true,
+  "chahine_wt_pct": 4.830773632514387
+ },
+ "super-tetrahedron_m1n0_f8_r1_w3.xyz": {
+  "file": "super-tetrahedron_m1n0_f8_r1_w3.xyz",
+  "atoms_in_cell": 4902,
+  "periodic_axes": 0,
+  "gap": 3.4,
+  "repeat": [
+   1,
+   1,
+   1
+  ],
+  "density_g_cm3": 0.4253983593776869,
+  "area_m2_g": 2627.4701007624294,
+  "helium_void_fraction": 0.904961497572856,
+  "pore_volume_cm3_g": 1.574171562343653,
+  "largest_free_sphere": 19.714122606919783,
+  "largest_included_sphere": 28.95844714470922,
+  "admits_h2": true,
+  "chahine_wt_pct": 5.2549402015248585
+ },
+ "super-tetrahedron_m2n0_f4_r1_w1.xyz": {
+  "file": "super-tetrahedron_m2n0_f4_r1_w1.xyz",
+  "atoms_in_cell": 5120,
+  "periodic_axes": 0,
+  "gap": 3.4,
+  "repeat": [
+   1,
+   1,
+   1
+  ],
+  "density_g_cm3": 0.4316536555906893,
+  "area_m2_g": 2593.5608276138482,
+  "helium_void_fraction": 0.8997608176638261,
+  "pore_volume_cm3_g": 1.540664198530369,
+  "largest_free_sphere": 20.558373080663678,
+  "largest_included_sphere": 29.226682680427878,
+  "admits_h2": true,
+  "chahine_wt_pct": 5.187121655227696
+ },
+ "super-truncated-octahedron_m1n0_f4_r2_w1.xyz": {
+  "file": "super-truncated-octahedron_m1n0_f4_r2_w1.xyz",
+  "atoms_in_cell": 8112,
+  "periodic_axes": 0,
+  "gap": 3.4,
+  "repeat": [
+   1,
+   1,
+   1
+  ],
+  "density_g_cm3": 0.3258505868101765,
+  "area_m2_g": 2460.528956647681,
+  "helium_void_fraction": 0.9185686640200577,
+  "pore_volume_cm3_g": 2.314762339544483,
+  "largest_free_sphere": 33.93800163236924,
+  "largest_included_sphere": 73.72109653786822,
+  "admits_h2": true,
+  "chahine_wt_pct": 4.921057913295361
+ },
+ "super-truncated-tetrahedron_m1n0_f4_r2_w1.xyz": {
+  "file": "super-truncated-tetrahedron_m1n0_f4_r2_w1.xyz",
+  "atoms_in_cell": 4056,
+  "periodic_axes": 0,
+  "gap": 3.4,
+  "repeat": [
+   1,
+   1,
+   1
+  ],
+  "density_g_cm3": 0.3114013946307842,
+  "area_m2_g": 2552.419611216038,
+  "helium_void_fraction": 0.9255698087761074,
+  "pore_volume_cm3_g": 2.4474307002926667,
+  "largest_free_sphere": 32.90482642354313,
+  "largest_included_sphere": 51.69740693743571,
+  "admits_h2": true,
+  "chahine_wt_pct": 5.1048392224320756
+ },
+ "superfullerene-C60_m2n0_f2_r1_w1.xyz": {
+  "file": "superfullerene-C60_m2n0_f2_r1_w1.xyz",
+  "atoms_in_cell": 23520,
+  "periodic_axes": 0,
+  "gap": 3.4,
+  "repeat": [
+   1,
+   1,
+   1
+  ],
+  "density_g_cm3": 0.2139357069960021,
+  "area_m2_g": 2504.666828706172,
+  "helium_void_fraction": 0.9507650120965231,
+  "pore_volume_cm3_g": 3.9254005099252867,
+  "largest_free_sphere": 54.471802360249114,
+  "largest_included_sphere": 110.12575604770096,
+  "admits_h2": true,
+  "chahine_wt_pct": 5.009333657412344
+ }
+}
