@@ -2621,6 +2621,28 @@ clean at frequency 2 and one row, and two rows there are *worse*, the
 opposite of the usual rule; (8,0) at frequency 3 gets worse with a second
 row too. Neither is a trend to extrapolate.
 
+#### Supertori: a supertube closed into a ring
+
+`supertorus_graph` repeats one period of a supertube round a circle
+until R/r reaches `aspect` (3 by default; below 2 is refused) and carries
+each vertex onto the torus. The seam edges become ordinary ones, so the
+graph is finite and genus 1: `V - E = -V/2`, budget `-6V`. The smallest
+is the (4,0), 112 vertices, budget -672 (`CAGES["supertorus-(4,0)"]`).
+
+**The curvature has to go somewhere, and only two places are offered.**
+Carried straight from the cylinder, the outer struts are twice the inner
+ones, and the geodesic carrier scales a build by its shortest strut, so
+the outer arms fill with atoms: 45 260 for the (4,0) at frequency 4.
+`_equalise_on_torus` slides the vertices over the torus until every strut
+is one length (to 1e-5), and the angles between arms then run 54-152 deg
+instead of 120. Weighting the angles back in trades one for the other
+and never wins both (struts 1.75 : 1 at 95-135 deg; 2.2 : 1 at 104-128).
+Equal struts is what the builder takes, because the carrier's size is set
+by strut length and its windows already absorb arm angles. At 112 nodes
+that is still 20 532 atoms at frequency 3 (arms 5 deg off their windows,
+bent in at a 6 deg tolerance) and 35 840 at frequency 4: about 180 atoms
+a node is the floor here.
+
 ### The superstructure is the same law on a graph, and it agrees with the meshed route
 
 `build_knee_supernetwork` hangs the **node** on every vertex of a net

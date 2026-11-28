@@ -751,6 +751,102 @@ def archimedean_cage(solid: str, strut: float = 24.0) -> SuperGraph:
     )
 
 
+def _equalise_on_torus(nodes: np.ndarray, edges, major: float,
+                       minor: float) -> np.ndarray:
+    """Slide the vertices over the torus until every strut is one length.
+
+    Carried straight from the cylinder, the outer struts are twice the
+    inner ones at R/r = 3, and the geodesic carrier scales a build by its
+    SHORTEST strut, so the long ones fill with atoms: measured, 45 260
+    atoms for the (4,0) ring at frequency 4. A honeycomb's angles are free
+    where a flat sheet's are not, so the vertices can absorb the curvature
+    instead: minimising the spread over each vertex's two torus angles
+    takes the struts to one length within 1e-5. Scaled so the mean strut
+    is 1.
+    """
+    from scipy.optimize import minimize
+
+    pairs = np.array([(i, j) for i, j, _ in edges])
+    radial = np.linalg.norm(nodes[:, :2], axis=1)
+    start = np.concatenate([np.arctan2(nodes[:, 1], nodes[:, 0]),
+                            np.arctan2(nodes[:, 2], radial - major)])
+    count = len(nodes)
+
+    def place(x):
+        ring, tube = x[:count], x[count:]
+        reach = major + minor * np.cos(tube)
+        return np.column_stack([reach * np.cos(ring), reach * np.sin(ring),
+                                minor * np.sin(tube)])
+
+    def spread(x):
+        points = place(x)
+        lengths = np.linalg.norm(points[pairs[:, 0]] - points[pairs[:, 1]],
+                                 axis=1)
+        return float(np.sum((lengths / lengths.mean() - 1.0) ** 2))
+
+    best = minimize(spread, start, method="L-BFGS-B",
+                    options={"maxiter": 5000})
+    points = place(best.x)
+    lengths = np.linalg.norm(points[pairs[:, 0]] - points[pairs[:, 1]], axis=1)
+    return points / lengths.mean()
+
+
+def supertorus_graph(n: int = 4, m: int = 0, aspect: float = 3.0,
+                     strut: float = 20.0, bond: float = CC_BOND
+                     ) -> SuperGraph:
+    """A supertube closed into a ring: super-graphene on a torus.
+
+    One axial period of the ``(n, m)`` supertube (:func:`supertube_graph`)
+    is repeated round a circle until the ring's major radius is `aspect`
+    times the tube's, then each vertex is carried onto the torus: the
+    axial coordinate becomes the angle round the ring, the cross-section
+    is kept. The seam edges of the periodic tube become ordinary edges, so
+    the graph is **finite and genus 1**: ``V - E = -V/2`` and the ring
+    budget ``12(V - E)`` is ``-6V``, every node a three-arm saddle.
+
+    **Bending stretches the outside and compresses the inside**, by
+    ``(R + r)/R`` and ``(R - r)/R``: about 2 to 1 at ``aspect = 3``. The
+    vertices are then slid over the torus until every strut is one
+    length (:func:`_equalise_on_torus`), the angles at the vertices
+    taking up the curvature instead. `aspect` below 2 is refused. The number of periods is
+    the smallest whole number that reaches `aspect`, so the achieved
+    ratio is recorded in the note.
+    """
+    if aspect < 2.0:
+        raise ValueError(
+            f"aspect {aspect} is below 2: the inner struts would be under "
+            "a third of the outer ones and the inner nodes would touch.")
+    unit = supertube_graph(n, m, 1, 1.0, bond)
+    shape = np.asarray(unit.shape, dtype=float)
+    cross = unit.nodes * shape                 # x, y in struts; z in struts
+    radius = float(np.linalg.norm(cross[:, :2], axis=1).mean())
+    period = float(shape[2])
+    periods = int(np.ceil(2.0 * np.pi * aspect * radius / period))
+    major = periods * period / (2.0 * np.pi)
+    count = len(cross)
+
+    nodes = []
+    for p in range(periods):
+        for x, y, z in cross:
+            phi = 2.0 * np.pi * (z + p * period) / (periods * period)
+            nodes.append([(major + x) * np.cos(phi), (major + x) * np.sin(phi),
+                          y])
+    edges = []
+    for i, j, (_, _, shift) in unit.edges:
+        for p in range(periods):
+            q = (p + shift) % periods
+            edges.append((p * count + i, q * count + j, (0, 0, 0)))
+    nodes = _equalise_on_torus(np.asarray(nodes), edges, major, radius)
+    nodes = nodes * float(strut)
+    return SuperGraph(
+        name=f"supertorus-({n},{m})", nodes=nodes, edges=tuple(edges),
+        pbc=(False, False, False),
+        note=f"the ({n},{m}) supertube closed into a ring: {periods} periods, "
+             f"{len(nodes)} vertices, R/r = {major / radius:.2f}. Genus 1, "
+             "budget -6V.",
+    )
+
+
 #: Supertube indices the catalogue offers, and what separates them.
 #:
 #: ``(n, n)`` is an **armchair** roll of super-graphene and ``(n, 0)`` a
@@ -788,6 +884,10 @@ def archimedean_cage(solid: str, strut: float = 24.0) -> SuperGraph:
 #: this entry existed and the (6,0) is measured above; the (5,5), (8,8),
 #: (8,0) and (10,0) are **bracketed** by those rather than each built,
 #: and the chord law says the wider ones are the safer ones.
+#: The supertubes offered closed into rings, smallest first (vertices at
+#: R/r = 3): (4,0) 112, (5,0) 180, (6,0) 264.
+SUPERTORUS_INDICES: tuple[tuple[int, int], ...] = ((4, 0), (5, 0), (6, 0))
+
 SUPERTUBE_INDICES: tuple[tuple[int, int], ...] = (
     (4, 4), (5, 5), (6, 6), (8, 8),
     (6, 0), (8, 0), (10, 0),
@@ -840,6 +940,11 @@ CAGES: dict[str, object] = {
     **{f"supertube-({n},{m})":
        (lambda a, b: lambda strut: supertube_graph(a, b, 2, strut))(n, m)
        for n, m in SUPERTUBE_INDICES},
+    # Supertubes closed into rings (finite, genus 1). The (4,0) is the
+    # smallest: 112 vertices at R/r = 3.
+    **{f"supertorus-({n},{m})":
+       (lambda a, b: lambda strut: supertorus_graph(a, b, 3.0, strut))(n, m)
+       for n, m in SUPERTORUS_INDICES},
     "superfullerene-C60": _superfullerene("C60"),
     # Two fullerene entries that were written and then taken out again,
     # because the catalogue must not offer the same cage twice or a

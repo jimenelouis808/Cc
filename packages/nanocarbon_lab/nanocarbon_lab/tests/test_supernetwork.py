@@ -20,6 +20,7 @@ from nanocarbon_lab.builders.supernetwork import (
     CAGES,
     PLATONIC_VERTICES,
     SUPERLATTICES,
+    SUPERTORUS_INDICES,
     SUPERTUBE_INDICES,
     SuperGraph,
     archimedean_cage,
@@ -28,6 +29,7 @@ from nanocarbon_lab.builders.supernetwork import (
     icosahedral_cage,
     named_graph,
     supergraph_from_atoms,
+    supertorus_graph,
     supertube_graph,
 )
 
@@ -242,6 +244,8 @@ class TestTheCagesAreReachable:
             "super-rhombicuboctahedron", "super-icosidodecahedron",
             # Rolled super-graphene, armchair and zigzag.
             *(f"supertube-({n},{m})" for n, m in SUPERTUBE_INDICES),
+            # And closed into rings.
+            *(f"supertorus-({n},{m})" for n, m in SUPERTORUS_INDICES),
         }
 
     def test_no_cage_is_in_the_catalogue_twice(self):
@@ -665,3 +669,24 @@ class TestTheSupertubeFamily:
         assert chiral.coordination == 3
         assert len(chiral.nodes) == 168
         assert (6, 3) not in SUPERTUBE_INDICES
+
+
+class TestSupertorus:
+    """A supertube closed into a ring: finite, genus 1, budget -6V."""
+
+    def test_it_is_a_trivalent_ring_of_genus_one(self):
+        graph = supertorus_graph(4, 0, 3.0, 20.0)
+        assert graph.coordination == 3
+        assert not graph.periodic
+        assert len(graph.nodes) == 112
+        assert graph.ring_budget == -6 * len(graph.nodes)
+
+    def test_every_strut_is_one_length(self):
+        """Carried straight from the cylinder the outer struts are twice
+        the inner ones; slid over the torus they are equal."""
+        lengths = supertorus_graph(4, 0, 3.0, 20.0).strut_lengths(20.0)
+        assert lengths.max() / lengths.min() == pytest.approx(1.0, abs=1e-3)
+
+    def test_a_ring_too_tight_is_refused(self):
+        with pytest.raises(ValueError, match="aspect"):
+            supertorus_graph(4, 0, 1.5, 20.0)
