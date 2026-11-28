@@ -274,3 +274,55 @@ surco idealizado, el súper-fcc pierde por un factor 7 porque doce tubos
 en un nodo no dejan canal, y una rendija de 6.6 Å sigue ganando la
 pendiente por gramo con un pozo más somero — sitios peores, y muchos
 más de ellos por gramo.
+
+
+## Las estructuras nuevas, con LAMMPS
+
+Las que `nanocarbon_lab` añadió después: el D hexagonal (lonsdaleíta) y
+la red bcc (I-WP) de la ruta de codos, y los pares interpenetrados.
+Porosidad primero, después GCMC con `fix gcmc` de LAMMPS a 77 K, las
+mismas presiones y jugadas que las schwarzitas y las rendijas, y el vacío
+de helio para el exceso (`nuevas_lammps.py`, `nuevas_lammps.json`).
+LAMMPS es intercambiable con el GCMC propio: coincidió dentro del 3.3 %
+en el haz de Levesque y del 0.7 % en las tres schwarzitas.
+
+| estructura | área (m²/g) | canal (Å) | vacío He | 1 MPa abs / exc | 3.8 MPa abs / exc | 10 MPa abs / exc | exc 3.8 / Chahine |
+|---|---|---|---|---|---|---|---|
+| D hexagonal (lonsdaleíta, codos) | 1708 | 8.2 | 0.722 | 3.20 / 2.99 | 3.64 / 2.78 | 3.85 / 1.50 | 0.81 |
+| I-WP, red bcc (codos) | 2172 | 20.0 | 0.858 | 3.83 / 3.34 | 5.41 / 3.39 | 6.62 / 1.13 | 0.78 |
+| doble diamante (codos) | 1328 | 9.7 | 0.633 | 2.74 / 2.54 | 3.20 / 2.40 | 3.39 / 1.21 | 0.90 |
+| doble giroide (geodésico) | 2260 | 9.0 | 0.777 | 3.92 / 3.64 | 4.71 / 3.58 | 5.06 / 1.98 | 0.79 |
+| doble giroide (codos) | 2719 | 24.7 | 0.927 | 5.01 / 4.11 | 7.74 / 4.10 | 10.11 / 0.16 | 0.75 |
+| doble primitiva (geodésica) | 592 | **2.4** | 0.389 | no admite H₂ | | | |
+
+wt% sobre masa total; el exceso desde la masa en exceso. La lonsdaleíta
+se corrió en una celda doble (2880 átomos): su arista de 21.2 Å no
+llega a los 24 que pide el corte.
+
+**Lo que sale:**
+
+- **La porosidad descartó una en segundos.** La doble primitiva tiene
+  sus dos redes a 3.7 Å y el hueco entre ellas es una rendija cerrada:
+  el canal más ancho mide 2.4 Å, menos que la molécula. No hay nada que
+  simular.
+- **La lonsdaleíta es el Schwarz D.** 3.64 / 2.78 wt% a 3.8 MPa contra
+  3.68 / 2.82 del D, con la misma área (1708 contra 1717). El apilamiento
+  hexagonal no cambia ni el área ni lo que adsorbe.
+- **El doble giroide geodésico no se comporta como una rendija de su
+  ancho.** Su canal de 9.0 Å cae en la banda buena de la serie de
+  rendijas, y la apuesta era que dos redes partiendo cada poro darían
+  rendijas curvas. Da 3.58 wt% de exceso a 3.8 MPa contra los ~5 de la
+  rendija de ese canal: su eficiencia por área (0.79) es la de las demás
+  estructuras de tubos, no la de la rendija (0.85-0.95).
+- **Ninguna supera al giroide simple** (4.57 de exceso a 3.8 MPa) **ni a
+  la mejor rendija** (5.22). El doble giroide de codos se le acerca
+  (4.11 a 1 y 3.8 MPa) con mucho más poro, y a 10 MPa su exceso cae a
+  0.16: casi todo lo que guarda ahí es gas comprimido.
+- **La regla de Chahine se cumple dentro del 25 % en las cinco** (0.75 a
+  0.90), igual que en las seis anteriores. La topología mueve el área; lo
+  que adsorbe cada m² apenas cambia.
+
+Confirma lo que dijo la serie de rendijas, ahora con seis topologías más:
+para fisisorción de H₂ a 77 K con este modelo, la geometría del poro y
+el área mandan, y la curvatura o la interpenetración no compran nada por
+sí mismas. Lo que este modelo no tiene es química en la pared.

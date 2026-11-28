@@ -109,6 +109,105 @@
    "count": 1531.8606965174129,
    "error": 6.227251043241756,
    "warnings": []
+  },
+  {
+   "name": "doble-diamante",
+   "pressure_mpa": 1.0,
+   "atoms": 7488,
+   "rho_o": 0.028549594070210082,
+   "weight_percent": 2.736007070519112,
+   "excess_weight_percent": 2.5430103269196356,
+   "count": 1255.004975124378,
+   "error": 2.764424794499647,
+   "warnings": []
+  },
+  {
+   "name": "doble-diamante",
+   "pressure_mpa": 3.8,
+   "atoms": 7488,
+   "rho_o": 0.03354885144870384,
+   "weight_percent": 3.1997733290963786,
+   "excess_weight_percent": 2.4002886739246825,
+   "count": 1474.766169154229,
+   "error": 3.4946133151211747,
+   "warnings": []
+  },
+  {
+   "name": "doble-diamante",
+   "pressure_mpa": 10.0,
+   "atoms": 7488,
+   "rho_o": 0.035600412131941095,
+   "weight_percent": 3.388813169650565,
+   "excess_weight_percent": 1.2122099195106677,
+   "count": 1564.9502487562188,
+   "error": 1.4086646553069775,
+   "warnings": []
+  },
+  {
+   "name": "doble-giroide-geodesico",
+   "pressure_mpa": 1.0,
+   "atoms": 5696,
+   "rho_o": 0.0349529585258497,
+   "weight_percent": 3.915140560137516,
+   "excess_weight_percent": 3.6412929866410026,
+   "count": 1382.8557213930349,
+   "error": 2.9915998135520194,
+   "warnings": []
+  },
+  {
+   "name": "doble-giroide-geodesico",
+   "pressure_mpa": 3.8,
+   "atoms": 5696,
+   "rho_o": 0.04242771624739726,
+   "weight_percent": 4.71294134395302,
+   "excess_weight_percent": 3.583539715920261,
+   "count": 1678.5820895522388,
+   "error": 2.8496198576886353,
+   "warnings": []
+  },
+  {
+   "name": "doble-giroide-geodesico",
+   "pressure_mpa": 10.0,
+   "atoms": 5696,
+   "rho_o": 0.04573534149511964,
+   "weight_percent": 5.061760119396204,
+   "excess_weight_percent": 1.9786537803965012,
+   "count": 1809.4427860696517,
+   "error": 3.794773086467463,
+   "warnings": []
+  },
+  {
+   "name": "doble-giroide-codos",
+   "pressure_mpa": 1.0,
+   "atoms": 11168,
+   "rho_o": 0.016138373934109707,
+   "weight_percent": 5.010352233056623,
+   "excess_weight_percent": 4.109008448443877,
+   "count": 3509.7960199004974,
+   "error": 2.9902661531487147,
+   "warnings": []
+  },
+  {
+   "name": "doble-giroide-codos",
+   "pressure_mpa": 3.8,
+   "atoms": 11168,
+   "rho_o": 0.02567292330533866,
+   "weight_percent": 7.741315837677653,
+   "excess_weight_percent": 4.102576833065659,
+   "count": 5583.3830845771145,
+   "error": 6.9360611621037656,
+   "warnings": []
+  },
+  {
+   "name": "doble-giroide-codos",
+   "pressure_mpa": 10.0,
+   "atoms": 11168,
+   "rho_o": 0.03439598905565065,
+   "weight_percent": 10.105820538552189,
+   "excess_weight_percent": 0.15756811554873085,
+   "count": 7480.487562189055,
+   "error": 11.888415930363998,
+   "warnings": []
   }
  ]
 }
