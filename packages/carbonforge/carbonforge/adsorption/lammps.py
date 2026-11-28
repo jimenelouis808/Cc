@@ -64,9 +64,13 @@ TABLE_POINTS = 100_000
 
 #: Exchange (insert or delete) and displacement attempts per step. The
 #: in-house run picks insert, delete and displace with a third each, so
-#: two exchanges and one displacement per step is the same mix.
-EXCHANGES_PER_STEP = 2
-DISPLACEMENTS_PER_STEP = 1
+#: two exchanges per displacement is the same mix. Many per step,
+#: because LAMMPS rebuilds the neighbour list after every step that
+#: changed the atom count: at 2 + 1 per step that rebuild over the
+#: whole framework is the run (measured on Levesque's 8704-atom bundle,
+#: 66 000 trials in half an hour).
+EXCHANGES_PER_STEP = 200
+DISPLACEMENTS_PER_STEP = 100
 
 
 def _table_section(name: str, pair, temperature: float, cutoff: float,
