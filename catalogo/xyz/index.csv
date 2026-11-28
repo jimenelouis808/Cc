@@ -27,6 +27,7 @@ super-cube_m1n0_f6_r1_w4.xyz,5616,clean,1.0,1.390,1.457,5:48 6:2656 7:96,"Cubic 
 super-cube_m2n0_f2_r1_w1.xyz,3136,clean,1.0,1.391,1.444,5:48 6:1416 7:96,"Cubic cage (geodesic, clean)"
 super-cubic_m1n0_f6_r1_w4.xyz,684,clean,1.0,1.394,1.437,6:314 7:24,"Super-cubic (geodesic, compact)"
 super-cubic_m2n0_f2_r1_w1.xyz,464,clean,1.0,1.401,1.442,6:204 7:24,"Super-cubic (geodesic, clean)"
+super-cubic_m2n0_f2_r2_w1_double.xyz,1216,clean,1.0,1.366,1.469,6:552 7:48,"Double primitive (geodesic, interpenetrated)"
 super-cuboctahedron_m1n0_f4_r2_w1.xyz,4128,clean,1.0,1.345,1.504,5:96 6:1704 7:240,"Cuboctahedral cage (geodesic, clean)"
 super-diamond_m2n0_f3_r1_w1.xyz,5760,clean,1.0,1.341,1.511,5:96 6:2576 7:192,"Super-diamond (geodesic, clean, slow)"
 super-dodecahedron_m1n0_f6_r1_w4.xyz,14040,clean,1.0,1.400,1.465,5:120 6:6640 7:240,"Dodecahedral cage (geodesic, compact)"
