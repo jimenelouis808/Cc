@@ -380,6 +380,8 @@ PRESETS: dict[str, dict[str, object]] = {
     #   supertube-(8,8) freq 6, m=1, 2 rows  47232  1.345-1.487    6.8 h
     # and over ONE period, which is what the presets build now:
     #   supertube-(8,0) freq 4, m=1, 2 rows  10816  1.337-1.503     42 min
+    #   supertube-(4,4) freq 4, m=1, 2 rows   5408  1.353-1.506     24 min
+    #   supertube-(5,5) freq 4, m=1, 2 rows   6760  1.382-1.448     17 min
     #   supertube-(6,0) freq 2, m=1, 1 row    2352  1.372-1.472      4 min
     #     (94 % placed; at freq 2 two rows are strained, 2784 atoms)
     **{label: {"mode_kind": "superstructure (geodesic)", "gd_n": 0, "gd_wr": 1,

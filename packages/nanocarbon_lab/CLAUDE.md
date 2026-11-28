@@ -2607,6 +2607,10 @@ carry over, so each was rebuilt):
 | **(6,0)** | **2, 1** | **2352** | 1.372-1.472 | **clean**, 94 % (4 min; 35424 atoms at freq 6, two periods) |
 | (6,0) | 2, 2 | 2784 | 1.321-1.523 | strained |
 | (4,4) | 3, 2 | 3360 | 1.311-1.514 | strained |
+| (4,4) | 4, 2 | 5408 | 1.353-1.506 | clean, 100 % |
+| (5,5) | 4, 2 | 6760 | 1.382-1.448 | clean, 100 % |
+| (8,8) | 2, 1 | 3136 | 1.304-1.540 | strained |
+| (8,8) | 2, 2 | 3712 | 1.327-1.514 | strained |
 
 A lower frequency is cheaper only where the arms still land: (6,0) is
 clean at frequency 2 and one row, and two rows there are *worse*, the
