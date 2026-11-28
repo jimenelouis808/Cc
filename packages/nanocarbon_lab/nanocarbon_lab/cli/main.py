@@ -1174,7 +1174,7 @@ def _cmd_schwarzite_knees(args):
     atoms = build_knee_schwarzite(
         kind=args.kind,
         circumference=args.circumference, arm_rows=args.arm_rows,
-        bond=args.bond, relax=not args.no_relax,
+        bond=args.bond, relax=not args.no_relax, double=args.double,
     )
     atoms = _maybe_dope(atoms, args)
     _report_structure(atoms, *write_render_bundle(atoms, Path(args.out)))
@@ -1218,7 +1218,8 @@ def _cmd_geodesic(args):
         graph=args.graph, m=args.m, n=args.n, freq=freq, rows=args.rows,
         window_radius=args.window_radius,
         tolerance_deg=tolerance, bond=args.bond, vacuum=args.vacuum,
-        relax=not args.no_relax, seed=args.frame_seed, mirror=args.mirror)
+        relax=not args.no_relax, seed=args.frame_seed, mirror=args.mirror,
+        double=args.double)
     atoms = _maybe_dope(atoms, args)
     _report_structure(atoms, *write_render_bundle(atoms, Path(args.out)))
     print(f"  structure   = {describe_geodesic(atoms)}")
@@ -2937,6 +2938,10 @@ def build_parser() -> argparse.ArgumentParser:
     gd.add_argument("--mirror", action="store_true",
                     help="Write the exact enantiomer: the finished atoms "
                          "reflected, (m, n) becoming (n, m).")
+    gd.add_argument("--double", action="store_true",
+                    help="Add the copy in the surface's other labyrinth "
+                         "(super-srs: double gyroid; super-diamond, "
+                         "super-cubic). Refused if the two come within 3 A.")
     gd.add_argument("--rows", type=int, default=1,
                     help="Antiprism rows on the shortest arm.")
     gd.add_argument("--bond", type=float, default=1.42)
@@ -2996,6 +3001,10 @@ def build_parser() -> argparse.ArgumentParser:
                          "sets the cell. Not every pair closes cleanly; the "
                          "refusal names the ones that do.")
     sk.add_argument("--bond", type=float, default=1.42)
+    sk.add_argument("--double", action="store_true",
+                    help="Add the copy in the other labyrinth: double "
+                         "gyroid, double diamond, double primitive. Refused "
+                         "if the two come within 3 A (needs longer arms).")
     sk.add_argument("--no-relax", action="store_true",
                     help="Skip the force field. The census is set by the "
                          "mesh, so this changes the geometry and nothing "

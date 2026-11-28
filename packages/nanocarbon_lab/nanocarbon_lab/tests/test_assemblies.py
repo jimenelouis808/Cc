@@ -210,3 +210,66 @@ class TestSp2Verdict:
              "angle_max": 129.0, "n_close_contacts": 0}
         )
         assert verdict == "strained"
+
+
+# --- interpenetrated networks -------------------------------------------
+
+
+def _handedness(positions, bonds, cell):
+    """Mean triple product of each atom's three bond vectors: a
+    pseudoscalar, so an inversion flips its sign."""
+    from nanocarbon_lab.builders.fullerene_mesh import minimum_image
+
+    neighbours = {}
+    for i, j in bonds:
+        neighbours.setdefault(i, []).append(j)
+        neighbours.setdefault(j, []).append(i)
+    values = []
+    for i, js in neighbours.items():
+        if len(js) == 3:
+            v = [minimum_image(positions[j] - positions[i], cell) for j in js]
+            values.append(float(np.dot(v[0], np.cross(v[1], v[2]))))
+    return float(np.mean(values))
+
+
+class TestInterpenetrate:
+    def test_the_double_diamond_clears_a_graphitic_gap(self):
+        from nanocarbon_lab.builders.knee import build_knee_schwarzite
+
+        atoms = build_knee_schwarzite(kind="diamond", arm_rows=7,
+                                      double=True)
+        assert len(atoms) == 7488
+        assert set(atoms.get_tags()) == {0, 1}
+        assert atoms.info["network_gap"] == pytest.approx(4.39, abs=0.05)
+        assert atoms.info["ring_counts"] == {6: 3520, 7: 192}
+        assert atoms.info["network_ring_counts"] == {6: 1760, 7: 96}
+
+    def test_fused_networks_are_refused(self):
+        from nanocarbon_lab.builders.knee import build_knee_schwarzite
+
+        with pytest.raises(ValueError, match="would fuse"):
+            build_knee_schwarzite(kind="diamond", arm_rows=5, double=True)
+
+    def test_the_gyroid_pair_is_the_other_hand(self):
+        """The second srs network is the inversion of the first, so its
+        handedness is opposite, and the pair is achiral."""
+        from nanocarbon_lab.builders.knee import build_knee_schwarzite
+
+        atoms = build_knee_schwarzite(kind="gyroid", arm_rows=9, double=True)
+        cell = np.asarray(atoms.cell.lengths())
+        positions = atoms.get_positions()
+        half = len(atoms) // 2
+        bonds = atoms.info["bonds"]
+        first = _handedness(positions, [b for b in bonds if b[0] < half], cell)
+        second = _handedness(positions, [b for b in bonds if b[0] >= half],
+                             cell)
+        assert second == pytest.approx(-first, rel=1e-9)
+        assert atoms.info["network_gap"] > 20.0
+
+    def test_a_net_without_a_second_labyrinth_is_refused(self):
+        from nanocarbon_lab.builders.assemblies import interpenetrate
+        from nanocarbon_lab.builders.knee import build_knee_schwarzite
+
+        cell = build_knee_schwarzite(kind="lonsdaleite", relax=False)
+        with pytest.raises(ValueError, match="no interpenetrated pair"):
+            interpenetrate(cell, "lonsdaleite")

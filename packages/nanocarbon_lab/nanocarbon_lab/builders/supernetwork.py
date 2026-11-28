@@ -431,6 +431,13 @@ def supertube_graph(n: int = 6, m: int = 6, periods: int = 3,
     # skeleton is periodic in z only, so that is the only image to look
     # for -- and it must be found, or the supertube would come back as a
     # finite barrel with two open ends.
+    #
+    # Every image is kept, not the first one found. In a ONE-period
+    # armchair cell a vertex meets the same neighbour twice -- once
+    # inside the cell and once across the seam, its two inclined struts
+    # -- and stopping at the first image dropped a third of the edges,
+    # leaving every vertex two-coordinate. Two periods hid it, because
+    # then the two struts reach different vertices.
     cutoff = strut * 1.25
     count = len(positions)
     edges = []
@@ -441,7 +448,6 @@ def supertube_graph(n: int = 6, m: int = 6, periods: int = 3,
                     - positions[i]
                 if float(np.linalg.norm(delta)) < cutoff:
                     edges.append((i, j, (0, 0, int(shift))))
-                    break
 
     # SuperGraph multiplies fractional nodes by `shape * scale`, and
     # every other cage here reads `scale` as the STRUT length. Keeping

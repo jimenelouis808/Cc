@@ -827,17 +827,20 @@ def estimate_atoms(job: Job) -> int:
         keep = set(parameter_names(mode))
         arguments = {k: v for k, v in p.items() if k in keep}
         arguments["relax"] = False
-        return len(maker(**arguments))
+        # The interpenetrated copy is counted, not built: its gap is only
+        # meaningful after relaxation.
+        doubled = 2 if arguments.pop("double", False) else 1
+        return doubled * len(maker(**arguments))
 
     if mode == "superstructure (geodesic)":
         from .builders.geodesic import geodesic_atom_count
 
-        return geodesic_atom_count(str(p.get("graph", "super-icosahedron")),
-                                   int(p.get("m", 2)), int(p.get("freq", 2)),
-                                   int(p.get("rows", 1)),
-                                   int(p.get("n", 0)),
-                                   int(p.get("window_radius", 1)),
-                                   p.get("tolerance_deg"))
+        doubled = 2 if p.get("double") else 1
+        return doubled * geodesic_atom_count(
+            str(p.get("graph", "super-icosahedron")),
+            int(p.get("m", 2)), int(p.get("freq", 2)),
+            int(p.get("rows", 1)), int(p.get("n", 0)),
+            int(p.get("window_radius", 1)), p.get("tolerance_deg"))
 
     if mode == "superstructure (frame)":
         from .builders.frame import frame_atom_count
@@ -1271,7 +1274,7 @@ _CLI_MAP: dict[str, tuple[str, dict[str, str]]] = {
     "schwarzite (knees)": ("schwarzite-knees", {
         "kind": "--kind",
         "circumference": "--circumference", "arm_rows": "--arm-rows",
-        "bond": "--bond",
+        "bond": "--bond", "double": "--double",
     }),
     "junction (knees)": ("junction-knees", {
         "kind": "--kind", "circumference": "--circumference",
@@ -1287,7 +1290,8 @@ _CLI_MAP: dict[str, tuple[str, dict[str, str]]] = {
         "graph": "--graph", "m": "--m", "n": "--n", "freq": "--freq",
         "rows": "--rows", "window_radius": "--window-radius",
         "tolerance_deg": "--tolerance", "seed": "--frame-seed",
-        "mirror": "--mirror", "bond": "--bond", "vacuum": "--vacuum",
+        "mirror": "--mirror", "double": "--double", "bond": "--bond",
+        "vacuum": "--vacuum",
     }),
     "superstructure (frame)": ("frame", {
         "kind": "--kind", "m": "--m", "rows": "--rows",

@@ -372,6 +372,22 @@ class TestTheSupertube:
             assert lengths.max() == pytest.approx(strut, rel=0.02)
             assert lengths.min() == pytest.approx(strut, rel=0.02)
 
+    @pytest.mark.parametrize("n,m", [(4, 4), (6, 6), (8, 0)])
+    def test_one_period_is_half_of_two(self, n, m):
+        """One axial period is the tube's own cell. An armchair vertex
+        there meets one neighbour twice, inside the cell and across the
+        seam; keeping only the first image left it two-coordinate."""
+        one, two = supertube_graph(n, m, 1, 20.0), supertube_graph(n, m, 2, 20.0)
+        assert one.coordination == 3
+        assert 2 * len(one.edges) == len(two.edges)
+        assert 2 * one.ring_budget == two.ring_budget
+
+    def test_the_geodesic_route_takes_one_period(self):
+        from nanocarbon_lab.builders.geodesic import _named
+
+        assert len(_named("supertube-(8,0)").nodes) == 32
+        assert len(named_graph("supertube-(8,0)", 1.0).nodes) == 64
+
     def test_a_seam_bond_carries_the_axial_shift(self):
         """The ring closes through the cell, so some edges must be
         recorded with a non-zero z image -- otherwise the supertube is a

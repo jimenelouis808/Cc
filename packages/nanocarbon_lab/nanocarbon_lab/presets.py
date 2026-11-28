@@ -85,8 +85,12 @@ def knee_params(mode: str, values: dict[str, Any]) -> dict[str, Any]:
         shape = default_knee_shape(mode, kind)
         circumference = int(values.get("knee_k", (shape or (20, 9))[0]))
         rows = int(values.get("knee_rows", (shape or (20, 9))[1]))
-        return {field: kind, "circumference": circumference,
-                "arm_rows": rows}
+        params = {field: kind, "circumference": circumference,
+                  "arm_rows": rows}
+        if mode == "schwarzite (knees)" and values.get("knee_double"):
+            # The copy in the surface's other labyrinth.
+            params["double"] = True
+        return params
 
     if mode == "toroid (knees)":
         return {
@@ -217,6 +221,27 @@ PRESETS: dict[str, dict[str, object]] = {
     "I-WP, bcc net (knees, no spheres)": {
         "mode_kind": "schwarzite (knees)", "knee_cell": "bcc",
         "knee_k": 36, "knee_rows": 13, "anneal": 0},
+    # Two networks woven through each other, one in each labyrinth of the
+    # surface, never bonded (assemblies.interpenetrate). Double diamond:
+    # the second net at (1/2, 1/2, 1/2), seven-row arms so two tubes pass
+    # -- 7488 atoms, 4.39 A between the networks (graphite: 3.35), each
+    # network clean, 1.417-1.492 A. Five rows fuse them (0.65 A).
+    "Double diamond (knees, interpenetrated)": {
+        "mode_kind": "schwarzite (knees)", "knee_cell": "diamond",
+        "knee_k": 18, "knee_rows": 7, "knee_double": True, "anneal": 0},
+    # Double gyroid: the second srs net is the inversion of the first, the
+    # other hand, so the pair is achiral. The knee gyroid only clears at
+    # nine-row arms, which leaves a wide 26.8 A between the networks:
+    # 11168 atoms. The geodesic double gyroid below is the compact one.
+    "Double gyroid (knees, interpenetrated)": {
+        "mode_kind": "schwarzite (knees)", "knee_cell": "gyroid",
+        "knee_k": 20, "knee_rows": 9, "knee_double": True, "anneal": 0},
+    # The compact super-srs (m=1, freq 4, window 3) and its inversion:
+    # 5696 atoms, 5.05 A between the networks, each clean 1.370-1.466 A.
+    "Double gyroid (geodesic, interpenetrated)": {
+        "mode_kind": "superstructure (geodesic)", "gd_n": 0, "gd_wr": 3,
+        "gd_graph": "super-srs", "gd_m": 1, "gd_freq": 4, "gd_rows": 1,
+        "gd_double": True, "anneal": 0},
     # The same Y node repeated on a honeycomb instead of standing
     # alone: 920 atoms, {6: 432, 7: 24}, sum(6-n) = -24 = 12(V-E), and
     # bonds 1.408-1.436 A -- the tightest of anything this route builds.

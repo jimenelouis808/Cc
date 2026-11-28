@@ -2552,6 +2552,50 @@ this route at all: on a rolled sheet the three arms of a node do not sum
 to zero (0.20-0.45) and the struts differ in length, and a knee node needs
 both.
 
+#### Interpenetrated pairs: one network in each labyrinth
+
+A triply periodic minimal surface splits space into two labyrinths, each
+the net its cell is built on, so a tube network in each gives two carbon
+frameworks woven through each other and never bonded.
+`assemblies.interpenetrate` adds the second as the image of the first
+under the operation that exchanges the labyrinths (`LABYRINTH_PAIRS`):
+**inversion** for srs (the two gyroid labyrinths are srs nets of opposite
+hand, so the pair is achiral; a test pins the handedness pseudoscalar
+flipping sign), the **(1/2, 1/2, 1/2) translation** for diamond (the
+cuprite arrangement) and for the primitive cubic net. An isometry, so the
+copy's geometry is the original's exactly. There is no dispersion term to
+relax the two against each other, so the pair is not relaxed. What is
+measured is the **gap** between the two networks' atoms, refused under 3 Å
+(`double=True` on the knee schwarzite and the geodesic builder; `tags`
+0/1 name the network).
+
+| pair | route, shape | atoms | gap (Å) | each network |
+|---|---|---|---|---|
+| double diamond | knee (18, 7) | 7488 | **4.39** | clean, 1.417-1.492 |
+| double gyroid | geodesic super-srs, m1 f4 w3 | 5696 | **5.05** | clean, 1.370-1.466 |
+| double gyroid | knee (20, 9) | 11168 | 26.8 | clean, 1.412-1.509 |
+
+**The default shapes fuse.** The skeletons are only `sqrt(6)/3 = 0.82`
+struts apart for diamond and `sqrt(6)/2 = 1.22` for srs, and a node is
+fatter than its tube, so the knee D at five rows comes 0.65 Å from its
+partner and the knee gyroid 2.20 Å. Longer arms move the skeletons apart
+at the same tube (`DOUBLE_SCHWARZITE_SHAPE`); the knee gyroid is strained
+at 6 and 7 rows, clean from 8. The geodesic super-diamond's nodes are too
+fat at any arm (0.27 Å), so its double is refused.
+
+#### Supertubes: one axial period, and the edge it was dropping
+
+The shared catalogue (`supernetwork.CAGES`) holds each supertube over
+**two** axial periods; the geodesic route now takes **one**
+(`GEODESIC_NETS`), the tube's own translational cell, at half the atoms.
+The meshed route keeps two, having only been measured that way. One
+period exposed a bug in `supertube_graph`: an armchair vertex meets the
+same neighbour twice, inside the cell and across the seam, and the edge
+search stopped at the first image, so every vertex came out
+two-coordinate. Two periods hid it, because the two struts then reach
+different vertices. Every image is kept now, and a test pins one period
+as exactly half of two.
+
 ### The superstructure is the same law on a graph, and it agrees with the meshed route
 
 `build_knee_supernetwork` hangs the **node** on every vertex of a net

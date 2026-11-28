@@ -453,6 +453,7 @@ def build_geodesic_superstructure(
     window: int | None = None,
     window_radius: int = 1,
     mirror: bool = False,
+    double: bool = False,
 ) -> Atoms:
     """A cage or periodic net of tubes on geodesic nodes, as graphene.
 
@@ -504,6 +505,11 @@ def build_geodesic_superstructure(
         Return the exact enantiomer (:func:`enantiomer`): the finished
         atoms reflected, not the mirror graph rebuilt, so every length
         and angle is the same and only the handedness labels change.
+    double
+        Add the network's copy in the other labyrinth of its surface
+        (:func:`~nanocarbon_lab.builders.assemblies.interpenetrate`):
+        super-srs gives the double gyroid, super-diamond and super-cubic
+        their doubles. Refused when the two would come within 3 Å.
     """
     from .hull import equilateralise
 
@@ -553,7 +559,16 @@ def build_geodesic_superstructure(
                           for d in sorted(set(degree))},
         **report,
     })
-    return enantiomer(atoms) if mirror else atoms
+    atoms = enantiomer(atoms) if mirror else atoms
+    if double:
+        # The surface's other labyrinth: super-srs (gyroid) and
+        # super-diamond / super-cubic. Measured: the compact super-srs
+        # (m=1, freq 4, window 3) leaves 5.05 Å between its two networks,
+        # clean; super-diamond's nodes are too fat (0.27 Å, refused).
+        from .assemblies import interpenetrate
+
+        atoms = interpenetrate(atoms, graph.name)
+    return atoms
 
 
 def _choose_frames(graph, points, cell, freq: int, tolerance_deg: float,
@@ -896,7 +911,17 @@ def _geodesic_nets() -> dict:
         [1 / 3, 1 / 3, 0.0], [2 / 3, 2 / 3, 0.5],
         [1 / 3, 1 / 3, 3 / 8], [2 / 3, 2 / 3, 7 / 8]]), c)
     srs = _srs_sites()
+    # One axial period of each supertube, where the shared catalogue holds
+    # two (supernetwork.CAGES, which the meshed route also reads and was
+    # measured with two). One period is the tube's own translational cell,
+    # so it is periodic and exact at half the atoms; the geodesic builds
+    # carry it.
+    from .supernetwork import SUPERTUBE_INDICES, supertube_graph
+
+    supertubes = {f"supertube-({n},{m})": supertube_graph(n, m, 1, 1.0)
+                  for n, m in SUPERTUBE_INDICES}
     return {
+        **supertubes,
         # The gyroid's skeleton: three arms at 120 deg, in planes normal
         # to the four <111>. srs is chiral; the mirror is its own entry so
         # that net and wall handedness can be chosen independently.

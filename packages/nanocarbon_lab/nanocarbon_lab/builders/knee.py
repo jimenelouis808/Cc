@@ -2538,6 +2538,16 @@ SCHWARZITE_CELLS: dict[str, tuple[int, int, int]] = {
     "bcc": (8, 2, 7),
 }
 
+#: ``(circumference, arm_rows)`` for an interpenetrated pair
+#: (``double=True``): the default shape's tube, with arms long enough that
+#: the two networks clear a graphitic gap. Measured: diamond at 5 rows
+#: fuses (0.65 Å) and at 7 clears 4.39 Å; the gyroid at 5 fuses (2.20 Å),
+#: is strained at 7 (15.1 Å) and clean at 9 (26.8 Å).
+DOUBLE_SCHWARZITE_SHAPE: dict[str, tuple[int, int]] = {
+    "diamond": (18, 7),
+    "gyroid": (20, 9),
+}
+
 #: Cells whose wall is allowed pentagons, each one checked to sit in
 #: positive curvature after the build. The bcc node's eight arms leave a
 #: convex pillow at each of its six <100> poles, as the planar X junction
@@ -2633,6 +2643,7 @@ def build_knee_schwarzite(
     relax: bool = True,
     relax_iterations: int = 3000,
     kind: str = "primitive",
+    double: bool = False,
 ) -> Atoms:
     """A Schwarz P schwarzite with the census a minimal surface must have.
 
@@ -2668,6 +2679,13 @@ def build_knee_schwarzite(
         Whether to relax with the valence force field, under the minimum
         image convention. The bond graph is explicit, so the census is
         fixed before this runs.
+    double
+        Add a second network in the surface's other labyrinth
+        (:func:`~nanocarbon_lab.builders.assemblies.interpenetrate`):
+        the double gyroid, double diamond or double primitive. Measured
+        clean pairs: diamond at (18, 7), 4.39 Å between the networks, and
+        the gyroid at (20, 8), 21.1 Å; the default gyroid (20, 5) fuses
+        at 2.2 Å and is refused.
 
     Returns
     -------
@@ -2793,6 +2811,10 @@ def build_knee_schwarzite(
         # it does not need the haeckelite family's looser band.
         "geometry": geometry_report(positions, sorted(bonds), box=cell),
     })
+    if double:
+        from .assemblies import interpenetrate
+
+        return interpenetrate(atoms, kind)
     return atoms
 
 

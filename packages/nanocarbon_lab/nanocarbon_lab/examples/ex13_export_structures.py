@@ -40,12 +40,13 @@ def _key(spec: dict) -> str:
     """File stem naming one build by its parameters."""
     if spec["builder"] == "goldberg":
         return f"goldberg-{spec['kind']}_m{spec['m']}n{spec['n']}"
+    double = "_double" if spec.get("double") else ""
     if spec["builder"].startswith("knee_"):
         kind = spec.get("kind", spec.get("net"))
         return (f"{spec['builder'].replace('_', '-')}-{kind}"
-                f"_k{spec['circumference']}_r{spec['arm_rows']}")
+                f"_k{spec['circumference']}_r{spec['arm_rows']}{double}")
     return (f"{spec['graph']}_m{spec['m']}n{spec['n']}_f{spec['freq']}"
-            f"_r{spec['rows']}_w{spec['window_radius']}")
+            f"_r{spec['rows']}_w{spec['window_radius']}{double}")
 
 
 def preset_specs() -> dict[str, dict]:
@@ -62,6 +63,8 @@ def preset_specs() -> dict[str, dict]:
                     "window_radius": int(p.get("gd_wr", 1)),
                     "tolerance_deg": float(GEODESIC_CAGES.get(
                         p["gd_graph"], {}).get("tolerance_deg", 2.5))}
+            if p.get("gd_double"):
+                spec["double"] = True
         elif p.get("mode_kind") == GOLDBERG:
             m = int(p["gb_m"])
             spec = {"builder": "goldberg", "kind": p["gb_kind"], "m": m,
@@ -83,7 +86,7 @@ def estimate(spec: dict) -> int:
     from nanocarbon_lab.builders.geodesic import geodesic_atom_count
 
     try:
-        return geodesic_atom_count(
+        return (2 if spec.get("double") else 1) * geodesic_atom_count(
             spec["graph"], freq=spec["freq"], m=spec["m"], n=spec["n"],
             rows=spec["rows"], window_radius=spec["window_radius"],
             tolerance_deg=spec["tolerance_deg"])
@@ -91,11 +94,14 @@ def estimate(spec: dict) -> int:
         return 0
 
 
-def _write(path: Path, positions, cell, pbc, info: dict) -> None:
+def _write(path: Path, positions, cell, pbc, info: dict, tags=None) -> None:
     from ase import Atoms
     from ase.io import write
 
     atoms = Atoms("C" * len(positions), positions=positions, pbc=pbc)
+    if tags is not None and np.any(tags):
+        # Which network each atom is in, for an interpenetrated pair.
+        atoms.set_tags(tags)
     cell = np.asarray(cell, dtype=float)
     atoms.set_cell(np.diag(cell) if cell.ndim == 1 else cell)
     atoms.info.update({k: v for k, v in info.items()})
@@ -120,7 +126,8 @@ def build_one(stem: str, spec: dict, out: Path) -> dict:
             atoms = build_geodesic_superstructure(
                 spec["graph"], m=spec["m"], n=spec["n"], freq=spec["freq"],
                 rows=spec["rows"], window_radius=spec["window_radius"],
-                tolerance_deg=spec["tolerance_deg"])
+                tolerance_deg=spec["tolerance_deg"],
+                double=bool(spec.get("double", False)))
         elif spec["builder"] == "goldberg":
             from nanocarbon_lab.builders.goldberg import build_goldberg
             atoms = build_goldberg(kind=spec["kind"], m=spec["m"], n=spec["n"])
@@ -141,7 +148,10 @@ def build_one(stem: str, spec: dict, out: Path) -> dict:
                 bond_min=float(geometry["bond_min"]),
                 bond_max=float(geometry["bond_max"]),
                 seconds=round(time.time() - started))
-    _write(path, atoms.get_positions(), atoms.cell[:], atoms.pbc, info)
+    if "network_gap" in atoms.info:
+        info["network_gap"] = float(atoms.info["network_gap"])
+    _write(path, atoms.get_positions(), atoms.cell[:], atoms.pbc, info,
+           atoms.get_tags())
     return {"file": path.name, "status": "built", "atoms": len(atoms), **info}
 
 

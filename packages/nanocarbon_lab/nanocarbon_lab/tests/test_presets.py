@@ -51,6 +51,10 @@ KNEE_CENSUS = {
         1440, {6: 608, 7: 96}, -96),
     "I-WP, bcc net (knees, no spheres)": (
         3624, {5: 48, 6: 1632, 7: 120}, -72),
+    "Double diamond (knees, interpenetrated)": (
+        7488, {6: 3520, 7: 192}, -192),
+    "Double gyroid (knees, interpenetrated)": (
+        11168, {6: 5472, 7: 96}, -96),
     "Super-graphene (knees, tubes on a honeycomb)": (920, {6: 432, 7: 24}, -24),
     "Super-square (knees, tubes on a square net)": (180, {5: 4, 6: 68, 7: 16},
                                                     -12),
@@ -129,6 +133,10 @@ class TestTheShapeIsTheKindsOwn:
         shape = (params["circumference"], params["arm_rows"])
         tables = (default_knee_shape(mode, kind),
                   adsorption_knee_shape(mode, kind))
+        if params.get("double"):
+            from nanocarbon_lab.builders.knee import DOUBLE_SCHWARZITE_SHAPE
+
+            tables = (DOUBLE_SCHWARZITE_SHAPE[kind],)
         assert shape in tables, (name, shape, tables)
 
     @pytest.mark.parametrize("name", [

@@ -1,4 +1,4 @@
-"""Assemblies of tubes: multi-wall nanotubes and hexagonally packed bundles.
+"""Assemblies: multi-wall nanotubes, bundles and interpenetrated networks.
 
 Neither is a new *topology* -- each shell or tube is an ordinary capped
 nanotube from :func:`nanocarbon_lab.builders.capped_cnt.build_capped_cnt`.
@@ -294,3 +294,107 @@ __all__ = [
     "build_multiwall_cnt",
     "stack_rings",
 ]
+
+
+#: How a periodic tube network's second labyrinth is reached, by net.
+#: A triply periodic minimal surface splits space into two labyrinths,
+#: each the net its cell is built on, so a tube network in each gives two
+#: carbon frameworks woven through each other and never bonded.
+#:
+#: * srs (the gyroid): the two labyrinths are srs nets of **opposite**
+#:   handedness, exchanged by the inversion through the origin of Ia-3d,
+#:   so the pair is achiral though each half is chiral. Skeletons
+#:   ``sqrt(6)/2 = 1.2247`` struts apart.
+#: * diamond (Schwarz D): two diamond nets exchanged by ``(1/2, 1/2,
+#:   1/2)``, the cuprite arrangement. Skeletons only ``sqrt(6)/3 =
+#:   0.8165`` struts apart, so a pair needs long arms.
+#: * primitive cubic (Schwarz P): two simple cubic nets exchanged by the
+#:   body-centring translation.
+LABYRINTH_PAIRS: dict[str, str] = {
+    "gyroid": "inversion",
+    "super-srs": "inversion",
+    "super-srs-mirror": "inversion",
+    "diamond": "translation",
+    "super-diamond": "translation",
+    "primitive": "translation",
+    "super-cubic": "translation",
+}
+
+#: The closest two interpenetrated networks' atoms may come, in Å.
+#: Graphite's layers are 3.35 apart; there is no dispersion term here, so
+#: a pair closer than this is two walls fused, not two frameworks.
+INTERPENETRATION_MIN_GAP = 3.0
+
+
+def interpenetrate(atoms: Atoms, net: str,
+                   min_gap: float = INTERPENETRATION_MIN_GAP) -> Atoms:
+    """A finished periodic network plus its copy in the other labyrinth.
+
+    The copy is the image of `atoms` under the operation that exchanges
+    the two labyrinths of `net`'s surface (:data:`LABYRINTH_PAIRS`). It is
+    an isometry, so the copy's bonds, angles and rings are the original's
+    exactly; the two are not bonded and not relaxed against each other,
+    since a valence force field has nothing to relax them with. What this
+    adds is the **gap**, the shortest distance between atoms of the two,
+    recorded in ``info["network_gap"]``. Atoms carry ``tags`` 0 and 1 for
+    their network.
+
+    The operations act about the cell origin, which is where every
+    builder here puts the net's sites; a structure shifted after the
+    build would need shifting back first.
+
+    Raises
+    ------
+    ValueError
+        If `net` has no second labyrinth here, the structure is not
+        periodic in all three directions, or the copies come closer than
+        `min_gap` (longer arms at the same tube move them apart).
+    """
+    from scipy.spatial import cKDTree
+
+    if net not in LABYRINTH_PAIRS:
+        raise ValueError(f"no interpenetrated pair for {net!r}; the nets "
+                         f"with one are {sorted(LABYRINTH_PAIRS)}.")
+    if not all(atoms.pbc):
+        raise ValueError("an interpenetrated pair needs a cell periodic in "
+                         "all three directions.")
+    cell = np.asarray(atoms.cell.lengths(), dtype=float)
+    first = np.mod(atoms.get_positions(), cell)
+    if LABYRINTH_PAIRS[net] == "inversion":
+        second = np.mod(-first, cell)
+    else:
+        second = np.mod(first + cell / 2.0, cell)
+    top = np.nextafter(cell, 0.0)
+    tree = cKDTree(np.clip(second, 0.0, top), boxsize=cell)
+    gap = float(tree.query(np.clip(first, 0.0, top))[0].min())
+    if gap < min_gap:
+        raise ValueError(
+            f"the two {net} networks come {gap:.2f} Å apart, closer than "
+            f"{min_gap} Å: the walls would fuse. Longer arms move the "
+            "skeletons apart at the same tube.")
+
+    count = len(first)
+    pair = Atoms(symbols=list(atoms.get_chemical_symbols()) * 2,
+                 positions=np.vstack([first, second]),
+                 cell=list(cell), pbc=(True, True, True))
+    pair.set_tags([0] * count + [1] * count)
+    info = dict(atoms.info)
+    # Index lists name atoms, so the copy's are shifted; counts double;
+    # the geometry is the original's, the operation being an isometry.
+    for key in ("rings",):
+        if key in info:
+            info[key] = ([list(r) for r in info[key]]
+                         + [[x + count for x in r] for r in info[key]])
+    if "bonds" in info:
+        info["bonds"] = (list(info["bonds"])
+                         + [(i + count, j + count) for i, j in info["bonds"]])
+    if "ring_counts" in info:
+        info["network_ring_counts"] = dict(info["ring_counts"])
+        info["ring_counts"] = {k: 2 * v for k, v in info["ring_counts"].items()}
+    for key in ("ring_deficit", "ring_budget"):
+        if key in info:
+            info[key] = 2 * int(info[key])
+    info.update({"networks": 2, "network_gap": round(gap, 3),
+                 "interpenetration": LABYRINTH_PAIRS[net]})
+    pair.info.update(info)
+    return pair

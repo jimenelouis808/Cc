@@ -752,6 +752,8 @@ class NanocarbonGUI:
             "knee_k", tk.DoubleVar(value=KNEE_DEFAULTS["knee_k"]))
         self.var_knee_rows = self._var(
             "knee_rows", tk.DoubleVar(value=KNEE_DEFAULTS["knee_rows"]))
+        self.var_knee_double = self._var("knee_double",
+                                         tk.BooleanVar(value=False))
         # The toroid and the coils size themselves from their own
         # arguments rather than from a node's table, so they get their
         # own boxes. Zero means "let the builder choose": it asks
@@ -818,6 +820,8 @@ class NanocarbonGUI:
         self.var_gd_tol = self._var("gd_tol", tk.DoubleVar(value=0.5))
         self.var_gd_seed = self._var("gd_seed", tk.IntVar(value=0))
         self.var_gd_mirror = self._var("gd_mirror",
+                                       tk.BooleanVar(value=False))
+        self.var_gd_double = self._var("gd_double",
                                        tk.BooleanVar(value=False))
         self.var_nc_pent = self._var("nc_pent", tk.IntVar(value=1))
         self.var_nc_radius = self._var("nc_radius",
@@ -1224,7 +1228,11 @@ class NanocarbonGUI:
                         text="Enantiomer (reflect the finished atoms)",
                         variable=self.var_gd_mirror).grid(
             row=15, column=0, columnspan=2, sticky="w")
-        self.lbl_gd.grid(row=16, column=0, columnspan=2, sticky="w")
+        ttk.Checkbutton(self.frame_gd,
+                        text="Interpenetrated pair (both labyrinths)",
+                        variable=self.var_gd_double).grid(
+            row=16, column=0, columnspan=2, sticky="w")
+        self.lbl_gd.grid(row=17, column=0, columnspan=2, sticky="w")
         self.var_gd_graph.trace_add("write", lambda *_: self._gd_cage_changed())
 
         # --- frame route: octahedral nodes and prism arms
@@ -1281,7 +1289,11 @@ class NanocarbonGUI:
         self.lbl_knee = ttk.Label(
             self.frame_knee, text="", foreground=MUTED,
             font=("TkDefaultFont", 8), wraplength=230, justify="left")
-        self.lbl_knee.grid(row=7, column=0, columnspan=2, sticky="w")
+        ttk.Checkbutton(self.frame_knee,
+                        text="Interpenetrated pair (schwarzite cells)",
+                        variable=self.var_knee_double).grid(
+            row=7, column=0, columnspan=2, sticky="w")
+        self.lbl_knee.grid(row=8, column=0, columnspan=2, sticky="w")
         for var in (self.var_knee_cell, self.var_knee_node,
                     self.var_knee_net):
             var.trace_add("write", lambda *_: self._knee_kind_changed())
@@ -4162,7 +4174,8 @@ class NanocarbonGUI:
                           n=int(self.var_gd_n.get()),
                           tolerance_deg=float(self.var_gd_tol.get()),
                           seed=int(self.var_gd_seed.get()),
-                          mirror=bool(self.var_gd_mirror.get()))
+                          mirror=bool(self.var_gd_mirror.get()),
+                          double=bool(self.var_gd_double.get()))
         elif mode == "superstructure (frame)":
             params = dict(kind=self.var_fr_kind.get(),
                           m=int(self.var_fr_m.get()),

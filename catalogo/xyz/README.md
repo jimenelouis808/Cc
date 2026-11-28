@@ -23,3 +23,8 @@ OMP_NUM_THREADS=1 uv run python -m nanocarbon_lab.examples.ex13_export_structure
 ```
 
 Un archivo que ya existe no se reconstruye.
+
+Los supertubos `supertube-(n,m)-2periodos_*.xyz` se construyeron con dos
+periodos axiales, el doble de átomos de lo necesario. Se conservan tal
+cual; los presets ya usan la celda de un periodo, y sus archivos llevan
+el nombre normal `supertube-(n,m)_*.xyz`.
