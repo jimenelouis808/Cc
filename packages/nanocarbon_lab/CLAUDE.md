@@ -2638,11 +2638,24 @@ the outer arms fill with atoms: 45 260 for the (4,0) at frequency 4.
 is one length (to 1e-5), and the angles between arms then run 54-152 deg
 instead of 120. Weighting the angles back in trades one for the other
 and never wins both (struts 1.75 : 1 at 95-135 deg; 2.2 : 1 at 104-128).
-Equal struts is what the builder takes, because the carrier's size is set
-by strut length and its windows already absorb arm angles. At 112 nodes
-that is still 20 532 atoms at frequency 3 (arms 5 deg off their windows,
-bent in at a 6 deg tolerance) and 35 840 at frequency 4: about 180 atoms
-a node is the floor here.
+**The angles decide it, not the struts.** Measured on the (4,0) ring,
+112 nodes, budget -672:
+
+| equalisation | struts | angles (deg) | freq, rows | atoms | bonds (Å) | verdict |
+|---|---|---|---|---|---|---|
+| struts only | 1.00 | 54-152 | 3, 1 | 20532 | 1.260-1.592 | broken |
+| struts only | 1.00 | 54-152 | 4, 1 | 35840 | 1.288-1.545 | broken |
+| weight 0.3 | 1.82 | 95-135 | 4, 1 | 41996 | 1.315-1.530 | strained |
+| weight 0.3 | 1.82 | 95-135 | 4, 2 | 44912 | 1.322-1.519 | strained |
+| weight 0.3, R/r 4 | 1.52 | -- | 4, 1 | 56600 | 1.304-1.540 | strained |
+| **weight 1** | 2.21 | 104-131 | 4, 2 | **48272** | **1.348-1.508** | **clean**, 100 % |
+
+Equal struts looked like the cheap answer, because the carrier scales by
+its shortest strut; but a node with two arms 54 deg apart crowds its
+windows at any frequency, as the tetrahedral cage does at frequency 2.
+Holding the angles near 120 deg costs atoms in the long struts and is
+what works: `angle_weight` defaults to 1. The census meets the budget
+exactly (`{5: 1215, 7: 1887}`, 1215 - 1887 = -672).
 
 ### The superstructure is the same law on a graph, and it agrees with the meshed route
 

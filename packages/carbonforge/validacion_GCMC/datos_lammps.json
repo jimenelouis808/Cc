@@ -123,5 +123,36 @@
   "warnings": [
    "no void fraction was given, so the excess uses the WHOLE cell volume and overstates the correction."
   ]
+ },
+ {
+  "temperature": 77.0,
+  "pressure_mpa": 5.0,
+  "rho_o": 0.04742708279652674,
+  "count": 2514.2039800995026,
+  "error": 1.8227642317218251,
+  "warnings": [
+   "no void fraction was given, so the excess uses the WHOLE cell volume and overstates the correction."
+  ]
+ },
+ {
+  "temperature": 77.0,
+  "pressure_mpa": 10.0,
+  "rho_o": 0.04860920533396092,
+  "count": 2576.870646766169,
+  "error": 1.4243751066500974,
+  "warnings": [
+   "no void fraction was given, so the excess uses the WHOLE cell volume and overstates the correction."
+  ]
+ },
+ {
+  "temperature": 77.0,
+  "pressure_mpa": 15.0,
+  "rho_o": 0.04941677634337829,
+  "count": 2619.681592039801,
+  "error": 7.303651293854469,
+  "warnings": [
+   "no void fraction was given, so the excess uses the WHOLE cell volume and overstates the correction.",
+   "the loading drifted by +66.5 molecules from the first production block to the last."
+  ]
  }
 ]

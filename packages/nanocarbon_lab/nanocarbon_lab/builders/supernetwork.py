@@ -808,7 +808,7 @@ def _equalise_on_torus(nodes: np.ndarray, edges, major: float,
 
 def supertorus_graph(n: int = 4, m: int = 0, aspect: float = 3.0,
                      strut: float = 20.0, bond: float = CC_BOND,
-                     angle_weight: float = 0.0) -> SuperGraph:
+                     angle_weight: float = 1.0) -> SuperGraph:
     """A supertube closed into a ring: super-graphene on a torus.
 
     One axial period of the ``(n, m)`` supertube (:func:`supertube_graph`)
@@ -821,9 +821,12 @@ def supertorus_graph(n: int = 4, m: int = 0, aspect: float = 3.0,
 
     **Bending stretches the outside and compresses the inside**, by
     ``(R + r)/R`` and ``(R - r)/R``: about 2 to 1 at ``aspect = 3``. The
-    vertices are then slid over the torus until every strut is one
-    length (:func:`_equalise_on_torus`), the angles at the vertices
-    taking up the curvature instead. `aspect` below 2 is refused. The number of periods is
+    vertices are then slid over the torus to even the struts out, with
+    the angles between arms held near 120 deg (`angle_weight`;
+    :func:`_equalise_on_torus`). Both cannot be had: equal struts force
+    angles of 54-152 deg, and that node is broken at every frequency
+    tried; weight 1 leaves struts 2.2 : 1 and angles 104-131 deg, and
+    that one is clean. `aspect` below 2 is refused. The number of periods is
     the smallest whole number that reaches `aspect`, so the achieved
     ratio is recorded in the note.
     """

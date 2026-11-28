@@ -681,11 +681,27 @@ class TestSupertorus:
         assert len(graph.nodes) == 112
         assert graph.ring_budget == -6 * len(graph.nodes)
 
-    def test_every_strut_is_one_length(self):
-        """Carried straight from the cylinder the outer struts are twice
-        the inner ones; slid over the torus they are equal."""
-        lengths = supertorus_graph(4, 0, 3.0, 20.0).strut_lengths(20.0)
+    def test_struts_or_angles_but_not_both(self):
+        """With no angle weight the struts come out equal; with the
+        default weight the angles between arms stay near 120 deg and the
+        struts spread. The default is the one that builds clean."""
+        from nanocarbon_lab.builders.geodesic import _arm_vectors
+
+        equal = supertorus_graph(4, 0, 3.0, 20.0, angle_weight=0.0)
+        lengths = equal.strut_lengths(20.0)
         assert lengths.max() / lengths.min() == pytest.approx(1.0, abs=1e-3)
+
+        graph = supertorus_graph(4, 0, 3.0, 20.0)
+        arms = [[] for _ in graph.nodes]
+        for (i, j, _), v in zip(graph.edges, _arm_vectors(
+                graph.nodes, graph.edges, None), strict=True):
+            u = v / np.linalg.norm(v)
+            arms[i].append(u)
+            arms[j].append(-u)
+        angles = [np.degrees(np.arccos(np.clip(a[x] @ a[y], -1, 1)))
+                  for a in map(np.array, arms)
+                  for x in range(3) for y in range(x + 1, 3)]
+        assert 100.0 < min(angles) and max(angles) < 135.0
 
     def test_a_ring_too_tight_is_refused(self):
         with pytest.raises(ValueError, match="aspect"):
