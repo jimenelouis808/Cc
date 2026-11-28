@@ -43,5 +43,72 @@
    "largest_included_sphere": 8.715056512706647
   }
  },
- "points": []
+ "points": [
+  {
+   "name": "lonsdaleite",
+   "pressure_mpa": 1.0,
+   "atoms": 2880,
+   "rho_o": 0.03522122905728281,
+   "weight_percent": 3.2025506040702827,
+   "excess_weight_percent": 2.9946497117558164,
+   "count": 567.726368159204,
+   "error": 1.186176162670993,
+   "warnings": []
+  },
+  {
+   "name": "lonsdaleite",
+   "pressure_mpa": 3.8,
+   "atoms": 2880,
+   "rho_o": 0.04020904868840013,
+   "weight_percent": 3.639570251646356,
+   "excess_weight_percent": 2.7774600724089487,
+   "count": 648.1243781094528,
+   "error": 1.3990760840243441,
+   "warnings": []
+  },
+  {
+   "name": "lonsdaleite",
+   "pressure_mpa": 10.0,
+   "atoms": 2880,
+   "rho_o": 0.04265450010779014,
+   "weight_percent": 3.852395826433445,
+   "excess_weight_percent": 1.5037440434943699,
+   "count": 687.542288557214,
+   "error": 1.6699309699638611,
+   "warnings": []
+  },
+  {
+   "name": "bcc",
+   "pressure_mpa": 1.0,
+   "atoms": 3624,
+   "rho_o": 0.02099703097909512,
+   "weight_percent": 3.8315677929859895,
+   "excess_weight_percent": 3.337485610131721,
+   "count": 860.2935323383084,
+   "error": 2.6854029285916967,
+   "warnings": []
+  },
+  {
+   "name": "bcc",
+   "pressure_mpa": 3.8,
+   "atoms": 3624,
+   "rho_o": 0.030114982483673874,
+   "weight_percent": 5.4054849092588215,
+   "excess_weight_percent": 3.386596869014747,
+   "count": 1233.8756218905473,
+   "error": 2.3760728570947136,
+   "warnings": []
+  },
+  {
+   "name": "bcc",
+   "pressure_mpa": 10.0,
+   "atoms": 3624,
+   "rho_o": 0.03738785111287541,
+   "weight_percent": 6.624449146372087,
+   "excess_weight_percent": 1.1280463328620787,
+   "count": 1531.8606965174129,
+   "error": 6.227251043241756,
+   "warnings": []
+  }
+ ]
 }
