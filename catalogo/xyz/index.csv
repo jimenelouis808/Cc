@@ -58,6 +58,7 @@ superfullerene-C60_m2n0_f2_r1_w1.xyz,23520,clean,1.0,1.391,1.465,5:360 6:10620 7
 "supertube-(5,5)_m1n0_f4_r2_w1.xyz",6760,clean,1.0,1.382,1.448,5:240 6:2760 7:360,"Supertube (5,5) (geodesic, clean, slow)"
 "supertube-(6,0)_m1n0_f2_r1_w1.xyz",2352,clean,0.9444,1.372,1.472,5:144 6:720 7:288,"Supertube (6,0) (geodesic, clean)"
 "supertube-(6,6)-2periodos_m1n0_f4_r2_w1.xyz",16224,clean,1.0,1.346,1.505,5:456 6:6864 7:744,
+"supertube-(6,6)_m1n0_f4_r2_w1.xyz",8112,clean,1.0,1.338,1.492,5:228 6:3432 7:372,"Supertube (6,6) (geodesic, clean, slow)"
 "supertube-(8,0)-2periodos_m1n0_f4_r2_w1.xyz",21632,clean,0.9995,1.334,1.503,5:756 6:8856 7:1140,
 "supertube-(8,0)_m1n0_f4_r2_w1.xyz",10816,clean,1.0,1.337,1.503,5:378 6:4428 7:570,"Supertube (8,0) (geodesic, clean, slow)"
 wythoff-bitruncated-cubic_m1n0_f4_r1_w2.xyz,3792,clean,1.0,1.353,1.493,5:96 6:1536 7:240,"Sodalite net, bitruncated cubic (Wythoff, clean)"
