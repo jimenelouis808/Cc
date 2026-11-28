@@ -752,7 +752,7 @@ def archimedean_cage(solid: str, strut: float = 24.0) -> SuperGraph:
 
 
 def _equalise_on_torus(nodes: np.ndarray, edges, major: float,
-                       minor: float) -> np.ndarray:
+                       minor: float, angle_weight: float = 0.0) -> np.ndarray:
     """Slide the vertices over the torus until every strut is one length.
 
     Carried straight from the cylinder, the outer struts are twice the
@@ -778,11 +778,26 @@ def _equalise_on_torus(nodes: np.ndarray, edges, major: float,
         return np.column_stack([reach * np.cos(ring), reach * np.sin(ring),
                                 minor * np.sin(tube)])
 
+    neighbours: list[list[int]] = [[] for _ in range(count)]
+    for i, j in pairs:
+        neighbours[i].append(j)
+        neighbours[j].append(i)
+    triples = np.array([(i, a, b) for i in range(count)
+                        for k, a in enumerate(neighbours[i])
+                        for b in neighbours[i][k + 1:]])
+
     def spread(x):
         points = place(x)
         lengths = np.linalg.norm(points[pairs[:, 0]] - points[pairs[:, 1]],
                                  axis=1)
-        return float(np.sum((lengths / lengths.mean() - 1.0) ** 2))
+        cost = float(np.sum((lengths / lengths.mean() - 1.0) ** 2))
+        if angle_weight:
+            u = points[triples[:, 1]] - points[triples[:, 0]]
+            v = points[triples[:, 2]] - points[triples[:, 0]]
+            cosine = np.sum(u * v, axis=1) / (np.linalg.norm(u, axis=1)
+                                              * np.linalg.norm(v, axis=1))
+            cost += angle_weight * float(np.sum((cosine + 0.5) ** 2))
+        return cost
 
     best = minimize(spread, start, method="L-BFGS-B",
                     options={"maxiter": 5000})
@@ -792,8 +807,8 @@ def _equalise_on_torus(nodes: np.ndarray, edges, major: float,
 
 
 def supertorus_graph(n: int = 4, m: int = 0, aspect: float = 3.0,
-                     strut: float = 20.0, bond: float = CC_BOND
-                     ) -> SuperGraph:
+                     strut: float = 20.0, bond: float = CC_BOND,
+                     angle_weight: float = 0.0) -> SuperGraph:
     """A supertube closed into a ring: super-graphene on a torus.
 
     One axial period of the ``(n, m)`` supertube (:func:`supertube_graph`)
@@ -836,7 +851,8 @@ def supertorus_graph(n: int = 4, m: int = 0, aspect: float = 3.0,
         for p in range(periods):
             q = (p + shift) % periods
             edges.append((p * count + i, q * count + j, (0, 0, 0)))
-    nodes = _equalise_on_torus(np.asarray(nodes), edges, major, radius)
+    nodes = _equalise_on_torus(np.asarray(nodes), edges, major, radius,
+                               angle_weight)
     nodes = nodes * float(strut)
     return SuperGraph(
         name=f"supertorus-({n},{m})", nodes=nodes, edges=tuple(edges),
