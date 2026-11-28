@@ -1997,7 +1997,7 @@ super-square, super-graphene and super-kagome already).
 |---|---|---|---|---|---|
 | triangular 3^6 | -- | 2, 1, 1 | 232 | 1.367-1.439 | clean |
 | 4.8.8 | -- | 4, 2, 1 | 1272 | 1.363-1.476 | clean |
-| 3.12.12 | -- | (being re-measured) | | | see below |
+| 3.12.12 | -- | 4, 1, 2 | 4056 | 1.352-1.493 | clean (strained at 1 row; see below) |
 | 4.6.12 | -- | 4, 1, 2 | 8112 | 1.359-1.482 | clean (broken at 1 row) |
 | truncated cubic | truncated cubes + octahedra | 4, 1, 2 | 2100 | 1.341-1.502 | clean (strained at 1 row) |
 | rectified cubic | octahedra + cuboctahedra | 6, 2, 1 | 2148 | 1.347-1.491 | clean, 99 % (broken at f2) |

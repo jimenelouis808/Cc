@@ -797,7 +797,7 @@ PRESETS: dict[str, dict[str, object]] = {
 # clean build, m = 1 (measured; every one 100 % placed unless noted):
 #   triangular 3^6        f2 r1  1 row    232 atoms  1.367-1.439 A
 #   4.8.8                 f4 r2  1 row   1272        1.363-1.476
-#   3.12.12               f4 r3  1 row   4272        1.385-1.462
+#   3.12.12               f4 r1  2 rows  4056        1.352-1.493
 #   4.6.12                f4 r1  2 rows  8112        1.359-1.482
 #   truncated cubic       f4 r1  2 rows  2100        1.341-1.502
 #   rectified cubic       f6 r2  1 row   2148        1.347-1.491  (99 %)
@@ -817,7 +817,7 @@ PRESETS.update({
         ("Super-4.8.8 sheet (Wythoff, clean)",
          "wythoff-truncated-square", 4, 2, 1),
         ("Super-3.12.12 sheet (Wythoff, clean)",
-         "wythoff-truncated-hexagonal", 4, 3, 1),
+         "wythoff-truncated-hexagonal", 4, 1, 2),
         ("Super-4.6.12 sheet (Wythoff, clean, slow)",
          "wythoff-truncated-trihexagonal", 4, 1, 2),
         ("Truncated-cubic honeycomb (Wythoff, clean)",
