@@ -53,6 +53,7 @@ super-tetrahedron_m2n0_f4_r1_w1.xyz,5120,clean,1.0,1.377,1.491,5:40 6:2452 7:64,
 super-truncated-octahedron_m1n0_f4_r2_w1.xyz,8112,clean,1.0,1.348,1.502,5:224 6:3440 7:368,"Truncated-octahedral cage (geodesic, clean)"
 super-truncated-tetrahedron_m1n0_f4_r2_w1.xyz,4056,clean,1.0,1.335,1.500,5:120 6:1704 7:192,"Truncated-tetrahedral cage (geodesic, clean)"
 superfullerene-C60_m2n0_f2_r1_w1.xyz,23520,clean,1.0,1.391,1.465,5:360 6:10620 7:720,"Superfullerene C60 (geodesic, clean)"
+"supertorus-(4,0)_m1n0_f4_r2_w1.xyz",48272,clean,1.0,1.348,1.508,5:1215 6:20922 7:1887,"Supertorus (4,0) (geodesic, clean, slow)"
 "supertube-(4,4)-2periodos_m1n0_f4_r2_w1.xyz",10816,clean,1.0,1.349,1.507,5:312 6:4560 7:504,"Supertubo (4,4)"
 "supertube-(4,4)_m1n0_f4_r2_w1.xyz",5408,clean,1.0,1.353,1.506,5:156 6:2280 7:252,"Supertube (4,4) (geodesic, clean, slow)"
 "supertube-(5,5)-2periodos_m1n0_f4_r2_w1.xyz",13520,clean,1.0,1.381,1.448,5:480 6:5520 7:720,

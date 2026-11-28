@@ -154,5 +154,15 @@
    "no void fraction was given, so the excess uses the WHOLE cell volume and overstates the correction.",
    "the loading drifted by +66.5 molecules from the first production block to the last."
   ]
+ },
+ {
+  "temperature": 77.0,
+  "pressure_mpa": 20.0,
+  "rho_o": 0.05003533538150377,
+  "count": 2652.4726368159204,
+  "error": 6.517067336361243,
+  "warnings": [
+   "no void fraction was given, so the excess uses the WHOLE cell volume and overstates the correction."
+  ]
  }
 ]
