@@ -798,7 +798,7 @@ GEODESIC_CAGES: dict[str, dict] = {
     "supertube-(8,8)": {"freq": 6, "tolerance_deg": 4.5},
     "supertube-(6,0)": {"freq": 2, "tolerance_deg": 4.5},
     "supertube-(8,0)": {"freq": 4, "tolerance_deg": 4.5},
-    "supertube-(10,0)": {"freq": 4, "tolerance_deg": 4.5},
+    "supertube-(10,0)": {"freq": 6, "tolerance_deg": 4.5},
     "supertorus-(4,0)": {"freq": 4, "tolerance_deg": 4.5},
     # GEODESIC_NETS. srs and lonsdaleite have nodes in several
     # orientations and fit node by node (exactly, at 16 starts; 4 missed

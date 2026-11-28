@@ -2613,11 +2613,13 @@ carry over, so each was rebuilt):
 | (5,5) | 4, 2 | 6760 | 1.382-1.448 | clean, 100 % |
 | (6,6) | 4, 2 | 8112 | 1.338-1.492 | clean, 100 % |
 | (10,0) | 3, 2 | 7944 | 1.319-1.527 | strained |
+| **(10,0)** | **6, 2** | **29520** | 1.343-1.499 | **clean**, 100 % (5.6 h; strained at frequency 4 with 2 and 3 rows) |
 | (8,8) | 2, 1 | 3136 | 1.304-1.540 | strained |
 | (8,8) | 2, 2 | 3712 | 1.327-1.514 | strained |
 | (8,8) | 6, 2 | 23616 | 1.349-1.481 | clean, 100 % (3.8 h; 47232 atoms and 6.8 h at two periods) |
 
-A lower frequency is cheaper only where the arms still land: (6,0) is
+**All seven supertubes now have a clean one-period build.** A lower
+frequency is cheaper only where the arms still land: (6,0) is
 clean at frequency 2 and one row, and two rows there are *worse*, the
 opposite of the usual rule; (8,0) at frequency 3 gets worse with a second
 row too. Neither is a trend to extrapolate.
