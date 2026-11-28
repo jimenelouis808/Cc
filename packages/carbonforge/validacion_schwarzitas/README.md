@@ -91,6 +91,38 @@ Un experimento mide exceso: a 3.8 MPa y 77 K el H₂ en bulto vale
 0.01357 g/cm³, y el exceso es del 70 al 76 % del absoluto en estas
 cuatro estructuras. Un 6.07 wt% absoluto son ~4.2 en el banco.
 
+## Los mismos nueve puntos con LAMMPS
+
+Las tres celdas leídas del catálogo del workspace (las mismas: 968, 1440
+y 1744 átomos en 31.9, 30.0 y 39.0 Å), 77 K, las mismas jugadas por
+punto (1.5 + 1.5 millones) y la misma fracción de vacío de helio, con
+`fix gcmc` de LAMMPS (`lammps_kowalczyk.py`, `datos_lammps.json`):
+
+| estructura | P (MPa) | wt% propio | wt% LAMMPS | ρ_o propio | ρ_o LAMMPS | dif ρ_o | N propio | N LAMMPS |
+|---|---|---|---|---|---|---|---|---|
+| primitive | 1 | 4.54 | 4.53 | 0.02833 | 0.02827 | -0.2 % | 274 | 274 ± 1 |
+| primitive | 3.8 | 6.07 | 6.10 | 0.03848 | 0.03872 | +0.6 % | 372 | 375 ± 1 |
+| primitive | 10 | 6.98 | 7.00 | 0.04473 | 0.04483 | +0.2 % | 433 | 434 ± 1 |
+| diamond | 1 | 3.28 | 3.28 | 0.03609 | 0.03606 | -0.1 % | 291 | 291 ± 1 |
+| diamond | 3.8 | 3.68 | 3.67 | 0.04062 | 0.04058 | -0.1 % | 327 | 327 ± 1 |
+| diamond | 10 | 3.86 | 3.84 | 0.04272 | 0.04252 | -0.5 % | 344 | 343 ± 1 |
+| gyroid | 1 | 4.76 | 4.79 | 0.02924 | 0.02941 | +0.6 % | 520 | 523 ± 2 |
+| gyroid | 3.8 | 6.37 | 6.41 | 0.03980 | 0.04006 | +0.7 % | 707 | 712 ± 3 |
+| gyroid | 10 | 7.29 | 7.33 | 0.04599 | 0.04622 | +0.5 % | 817 | 821 ± 2 |
+
+**Los dos motores coinciden dentro del 0.7 % en los nueve puntos**, la
+mitad de ellos dentro del error de bloque, en paredes curvas de tres
+topologías. Es más estrecho que en el haz de Levesque (hasta 3.3 %),
+porque estas celdas son pequeñas y las dos corridas llegan al
+equilibrio con las mismas jugadas. Cuatro puntos de LAMMPS avisan de
+deriva (±9 a ±17 moléculas de 327 a 821, el 1-3 %), en los dos sentidos,
+que es ruido de muestreo y no tendencia.
+
+Esto cierra la parte de método: el número que dé el GCMC para una
+estructura nueva no depende de qué motor lo calculó. Lo que sigue
+abierto es lo de arriba — que el ~3 wt% de Kowalczyk describe sus
+materiales, no los nuestros.
+
 ## Reproducirlo
 
 ```bash

@@ -1,0 +1,109 @@
+[
+ {
+  "kind": "primitive",
+  "pressure_mpa": 1.0,
+  "rho_o": 0.02826575669693916,
+  "weight_percent": 4.529221482450566,
+  "excess_g_cm3": 0.02547584882507149,
+  "count": 273.6169154228856,
+  "error": 0.7425556469981823,
+  "atoms": 968,
+  "warnings": []
+ },
+ {
+  "kind": "primitive",
+  "pressure_mpa": 3.8,
+  "rho_o": 0.038721573454990145,
+  "weight_percent": 6.102390702484285,
+  "excess_g_cm3": 0.027126054423324532,
+  "count": 374.83084577114425,
+  "error": 1.3625547899279313,
+  "atoms": 968,
+  "warnings": [
+   "the loading drifted by +9.4 molecules from the first production block to the last."
+  ]
+ },
+ {
+  "kind": "primitive",
+  "pressure_mpa": 10.0,
+  "rho_o": 0.044828851794349166,
+  "weight_percent": 6.997527113125258,
+  "excess_g_cm3": 0.01357859764291753,
+  "count": 433.9502487562189,
+  "error": 0.7650871410063922,
+  "atoms": 968,
+  "warnings": []
+ },
+ {
+  "kind": "diamond",
+  "pressure_mpa": 1.0,
+  "rho_o": 0.036062306315624085,
+  "weight_percent": 3.2765212297978485,
+  "excess_g_cm3": 0.033709037581797996,
+  "count": 290.64179104477614,
+  "error": 0.7709013483506753,
+  "atoms": 1440,
+  "warnings": []
+ },
+ {
+  "kind": "diamond",
+  "pressure_mpa": 3.8,
+  "rho_o": 0.04057973998648008,
+  "weight_percent": 3.6718917682659336,
+  "excess_g_cm3": 0.030798996806800504,
+  "count": 327.0497512437811,
+  "error": 0.9534964895349931,
+  "atoms": 1440,
+  "warnings": [
+   "the loading drifted by -9.6 molecules from the first production block to the last."
+  ]
+ },
+ {
+  "kind": "diamond",
+  "pressure_mpa": 10.0,
+  "rho_o": 0.04252116235527514,
+  "weight_percent": 3.8408157894100805,
+  "excess_g_cm3": 0.01616178082865417,
+  "count": 342.69651741293535,
+  "error": 1.0031395161635734,
+  "atoms": 1440,
+  "warnings": []
+ },
+ {
+  "kind": "gyroid",
+  "pressure_mpa": 1.0,
+  "rho_o": 0.02941361981579591,
+  "weight_percent": 4.7893680902883915,
+  "excess_g_cm3": 0.02658322642535757,
+  "count": 522.7014925373135,
+  "error": 1.754566264858009,
+  "atoms": 1744,
+  "warnings": []
+ },
+ {
+  "kind": "gyroid",
+  "pressure_mpa": 3.8,
+  "rho_o": 0.04006000469301326,
+  "weight_percent": 6.411750497067505,
+  "excess_g_cm3": 0.028296218240825705,
+  "count": 711.8955223880597,
+  "error": 2.7220136541416005,
+  "atoms": 1744,
+  "warnings": [
+   "the loading drifted by +17.2 molecules from the first production block to the last."
+  ]
+ },
+ {
+  "kind": "gyroid",
+  "pressure_mpa": 10.0,
+  "rho_o": 0.04622028272073732,
+  "weight_percent": 7.325497978044109,
+  "excess_g_cm3": 0.014516543076991226,
+  "count": 821.3681592039801,
+  "error": 2.2847319317591714,
+  "atoms": 1744,
+  "warnings": [
+   "the loading drifted by -17.1 molecules from the first production block to the last."
+  ]
+ }
+]
