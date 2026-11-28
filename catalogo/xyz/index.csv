@@ -62,6 +62,7 @@ superfullerene-C60_m2n0_f2_r1_w1.xyz,23520,clean,1.0,1.391,1.465,5:360 6:10620 7
 "supertube-(6,6)_m1n0_f4_r2_w1.xyz",8112,clean,1.0,1.338,1.492,5:228 6:3432 7:372,"Supertube (6,6) (geodesic, clean, slow)"
 "supertube-(8,0)-2periodos_m1n0_f4_r2_w1.xyz",21632,clean,0.9995,1.334,1.503,5:756 6:8856 7:1140,
 "supertube-(8,0)_m1n0_f4_r2_w1.xyz",10816,clean,1.0,1.337,1.503,5:378 6:4428 7:570,"Supertube (8,0) (geodesic, clean, slow)"
+"supertube-(8,8)_m1n0_f6_r2_w1.xyz",23616,clean,1.0,1.349,1.481,5:368 6:10848 7:560,"Supertube (8,8) (geodesic, clean, slow)"
 wythoff-bitruncated-cubic_m1n0_f4_r1_w2.xyz,3792,clean,1.0,1.353,1.493,5:96 6:1536 7:240,"Sodalite net, bitruncated cubic (Wythoff, clean)"
 wythoff-cantellated-cubic_m1n0_f6_r1_w2.xyz,8640,clean,1.0,1.373,1.460,5:144 6:3696 7:432,"Cantellated-cubic honeycomb (Wythoff, clean, slow)"
 wythoff-cantitruncated-cubic_m1n0_f4_r1_w2.xyz,7680,clean,0.963,1.377,1.464,5:180 6:3144 7:468,"Cantitruncated-cubic honeycomb (Wythoff, clean, slow)"
