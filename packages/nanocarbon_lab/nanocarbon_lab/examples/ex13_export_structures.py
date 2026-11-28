@@ -171,6 +171,8 @@ def convert_cache(cache: Path, out: Path) -> list[dict]:
                     "freq": kwargs.get("freq", 2),
                     "rows": kwargs.get("rows", 1),
                     "window_radius": kwargs.get("window_radius", 1)}
+            if kwargs.get("double"):
+                spec["double"] = True
         elif builder.startswith("knee_"):
             spec = {"builder": builder, **kwargs}
         else:

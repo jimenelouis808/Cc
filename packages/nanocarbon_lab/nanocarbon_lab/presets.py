@@ -238,6 +238,14 @@ PRESETS: dict[str, dict[str, object]] = {
         "knee_k": 20, "knee_rows": 9, "knee_double": True, "anneal": 0},
     # The compact super-srs (m=1, freq 4, window 3) and its inversion:
     # 5696 atoms, 5.05 A between the networks, each clean 1.370-1.466 A.
+    # Double primitive: super-cubic and its copy at the body centre, both
+    # P labyrinths. 1216 atoms in a 24.9 A cell, 3.74 A between the
+    # networks, each clean 1.366-1.469 A. The knee P cannot do it: with
+    # arms long enough to clear 3 A its wall breaks (1.56 A bonds).
+    "Double primitive (geodesic, interpenetrated)": {
+        "mode_kind": "superstructure (geodesic)", "gd_n": 0, "gd_wr": 1,
+        "gd_graph": "super-cubic", "gd_m": 2, "gd_freq": 2, "gd_rows": 2,
+        "gd_double": True, "anneal": 0},
     "Double gyroid (geodesic, interpenetrated)": {
         "mode_kind": "superstructure (geodesic)", "gd_n": 0, "gd_wr": 3,
         "gd_graph": "super-srs", "gd_m": 1, "gd_freq": 4, "gd_rows": 1,

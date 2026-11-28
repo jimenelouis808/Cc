@@ -108,7 +108,7 @@ ENTRIES: list[tuple[str, str, str, dict, bool]] = [
      {"graph": "super-fcc", "m": 2, "freq": 4, "rows": 1}, False),
     ("slon", "Súper-lonsdaleíta", "geodesic",
      {"graph": "super-lonsdaleite", "m": 2, "freq": 3, "rows": 1}, False),
-    ("stube", "Supertubo (4,4)", "geodesic",
+    ("stube", "Supertubo (4,4), un periodo", "geodesic",
      {"graph": "supertube-(4,4)", "m": 1, "freq": 4, "rows": 2}, False),
     ("pchiral", "Schwarz P quiral GC(3,1)", "goldberg",
      {"kind": "primitive", "m": 3, "n": 1}, True),
@@ -130,6 +130,27 @@ ENTRIES: list[tuple[str, str, str, dict, bool]] = [
      {"net": "super-graphene", "circumference": 22, "arm_rows": 5}, True),
     ("kneess", "Súper-cuadrada (codos, sin esferas)", "knee_supernetwork",
      {"net": "super-square", "circumference": 12, "arm_rows": 5}, True),
+    ("kneelon", "D hexagonal, lonsdaleíta (codos, sin esferas)",
+     "knee_schwarzite",
+     {"kind": "lonsdaleite", "circumference": 18, "arm_rows": 5}, True),
+    ("kneebcc", "I-WP, red bcc (codos, sin esferas)", "knee_schwarzite",
+     {"kind": "bcc", "circumference": 36, "arm_rows": 13}, True),
+    ("dbldia", "Doble diamante interpenetrado (codos)", "knee_schwarzite",
+     {"kind": "diamond", "circumference": 18, "arm_rows": 7,
+      "double": True}, True),
+    ("dblgyr", "Doble giroide interpenetrado (geodésico)", "geodesic",
+     {"graph": "super-srs", "m": 1, "freq": 4, "rows": 1,
+      "window_radius": 3, "double": True}, False),
+    ("dblprim", "Doble primitiva interpenetrada (geodésica)", "geodesic",
+     {"graph": "super-cubic", "m": 2, "freq": 2, "rows": 2,
+      "double": True}, True),
+    ("t31212", "Lámina 3.12.12 (Wythoff)", "geodesic",
+     {"graph": "wythoff-truncated-hexagonal", "m": 1, "freq": 4,
+      "rows": 2}, False),
+    ("st60", "Supertubo (6,0), un periodo", "geodesic",
+     {"graph": "supertube-(6,0)", "m": 1, "freq": 2, "rows": 1}, True),
+    ("st80", "Supertubo (8,0), un periodo", "geodesic",
+     {"graph": "supertube-(8,0)", "m": 1, "freq": 4, "rows": 2}, False),
     ("kneey", "Unión Y (codos, sin esfera)", "knee_junction",
      {"kind": "y", "circumference": 14, "arm_rows": 9}, True),
     ("kneet", "Unión tetraédrica (codos, sin esfera)", "knee_junction",
@@ -153,7 +174,7 @@ LABELS_EN: dict[str, str] = {
     "sbcc": "Super-bcc", "sgraph": "Super-graphene",
     "skagome": "Super-kagome", "ssrs": "Super-srs (gyroid)",
     "sdia": "Super-diamond", "sfcc": "Super-fcc",
-    "slon": "Super-lonsdaleite", "stube": "Supertube (4,4)",
+    "slon": "Super-lonsdaleite", "stube": "Supertube (4,4), one period",
     "pchiral": "Chiral Schwarz P GC(3,1)",
     "fau": "Schwarz D GC(2,0), FAU-commensurate",
     "dchiral": "Chiral Schwarz D GC(2,1)",
@@ -164,6 +185,14 @@ LABELS_EN: dict[str, str] = {
     "kneeg": "Gyroid (knees, no spheres)",
     "kneesg": "Super-graphene (knees, no spheres)",
     "kneess": "Super-square (knees, no spheres)",
+    "kneelon": "Hexagonal D, lonsdaleite (knees, no spheres)",
+    "kneebcc": "I-WP, bcc net (knees, no spheres)",
+    "dbldia": "Interpenetrated double diamond (knees)",
+    "dblgyr": "Interpenetrated double gyroid (geodesic)",
+    "dblprim": "Interpenetrated double primitive (geodesic)",
+    "t31212": "3.12.12 sheet (Wythoff)",
+    "st60": "Supertube (6,0), one period",
+    "st80": "Supertube (8,0), one period",
     "kneey": "Y junction (knees, no sphere)",
     "kneet": "Tetrahedral junction (knees, no sphere)",
 }
@@ -188,6 +217,8 @@ def label(entry: tuple, lang: str) -> str:
 
 #: Ring fill by size; anything else is drawn black so it cannot hide.
 RING_COLOURS = {5: "#d62728", 6: "#bdbdbd", 7: "#1f5fbf", 8: "#2ca02c"}
+#: Hexagons of the second network of an interpenetrated pair.
+SECOND_NETWORK_HEXAGON = "#e8b56a"
 
 
 def _build(entry: tuple, cache: Path) -> Path:
@@ -231,6 +262,9 @@ def _build(entry: tuple, cache: Path) -> Path:
                    else float(atoms.info["disclinations_placed"])),
         "bonds": [float(geometry["bond_min"]), float(geometry["bond_max"])],
         "seconds": round(time.time() - started, 1),
+        # An interpenetrated pair: the second network's atoms are the
+        # second half, and its hexagons are drawn in their own colour.
+        "networks": int(atoms.info.get("networks", 1)),
     }
     path.write_text(json.dumps(record))
     return path
@@ -266,6 +300,8 @@ def _panel(ax, record: dict, label: str, lang: str = "es",
               for i in range(reps[0]) for j in range(reps[1])
               for k in range(reps[2])]
     polygons, colours = [], []
+    second_from = (len(positions) // 2 if record.get("networks", 1) == 2
+                   else None)
     for ring in record["rings"]:
         corners = _unwrap(positions[ring], cell, record["pbc"])
         if live.any():
@@ -273,9 +309,12 @@ def _panel(ax, record: dict, label: str, lang: str = "es",
             shift = np.zeros(3)
             shift[live] = np.floor(centre[live] / cell[live]) * cell[live]
             corners = corners - shift
+        colour = RING_COLOURS.get(len(ring), "#000000")
+        if second_from is not None and len(ring) == 6 and ring[0] >= second_from:
+            colour = SECOND_NETWORK_HEXAGON
         for image in images:
             polygons.append(corners + image)
-            colours.append(RING_COLOURS.get(len(ring), "#000000"))
+            colours.append(colour)
     collection = Poly3DCollection(
         polygons, facecolors=colours, edgecolors="#333333",
         linewidths=linewidth, alpha=1.0)

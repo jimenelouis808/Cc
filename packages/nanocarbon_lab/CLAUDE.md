@@ -2574,6 +2574,8 @@ measured is the **gap** between the two networks' atoms, refused under 3 Å
 | double diamond | knee (18, 7) | 7488 | **4.39** | clean, 1.417-1.492 |
 | double gyroid | geodesic super-srs, m1 f4 w3 | 5696 | **5.05** | clean, 1.370-1.466 |
 | double gyroid | knee (20, 9) | 11168 | 26.8 | clean, 1.412-1.509 |
+| **double primitive** | geodesic super-cubic, m2 f2, 2 rows | **1216** | **3.74** | clean, 1.366-1.469 |
+| double primitive | knee P, any clean shape | -- | -- | refused: clean only at 7 rows (1.34 Å apart); 9 rows and up strain and then break |
 
 **The default shapes fuse.** The skeletons are only `sqrt(6)/3 = 0.82`
 struts apart for diamond and `sqrt(6)/2 = 1.22` for srs, and a node is
