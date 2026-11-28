@@ -1997,7 +1997,7 @@ super-square, super-graphene and super-kagome already).
 |---|---|---|---|---|---|
 | triangular 3^6 | -- | 2, 1, 1 | 232 | 1.367-1.439 | clean |
 | 4.8.8 | -- | 4, 2, 1 | 1272 | 1.363-1.476 | clean |
-| 3.12.12 | -- | 4, 3, 1 | 4272 | 1.385-1.462 | clean |
+| 3.12.12 | -- | (being re-measured) | | | see below |
 | 4.6.12 | -- | 4, 1, 2 | 8112 | 1.359-1.482 | clean (broken at 1 row) |
 | truncated cubic | truncated cubes + octahedra | 4, 1, 2 | 2100 | 1.341-1.502 | clean (strained at 1 row) |
 | rectified cubic | octahedra + cuboctahedra | 6, 2, 1 | 2148 | 1.347-1.491 | clean, 99 % (broken at f2) |
@@ -2021,6 +2021,16 @@ instead of shearing out of them. Every uniform honeycomb of `[4,3,4]`
 and every Wythoff tiling of `[4,4]` and `[6,3]` is now clean. The tetrahedral cages' honeycombs (the
 quarter-cubic and alternated ones) need the `[3^[4]]` group and are not
 built.
+
+**Correcting this table: the first "3.12.12" was a honeycomb.** It was
+built from rings (0, 1, 1) of `[6,3]`, which put the generator on the
+mirror through the six-fold point -- the truncated triangular tiling,
+which is the hexagonal tiling again, at a third of the edge. It has 12
+vertices of coordination 3 per cell, exactly as 3.12.12 does, so the
+count test passed; the arms were at 120, 120, 120 deg instead of 60, 150,
+150. The 4272-atom "clean" row was therefore a super-graphene. 3.12.12 is
+rings (1, 1, 0), and `test_wythoff.py` now pins every named tiling's
+vertex angles, not only its counts.
 
 
 ## Perfect is two questions, and most builders answer only one
@@ -2496,6 +2506,51 @@ against sixteen octagons. A minimal surface saddles everywhere, so a
 pentagon on one is never right -- and `sum(6-n)` cannot see the
 difference. The gate is on the **census**, not on the budget, and this is
 the case that shows why it has to be.
+
+#### Lonsdaleite and bcc: two more cells, and a node that depends on its frame
+
+`SCHWARZITE_CELLS` also holds `lonsdaleite` (hexagonal diamond, the D
+surface's hexagonal polytype) and `bcc` (the I-WP surface's labyrinth),
+both measured at their default shape, every row 100 % placed and no
+contact under 2 Å:
+
+| cell | shape (k, rows) | atoms | census | bonds (Å) | sphere route |
+|---|---|---|---|---|---|
+| diamond | 18, 5 | 1440 | `{6: 608, 7: 96}` | 1.353-1.451 | super-diamond 5760 |
+| **lonsdaleite** | 18, 5 | 1440 | `{6: 608, 7: 96}` | **1.376-1.431** | super-lonsdaleite 5760 |
+| bcc | 36, 13 | 3624 | `{5: 48, 6: 1632, 7: 120}` | 1.370-1.515 | super-bcc **1440** |
+
+**`node_mesh` depends on the node's orientation.** Each arm's rings are
+laid out against the global z axis, so one node in two orientations is two
+meshes, and whether the seams pair up depends on which. Lonsdaleite's
+nodes are the diamond node in two mirror-related orientations, and meshed
+where they stand no circumference from 8 to 24 closed (`seam 0-2 has 7
+vertices on one side and 8 on the other`). Built as the diamond node and
+turned rigidly onto their arms (`NET_NODE_FRAME`), circumference 18
+closes at every arm length with exactly D's census. Diamond and the gyroid
+are left meshed in place, because they already close and turning them
+would change measured structures. A test pins the in-place failure, so
+the frame cannot be dropped as redundant.
+
+**bcc is the exception to "no pentagons on a minimal-surface cell".**
+Eight `<111>` arms leave a convex pillow at each of the node's six `<100>`
+poles, as the planar X junction does at its two. Scanned from 8 to 48
+rows round, the only 5-6-7 census is at k = 36 (13 rows), and all 48
+pentagons sit at the poles (mean sign of K **+1.00**) and all 120 heptagons
+in the necks (**-1.00**). `SCHWARZITE_PENTAGONS` allows them for that cell
+only, and every knee schwarzite now records its placement and raises if
+its pentagons are not in positive curvature. Every other circumference
+closes at the right budget, -72, with squares and octagons. **It is
+sphere-free and not smaller.** Eight arms 70.5 deg apart need a fat tube,
+and the geodesic super-bcc is 1440 atoms on a 12-ring one.
+
+Also scanned and not shipped: the sodalite net (bitruncated cubic) closes
+at k = 20, 7 rows with `{5: 48, 7: 192}` (about 5500 atoms against the
+geodesic 3792); kagome, the triangular tiling and the rectified cubic
+honeycomb never come out 5-6-7 from k = 8 to 30. The supertubes cannot use
+this route at all: on a rolled sheet the three arms of a node do not sum
+to zero (0.20-0.45) and the struts differ in length, and a knee node needs
+both.
 
 ### The superstructure is the same law on a graph, and it agrees with the meshed route
 

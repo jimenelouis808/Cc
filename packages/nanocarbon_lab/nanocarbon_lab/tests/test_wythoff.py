@@ -68,7 +68,38 @@ EUCLIDEAN = {
     ("[6,3]", (0, 1, 0)): (6, 4),
     ("[6,3]", (1, 0, 1)): (12, 4),
     ("[6,3]", (1, 1, 1)): (24, 3),
+    ("[6,3]", (1, 1, 0)): (12, 3),
 }
+
+#: The angles between consecutive arms round a vertex, which is what
+#: names a tiling. Counts and coordination are not enough: (0, 1, 1) of
+#: [6,3] -- the truncated triangular tiling, which is the honeycomb again
+#: -- also has 12 vertices of coordination 3 per cell, and it stood in
+#: the catalogue as 3.12.12 until the arm angles were read.
+TILING_ANGLES = {
+    "wythoff-truncated-square": [90, 135, 135],
+    "wythoff-triangular": [60] * 6,
+    "wythoff-truncated-hexagonal": [60, 150, 150],
+    "wythoff-rhombitrihexagonal": [60, 90, 90, 120],
+    "wythoff-truncated-trihexagonal": [90, 120, 150],
+}
+
+
+@pytest.mark.parametrize("name", sorted(TILING_ANGLES))
+def test_each_named_tiling_has_its_own_vertex(name):
+    graph = W.WYTHOFF_NETS[name]
+    points, cell = G._graph_frame(graph)
+    arms = []
+    for (i, j, _), v in zip(graph.edges, G._arm_vectors(points, graph.edges,
+                                                         cell), strict=True):
+        if i == 0:
+            arms.append(v)
+        if j == 0:
+            arms.append(-v)
+    angles = np.sort(np.degrees(np.arctan2([a[1] for a in arms],
+                                           [a[0] for a in arms])) % 360)
+    gaps = np.diff(np.append(angles, angles[0] + 360))
+    assert sorted(np.round(gaps, 6)) == sorted(TILING_ANGLES[name])
 
 
 @pytest.mark.parametrize("key", sorted(EUCLIDEAN))

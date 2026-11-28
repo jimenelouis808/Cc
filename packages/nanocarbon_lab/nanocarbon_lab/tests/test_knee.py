@@ -1529,3 +1529,51 @@ class TestTheMeasuredCatalogueIsMeasured:
                    and c.pitch == preset["kc_pitch"]
                    and c.coil_radius == preset["kc_radius"]
                    for c in MEASURED_PERIODIC_COILS)
+
+
+# --- lonsdaleite and bcc cells -----------------------------------------
+
+
+def test_lonsdaleite_is_the_diamond_node_turned_and_closes_like_d():
+    from nanocarbon_lab.builders.knee import (
+        build_knee_schwarzite,
+        net_geometry,
+    )
+
+    _, axes, cell = net_geometry("lonsdaleite")
+    assert len(axes) == 8 and {len(a) for a in axes} == {4}
+    assert cell[2] / cell[0] == pytest.approx(np.sqrt(8.0 / 3.0))
+    atoms = build_knee_schwarzite(kind="lonsdaleite")
+    assert atoms.info["ring_counts"] == {6: 608, 7: 96}
+    assert atoms.info["ring_deficit"] == -96
+    geometry = atoms.info["geometry"]
+    assert 1.36 < geometry["bond_min"] and geometry["bond_max"] < 1.45
+    assert geometry["n_close_contacts"] == 0
+    assert atoms.info["disclinations_placed"] == 1.0
+
+
+def test_lonsdaleite_meshed_in_place_does_not_close():
+    """The reason NET_NODE_FRAME exists: the node mesh depends on its
+    orientation, and lonsdaleite's nodes meshed where they stand do not
+    pair their seams."""
+    from nanocarbon_lab.builders import knee
+
+    spacing = knee.MESH_EDGE * knee.CC_BOND * np.sqrt(3.0) / 2.0
+    radius = knee.MESH_EDGE * knee.CC_BOND / (2.0 * np.sin(np.pi / 18))
+    sites, axes, cell = knee.net_geometry("lonsdaleite")
+    bond = 2.0 * 4 * spacing
+    with pytest.raises(ValueError):
+        knee.glue_nodes(sites * bond, axes, 18, 5, radius, spacing,
+                        cell=cell * bond)
+
+
+@pytest.mark.slow
+def test_the_bcc_cell_puts_its_pentagons_on_the_poles():
+    from nanocarbon_lab.builders.knee import build_knee_schwarzite
+
+    atoms = build_knee_schwarzite(kind="bcc")
+    assert atoms.info["ring_counts"] == {5: 48, 6: 1632, 7: 120}
+    assert atoms.info["ring_deficit"] == -72
+    sizes = atoms.info["disclination_check"]["sizes"]
+    assert sizes[5]["mean_sign"] == pytest.approx(1.0)
+    assert sizes[7]["mean_sign"] == pytest.approx(-1.0)

@@ -200,6 +200,23 @@ PRESETS: dict[str, dict[str, object]] = {
     "Gyroid (knees, no pentagons)": {
         "mode_kind": "schwarzite (knees)", "knee_cell": "gyroid",
         "knee_k": 20, "knee_rows": 5, "anneal": 0},
+    # Hexagonal diamond, the D surface's hexagonal polytype: the diamond
+    # node in two mirror-related orientations, so each is built as the
+    # diamond node and turned. 1440 atoms in a 21.2 x 36.7 x 34.6 A
+    # orthohexagonal cell, {6: 608, 7: 96}, bonds 1.376-1.431 A, every
+    # heptagon in negative curvature. The geodesic super-lonsdaleite is
+    # 5760 atoms: this is the sphere-free version, a quarter of them.
+    "Hexagonal D, lonsdaleite (knees, no spheres)": {
+        "mode_kind": "schwarzite (knees)", "knee_cell": "lonsdaleite",
+        "knee_k": 18, "knee_rows": 5, "anneal": 0},
+    # The bcc net, the I-WP surface's labyrinth: eight arms per node, and
+    # only a fat tube (36 round) leaves room between them. 3624 atoms,
+    # {5: 48, 6: 1632, 7: 120}, 1.370-1.515 A; the pentagons are the
+    # convex <100> poles, 100 % placed. Sphere-free but NOT smaller: the
+    # geodesic super-bcc is 1440 atoms on a thinner tube.
+    "I-WP, bcc net (knees, no spheres)": {
+        "mode_kind": "schwarzite (knees)", "knee_cell": "bcc",
+        "knee_k": 36, "knee_rows": 13, "anneal": 0},
     # The same Y node repeated on a honeycomb instead of standing
     # alone: 920 atoms, {6: 432, 7: 24}, sum(6-n) = -24 = 12(V-E), and
     # bonds 1.408-1.436 A -- the tightest of anything this route builds.

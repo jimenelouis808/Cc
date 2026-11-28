@@ -47,6 +47,10 @@ KNEE_CENSUS = {
     "Schwarz P (knees, no pentagons)": (968, {6: 456, 7: 24}, -24),
     "Schwarz D (knees, no pentagons)": (1440, {6: 608, 7: 96}, -96),
     "Gyroid (knees, no pentagons)": (1744, {6: 816, 7: 48}, -48),
+    "Hexagonal D, lonsdaleite (knees, no spheres)": (
+        1440, {6: 608, 7: 96}, -96),
+    "I-WP, bcc net (knees, no spheres)": (
+        3624, {5: 48, 6: 1632, 7: 120}, -72),
     "Super-graphene (knees, tubes on a honeycomb)": (920, {6: 432, 7: 24}, -24),
     "Super-square (knees, tubes on a square net)": (180, {5: 4, 6: 68, 7: 16},
                                                     -12),

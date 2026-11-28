@@ -350,7 +350,7 @@ WYTHOFF_NET_PATTERNS: dict[str, tuple[str, tuple[int, ...], str]] = {
         "truncated cuboctahedra and octagonal prisms"),
     "wythoff-truncated-square": ("[4,4]", (0, 1, 1), "4.8.8 tiling"),
     "wythoff-triangular": ("[6,3]", (0, 0, 1), "3^6 tiling, 6 arms"),
-    "wythoff-truncated-hexagonal": ("[6,3]", (0, 1, 1), "3.12.12 tiling"),
+    "wythoff-truncated-hexagonal": ("[6,3]", (1, 1, 0), "3.12.12 tiling"),
     "wythoff-rhombitrihexagonal": ("[6,3]", (1, 0, 1), "3.4.6.4 tiling"),
     "wythoff-truncated-trihexagonal": ("[6,3]", (1, 1, 1), "4.6.12 tiling"),
 }

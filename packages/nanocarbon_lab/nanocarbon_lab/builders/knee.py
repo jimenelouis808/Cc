@@ -2132,6 +2132,29 @@ def _srs_sites() -> np.ndarray:
     return np.vstack([base, (base + 0.5) % 1.0])
 
 
+def _lonsdaleite_sites() -> tuple[np.ndarray, np.ndarray]:
+    """Hexagonal diamond in its orthohexagonal cell, in units of the bond.
+
+    The ideal wurtzite net (``c/a = sqrt(8/3)``, ``u = 3/8``) has four
+    sites in its hexagonal cell; :func:`minimum_image` takes an
+    orthorhombic box only, so the cell used is ``(a, a*sqrt(3), c)`` with
+    eight. The basis is written with ``a2`` at **60 deg** to ``a1``, where
+    the two special points are ``(1/3, 1/3)`` and ``(2/3, 2/3)`` -- the
+    120 deg convention's fractions put here gave a one-coordinate net in
+    the geodesic builder, which is why this says so.
+    """
+    a, c, u = np.sqrt(8.0 / 3.0), 8.0 / 3.0, 3.0 / 8.0
+    a1 = np.array([a, 0.0, 0.0])
+    a2 = np.array([a / 2.0, a * np.sqrt(3.0) / 2.0, 0.0])
+    a3 = np.array([0.0, 0.0, c])
+    fractions = [(1 / 3, 1 / 3, 0.0), (1 / 3, 1 / 3, u),
+                 (2 / 3, 2 / 3, 0.5), (2 / 3, 2 / 3, 0.5 + u)]
+    base = np.array([f[0] * a1 + f[1] * a2 + f[2] * a3 for f in fractions])
+    box = np.array([a, a * np.sqrt(3.0), c])
+    sites = np.vstack([base, base + (a1 + a2)]) % box
+    return sites, box
+
+
 #: The skeletal nets, as site positions in fractions of the conventional
 #: cubic cell. **Only the sites are given**: each node's arm directions
 #: and the cell's relation to the arm length are derived from the net by
@@ -2163,6 +2186,15 @@ SCHWARZITE_NETS: dict[str, tuple[np.ndarray, np.ndarray]] = {
     ),
     "gyroid": (_srs_sites() * (4.0 / np.sqrt(2.0)),
                np.full(3, 4.0 / np.sqrt(2.0))),
+    # Hexagonal diamond: the D surface's hexagonal polytype, the wall
+    # between the pores of an EMT-like (lonsdaleite) pore net. Its nodes
+    # are the diamond node in two orientations related by a mirror, so
+    # they are built from a canonical one and turned: see NET_NODE_FRAME.
+    "lonsdaleite": _lonsdaleite_sites(),
+    # The body-centred net, eight <111> arms: the labyrinth of the I-WP
+    # surface. Two sites per cubic cell, bond = a*sqrt(3)/2.
+    "bcc": (np.array([[0.0, 0.0, 0.0], [0.5, 0.5, 0.5]]) * (2.0 / np.sqrt(3.0)),
+            np.full(3, 2.0 / np.sqrt(3.0))),
     # The 2D nets: a honeycomb of tubes is a sheet of Y junctions, and a
     # square one a sheet of planar crossings. Both repeat in x and y and
     # have vacuum in z.
@@ -2255,6 +2287,51 @@ def net_geometry(net: str) -> tuple[np.ndarray, list[np.ndarray], np.ndarray]:
 MOUTH_REGISTER = 0.6
 
 
+#: The diamond node's arms as :func:`node_mesh` builds them cleanly.
+_TETRAHEDRAL_FRAME = np.array([[1.0, 1.0, 1.0], [1.0, -1.0, -1.0],
+                               [-1.0, 1.0, -1.0], [-1.0, -1.0, 1.0]]
+                              ) / np.sqrt(3.0)
+
+#: Nets whose nodes are built in a canonical frame and turned rigidly
+#: onto their own arms, instead of meshed where they stand.
+#:
+#: :func:`node_mesh` lays each arm's rings out against the global z axis,
+#: so the same node in two orientations is two different meshes, and
+#: whether a node's seams pair up depends on which. Measured on
+#: lonsdaleite: meshed in place, no circumference from 8 to 24 closes
+#: (``seam 0-2 has 7 vertices on one side and 8 on the other``); built
+#: as the diamond node and turned, circumference 18 closes at every arm
+#: length with ``{6: N, 7: 96}``, exactly Schwarz D's census. Diamond and
+#: the gyroid are left meshed in place: they already close, and turning
+#: them would change structures that have been measured.
+NET_NODE_FRAME: dict[str, np.ndarray] = {"lonsdaleite": _TETRAHEDRAL_FRAME}
+
+
+def _rotation_onto(frame: np.ndarray, axes: np.ndarray) -> np.ndarray:
+    """The proper rotation taking `frame`'s arms onto `axes`, in some order.
+
+    Raises
+    ------
+    ValueError
+        If no proper rotation does (the arms are not the same node).
+    """
+    from itertools import permutations
+
+    best = (np.inf, None)
+    for order in permutations(range(len(axes))):
+        target = axes[list(order)]
+        u, _, vt = np.linalg.svd(frame.T @ target)
+        rotation = vt.T @ u.T
+        if np.linalg.det(rotation) < 0.0:
+            continue
+        error = float(np.abs(frame @ rotation.T - target).max())
+        if error < best[0]:
+            best = (error, rotation)
+    if best[0] > 1e-6:
+        raise ValueError("a node's arms are not a rotation of its frame.")
+    return best[1]
+
+
 def net_cell_mesh(
     net: str,
     circumference: int,
@@ -2322,7 +2399,8 @@ def net_cell_mesh(
     bond = 2.0 * (arm_rows - 1) * spacing
     cell = cell_in_bonds * bond
     vertices, tris = glue_nodes(sites * bond, axes_per_site, circumference,
-                                arm_rows, tube_radius, spacing, cell=cell)
+                                arm_rows, tube_radius, spacing, cell=cell,
+                                frame=NET_NODE_FRAME.get(net))
     return vertices, tris, cell
 
 
@@ -2334,6 +2412,7 @@ def glue_nodes(
     tube_radius: float,
     spacing: float,
     cell=None,
+    frame=None,
 ) -> tuple[np.ndarray, list[tuple[int, int, int]]]:
     """Build one node per centre and weld every mouth to its partner.
 
@@ -2343,6 +2422,8 @@ def glue_nodes(
     enter the opposite one; left ``None``, they are matched as they lie.
     ``cell`` is a three-vector of edge lengths, a zero component marking
     an axis that does not repeat, so a 2D net gets vacuum in z.
+    ``frame``, given, is the arm set every node is meshed in before being
+    turned onto its own arms (see :data:`NET_NODE_FRAME`).
 
     Every strut is two arms meeting, so the caller has already placed the
     centres ``2 * (arm_rows - 1) * spacing`` apart. Nothing here fits a
@@ -2362,8 +2443,15 @@ def glue_nodes(
     verts: list[list[float]] = []
     tris: list[tuple[int, int, int]] = []
     for centre, axes in zip(centres, axes_per_node, strict=True):
-        local, local_tris = node_mesh(axes, circumference, arm_rows,
-                                      tube_radius, spacing)
+        if frame is None:
+            local, local_tris = node_mesh(axes, circumference, arm_rows,
+                                          tube_radius, spacing)
+        else:
+            local, local_tris = node_mesh(frame, circumference, arm_rows,
+                                          tube_radius, spacing)
+            local = local @ _rotation_onto(
+                np.asarray(frame, dtype=float),
+                np.asarray(axes, dtype=float)).T
         local_tris = fill_node_holes(local_tris, max_size=hole_size(axes))
         local, local_tris = collapse_degree_three(local, local_tris)
         local, local_tris = collapse_degree_four(local, local_tris)
@@ -2443,7 +2531,20 @@ SCHWARZITE_CELLS: dict[str, tuple[int, int, int]] = {
     "primitive": (6, 1, 3),
     "diamond": (4, 8, 9),
     "gyroid": (3, 8, 5),
+    # Eight tetrahedral nodes in the orthohexagonal cell, as diamond has
+    # in its cubic one, so the same budget: -96, all heptagons.
+    "lonsdaleite": (4, 8, 9),
+    # Two eight-arm nodes: chi = 2(2 - 8) = -12, genus 7, budget -72.
+    "bcc": (8, 2, 7),
 }
+
+#: Cells whose wall is allowed pentagons, each one checked to sit in
+#: positive curvature after the build. The bcc node's eight arms leave a
+#: convex pillow at each of its six <100> poles, as the planar X junction
+#: does at its two, and measured, all 48 pentagons sit there (mean sign of
+#: K +1.00) and all 120 heptagons in the necks (-1.00). Everywhere else a
+#: pentagon is wrong, and the cell is refused.
+SCHWARZITE_PENTAGONS = frozenset({"bcc"})
 
 #: ``(circumference, arm_rows)`` per cell kind: the shape whose relaxed
 #: geometry measured best, not a round number. A P cell wants a wide arm
@@ -2458,6 +2559,15 @@ DEFAULT_SCHWARZITE_SHAPE: dict[str, tuple[int, int]] = {
     # Measured, every narrower cell relaxes to a broken wall -- k=8 (a
     # 3.05 A tube) reaches 1.722 A bonds and k=16 (5.40 A) 1.553.
     "gyroid": (20, 5),
+    # The diamond node's own size, and the only one from 10 to 25 that
+    # gives heptagons only (24 closes with 96 pentagons: wrong on a
+    # minimal surface).
+    "lonsdaleite": (18, 5),
+    # Eight arms 70.5 deg apart crowd the node, so the tube must be fat:
+    # scanned from 8 to 48 rows round, 36 is the only circumference whose
+    # census is 5-6-7 (13-row arms). The rest close at the right budget
+    # with squares and octagons.
+    "bcc": (36, 13),
 }
 
 
@@ -2587,7 +2697,9 @@ def build_knee_schwarzite(
     arms, nodes, genus = SCHWARZITE_CELLS[kind]
     budget = schwarzite_budget(kind)
     surface = {"primitive": "Schwarz P", "diamond": "Schwarz D",
-               "gyroid": "gyroid"}[kind]
+               "gyroid": "gyroid",
+               "lonsdaleite": "hexagonal D (lonsdaleite)",
+               "bcc": "I-WP (bcc net)"}[kind]
     try:
         vertices, tris, cell = _cell_mesh(kind, circumference, arm_rows,
                                           tube_radius, spacing)
@@ -2602,7 +2714,8 @@ def build_knee_schwarzite(
 
     census, _, broken = mesh_census(vertices, tris)
     deficit = sum((6 - size) * count for size, count in census.items())
-    if broken or set(census) - {6, 7} or deficit != budget:
+    allowed = {5, 6, 7} if kind in SCHWARZITE_PENTAGONS else {6, 7}
+    if broken or set(census) - allowed or deficit != budget:
         shapes = clean_schwarzite_shapes(bond, kind=kind)
         raise ValueError(
             f"circumference {circumference} with {arm_rows}-row arms gives "
@@ -2632,6 +2745,14 @@ def build_knee_schwarzite(
     for ring in rings:
         ring_counts[len(ring)] = ring_counts.get(len(ring), 0) + 1
 
+    from ..analyse.curvature import disclination_check
+
+    check = disclination_check(positions, rings, bonds, box=cell)
+    if ring_counts.get(5) and check["sizes"][5]["mean_sign"] < 0.5:
+        raise ValueError(
+            f"the {surface} cell's pentagons are not in positive curvature "
+            f"(mean sign {check['sizes'][5]['mean_sign']:+.2f}).")
+
     atoms = Atoms(symbols=["C"] * len(positions), positions=positions,
                   cell=list(np.asarray(cell, dtype=float)),
                   pbc=(True, True, True))
@@ -2654,9 +2775,12 @@ def build_knee_schwarzite(
         "ring_counts": dict(sorted(ring_counts.items())),
         "ring_deficit": int(sum((6 - s) * c for s, c in ring_counts.items())),
         # A minimal surface saddles everywhere, so a pentagon on one is
-        # never right. This is the number the implicit route cannot get to
-        # zero: it returns 33 at a comparable cell.
+        # never right (bcc aside: SCHWARZITE_PENTAGONS). This is the number
+        # the implicit route cannot get to zero: it returns 33 at a
+        # comparable cell.
         "pentagons": int(ring_counts.get(5, 0)),
+        "disclination_check": check,
+        "disclinations_placed": check["agreement"],
         # The real atom indices per ring, not a census. `dopants/rings.py`
         # places a heteroatom on a named ring size and RAISES without
         # this, rather than falling back on perceiving rings by distance
