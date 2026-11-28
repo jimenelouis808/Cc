@@ -1024,5 +1024,461 @@
   "largest_included_sphere": 110.12575604770096,
   "admits_h2": true,
   "chahine_wt_pct": 5.009333657412344
+ },
+ "supertorus-(4,0)_m1n0_f4_r2_w1.xyz": {
+  "file": "supertorus-(4,0)_m1n0_f4_r2_w1.xyz",
+  "atoms_in_cell": 48272,
+  "periodic_axes": 0,
+  "gap": 3.4,
+  "repeat": [
+   1,
+   1,
+   1
+  ],
+  "density_g_cm3": 0.11415958035828078,
+  "area_m2_g": 2649.2723497663656,
+  "helium_void_fraction": 0.9717597731912554,
+  "pore_volume_cm3_g": 7.994072833273188,
+  "largest_free_sphere": 124.1135125287186,
+  "largest_included_sphere": 147.1458943329587,
+  "admits_h2": true,
+  "chahine_wt_pct": 5.298544699532731
+ },
+ "supertube-(10,0)_m1n0_f6_r2_w1.xyz": {
+  "file": "supertube-(10,0)_m1n0_f6_r2_w1.xyz",
+  "atoms_in_cell": 29520,
+  "periodic_axes": 1,
+  "gap": 3.4,
+  "repeat": [
+   1,
+   1,
+   1
+  ],
+  "density_g_cm3": 0.22846753858372762,
+  "area_m2_g": 2465.2567932136026,
+  "helium_void_fraction": 0.9466902620183836,
+  "pore_volume_cm3_g": 3.6199891027271995,
+  "largest_free_sphere": 106.17682608108828,
+  "largest_included_sphere": 114.1516193999752,
+  "admits_h2": true,
+  "chahine_wt_pct": 4.930513586427205
+ },
+ "supertube-(4,4)_m1n0_f4_r2_w1.xyz": {
+  "file": "supertube-(4,4)_m1n0_f4_r2_w1.xyz",
+  "atoms_in_cell": 5408,
+  "periodic_axes": 1,
+  "gap": 3.4,
+  "repeat": [
+   1,
+   1,
+   1
+  ],
+  "density_g_cm3": 0.3087157107272384,
+  "area_m2_g": 2525.540664687464,
+  "helium_void_fraction": 0.9281040599838468,
+  "pore_volume_cm3_g": 2.4893992756516337,
+  "largest_free_sphere": 53.88220256421525,
+  "largest_included_sphere": 55.56771387430251,
+  "admits_h2": true,
+  "chahine_wt_pct": 5.051081329374928
+ },
+ "supertube-(5,5)_m1n0_f4_r2_w1.xyz": {
+  "file": "supertube-(5,5)_m1n0_f4_r2_w1.xyz",
+  "atoms_in_cell": 6760,
+  "periodic_axes": 1,
+  "gap": 3.4,
+  "repeat": [
+   1,
+   1,
+   1
+  ],
+  "density_g_cm3": 0.2705114503001432,
+  "area_m2_g": 2518.85705759488,
+  "helium_void_fraction": 0.932411862390409,
+  "pore_volume_cm3_g": 2.9266167197541146,
+  "largest_free_sphere": 80.44931641535274,
+  "largest_included_sphere": 81.82855636088098,
+  "admits_h2": true,
+  "chahine_wt_pct": 5.03771411518976
+ },
+ "supertube-(6,0)_m1n0_f2_r1_w1.xyz": {
+  "file": "supertube-(6,0)_m1n0_f2_r1_w1.xyz",
+  "atoms_in_cell": 2352,
+  "periodic_axes": 1,
+  "gap": 3.4,
+  "repeat": [
+   1,
+   1,
+   1
+  ],
+  "density_g_cm3": 0.5424824297884504,
+  "area_m2_g": 2159.923887485095,
+  "helium_void_fraction": 0.8486857131942881,
+  "pore_volume_cm3_g": 1.1245218275018152,
+  "largest_free_sphere": 25.933132388027367,
+  "largest_included_sphere": 27.415916120464278,
+  "admits_h2": true,
+  "chahine_wt_pct": 4.31984777497019
+ },
+ "supertube-(6,6)_m1n0_f4_r2_w1.xyz": {
+  "file": "supertube-(6,6)_m1n0_f4_r2_w1.xyz",
+  "atoms_in_cell": 8112,
+  "periodic_axes": 1,
+  "gap": 3.4,
+  "repeat": [
+   1,
+   1,
+   1
+  ],
+  "density_g_cm3": 0.24956779309524513,
+  "area_m2_g": 2513.2995474369113,
+  "helium_void_fraction": 0.9375932819720858,
+  "pore_volume_cm3_g": 3.243741202713536,
+  "largest_free_sphere": 85.6889906929303,
+  "largest_included_sphere": 86.425262426458,
+  "admits_h2": true,
+  "chahine_wt_pct": 5.026599094873823
+ },
+ "supertube-(8,0)_m1n0_f4_r2_w1.xyz": {
+  "file": "supertube-(8,0)_m1n0_f4_r2_w1.xyz",
+  "atoms_in_cell": 10816,
+  "periodic_axes": 1,
+  "gap": 3.4,
+  "repeat": [
+   1,
+   1,
+   1
+  ],
+  "density_g_cm3": 0.2781976298630705,
+  "area_m2_g": 2515.410084893899,
+  "helium_void_fraction": 0.9323215401741729,
+  "pore_volume_cm3_g": 2.835274574606906,
+  "largest_free_sphere": 69.14156415274289,
+  "largest_included_sphere": 70.98146534059907,
+  "admits_h2": true,
+  "chahine_wt_pct": 5.0308201697877974
+ },
+ "supertube-(8,8)_m1n0_f6_r2_w1.xyz": {
+  "file": "supertube-(8,8)_m1n0_f6_r2_w1.xyz",
+  "atoms_in_cell": 23616,
+  "periodic_axes": 1,
+  "gap": 3.4,
+  "repeat": [
+   1,
+   1,
+   1
+  ],
+  "density_g_cm3": 0.16583455227470834,
+  "area_m2_g": 2581.8885248555366,
+  "helium_void_fraction": 0.9599568043946853,
+  "pore_volume_cm3_g": 5.258755315892851,
+  "largest_free_sphere": 176.83582369760458,
+  "largest_included_sphere": 179.81398598105665,
+  "admits_h2": true,
+  "chahine_wt_pct": 5.163777049711073
+ },
+ "wythoff-bitruncated-cubic_m1n0_f4_r1_w2.xyz": {
+  "file": "wythoff-bitruncated-cubic_m1n0_f4_r1_w2.xyz",
+  "atoms_in_cell": 3792,
+  "periodic_axes": 3,
+  "gap": 3.4,
+  "repeat": [
+   1,
+   1,
+   1
+  ],
+  "density_g_cm3": 0.6245680815600612,
+  "area_m2_g": 2115.1379849033756,
+  "helium_void_fraction": 0.8403469963223261,
+  "pore_volume_cm3_g": 0.8770327572591318,
+  "largest_free_sphere": 14.711098842844308,
+  "largest_included_sphere": 34.36342068089773,
+  "admits_h2": true,
+  "chahine_wt_pct": 4.230275969806751
+ },
+ "wythoff-cantellated-cubic_m1n0_f6_r1_w2.xyz": {
+  "file": "wythoff-cantellated-cubic_m1n0_f6_r1_w2.xyz",
+  "atoms_in_cell": 8640,
+  "periodic_axes": 3,
+  "gap": 3.4,
+  "repeat": [
+   1,
+   1,
+   1
+  ],
+  "density_g_cm3": 0.6185608286797122,
+  "area_m2_g": 2254.2900186025377,
+  "helium_void_fraction": 0.8487873010882344,
+  "pore_volume_cm3_g": 0.8798110734368204,
+  "largest_free_sphere": 12.39457643665661,
+  "largest_included_sphere": 44.75771367542871,
+  "admits_h2": true,
+  "chahine_wt_pct": 4.508580037205076
+ },
+ "wythoff-cantitruncated-cubic_m1n0_f4_r1_w2.xyz": {
+  "file": "wythoff-cantitruncated-cubic_m1n0_f4_r1_w2.xyz",
+  "atoms_in_cell": 7680,
+  "periodic_axes": 3,
+  "gap": 3.4,
+  "repeat": [
+   1,
+   1,
+   1
+  ],
+  "density_g_cm3": 0.4382273380769686,
+  "area_m2_g": 2291.0395632767477,
+  "helium_void_fraction": 0.8966469321551661,
+  "pore_volume_cm3_g": 1.538204659461341,
+  "largest_free_sphere": 26.501197620400664,
+  "largest_included_sphere": 64.2203246453926,
+  "admits_h2": true,
+  "chahine_wt_pct": 4.582079126553495
+ },
+ "wythoff-omnitruncated-cubic_m1n0_f4_r1_w2.xyz": {
+  "file": "wythoff-omnitruncated-cubic_m1n0_f4_r1_w2.xyz",
+  "atoms_in_cell": 15360,
+  "periodic_axes": 3,
+  "gap": 3.4,
+  "repeat": [
+   1,
+   1,
+   1
+  ],
+  "density_g_cm3": 0.4215994758586383,
+  "area_m2_g": 2318.221362987539,
+  "helium_void_fraction": 0.8974654953717107,
+  "pore_volume_cm3_g": 1.6212860130844213,
+  "largest_free_sphere": 27.527512720719056,
+  "largest_included_sphere": 65.54317330614704,
+  "admits_h2": true,
+  "chahine_wt_pct": 4.636442725975078
+ },
+ "wythoff-rectified-cubic_m1n0_f6_r1_w2.xyz": {
+  "file": "wythoff-rectified-cubic_m1n0_f6_r1_w2.xyz",
+  "atoms_in_cell": 2148,
+  "periodic_axes": 3,
+  "gap": 3.4,
+  "repeat": [
+   1,
+   1,
+   1
+  ],
+  "density_g_cm3": 0.8801143760983425,
+  "area_m2_g": 1914.8164331860792,
+  "helium_void_fraction": 0.7530951400775073,
+  "pore_volume_cm3_g": 0.4223693458812409,
+  "largest_free_sphere": 8.869420252185709,
+  "largest_included_sphere": 21.772873658502963,
+  "admits_h2": true,
+  "chahine_wt_pct": 3.829632866372158
+ },
+ "wythoff-rhombicosidodecahedron_m2n0_f2_r1_w1.xyz": {
+  "file": "wythoff-rhombicosidodecahedron_m2n0_f2_r1_w1.xyz",
+  "atoms_in_cell": 24960,
+  "periodic_axes": 0,
+  "gap": 3.4,
+  "repeat": [
+   1,
+   1,
+   1
+  ],
+  "density_g_cm3": 0.3121574040154051,
+  "area_m2_g": 2290.0211395242222,
+  "helium_void_fraction": 0.9242286128454247,
+  "pore_volume_cm3_g": 2.4572539050271764,
+  "largest_free_sphere": 49.42773755290247,
+  "largest_included_sphere": 84.91225029042934,
+  "admits_h2": true,
+  "chahine_wt_pct": 4.5800422790484445
+ },
+ "wythoff-rhombitrihexagonal_m1n0_f6_r1_w2.xyz": {
+  "file": "wythoff-rhombitrihexagonal_m1n0_f6_r1_w2.xyz",
+  "atoms_in_cell": 8616,
+  "periodic_axes": 2,
+  "gap": 3.4,
+  "repeat": [
+   1,
+   1,
+   1
+  ],
+  "density_g_cm3": 0.6512057755238448,
+  "area_m2_g": 2390.1404549011368,
+  "helium_void_fraction": 0.8373636612966829,
+  "pore_volume_cm3_g": 0.7723109226553808,
+  "largest_free_sphere": 22.783936144743997,
+  "largest_included_sphere": 31.118404953416324,
+  "admits_h2": true,
+  "chahine_wt_pct": 4.780280909802274
+ },
+ "wythoff-runcitruncated-cubic_m1n0_f6_r1_w2.xyz": {
+  "file": "wythoff-runcitruncated-cubic_m1n0_f6_r1_w2.xyz",
+  "atoms_in_cell": 17280,
+  "periodic_axes": 3,
+  "gap": 3.4,
+  "repeat": [
+   1,
+   1,
+   1
+  ],
+  "density_g_cm3": 0.4116038650680466,
+  "area_m2_g": 2404.552733711878,
+  "helium_void_fraction": 0.9027359019324507,
+  "pore_volume_cm3_g": 1.6809851867781047,
+  "largest_free_sphere": 42.50815353921391,
+  "largest_included_sphere": 69.70264562051743,
+  "admits_h2": true,
+  "chahine_wt_pct": 4.809105467423755
+ },
+ "wythoff-triangular_m1n0_f2_r1_w1.xyz": {
+  "file": "wythoff-triangular_m1n0_f2_r1_w1.xyz",
+  "atoms_in_cell": 4176,
+  "periodic_axes": 2,
+  "gap": 3.4,
+  "repeat": [
+   3,
+   2,
+   3
+  ],
+  "density_g_cm3": 1.6988747515775204,
+  "area_m2_g": 758.4731342601104,
+  "helium_void_fraction": 0.49204988577079045,
+  "pore_volume_cm3_g": 0.026694139728599447,
+  "largest_free_sphere": 3.0554845183919634,
+  "largest_included_sphere": 5.274981534328493,
+  "admits_h2": true,
+  "chahine_wt_pct": 1.5169462685202209
+ },
+ "wythoff-truncated-cubic_m1n0_f4_r2_w1.xyz": {
+  "file": "wythoff-truncated-cubic_m1n0_f4_r2_w1.xyz",
+  "atoms_in_cell": 2100,
+  "periodic_axes": 3,
+  "gap": 3.4,
+  "repeat": [
+   1,
+   1,
+   1
+  ],
+  "density_g_cm3": 0.3383949619425402,
+  "area_m2_g": 2237.4338026650985,
+  "helium_void_fraction": 0.9179939177976,
+  "pore_volume_cm3_g": 2.2279192997993933,
+  "largest_free_sphere": 33.78445436846831,
+  "largest_included_sphere": 52.66481633968823,
+  "admits_h2": true,
+  "chahine_wt_pct": 4.474867605330197
+ },
+ "wythoff-truncated-cuboctahedron_m1n0_f4_r2_w1.xyz": {
+  "file": "wythoff-truncated-cuboctahedron_m1n0_f4_r2_w1.xyz",
+  "atoms_in_cell": 16224,
+  "periodic_axes": 0,
+  "gap": 3.4,
+  "repeat": [
+   1,
+   1,
+   1
+  ],
+  "density_g_cm3": 0.33845511562762853,
+  "area_m2_g": 2371.2567993987454,
+  "helium_void_fraction": 0.9111615471923807,
+  "pore_volume_cm3_g": 2.201818298076962,
+  "largest_free_sphere": 34.894276614288586,
+  "largest_included_sphere": 75.32335932358838,
+  "admits_h2": true,
+  "chahine_wt_pct": 4.7425135987974905
+ },
+ "wythoff-truncated-dodecahedron_m2n0_f2_r1_w1.xyz": {
+  "file": "wythoff-truncated-dodecahedron_m2n0_f2_r1_w1.xyz",
+  "atoms_in_cell": 23520,
+  "periodic_axes": 0,
+  "gap": 3.4,
+  "repeat": [
+   1,
+   1,
+   1
+  ],
+  "density_g_cm3": 0.15533456472861823,
+  "area_m2_g": 2483.776756698201,
+  "helium_void_fraction": 0.9633140521184104,
+  "pore_volume_cm3_g": 5.673989354568213,
+  "largest_free_sphere": 60.92006148224925,
+  "largest_included_sphere": 114.30289229648034,
+  "admits_h2": true,
+  "chahine_wt_pct": 4.967553513396402
+ },
+ "wythoff-truncated-hexagonal_m1n0_f4_r2_w1.xyz": {
+  "file": "wythoff-truncated-hexagonal_m1n0_f4_r2_w1.xyz",
+  "atoms_in_cell": 8112,
+  "periodic_axes": 2,
+  "gap": 3.4,
+  "repeat": [
+   1,
+   1,
+   2
+  ],
+  "density_g_cm3": 0.3669610625775515,
+  "area_m2_g": 2355.9035336946145,
+  "helium_void_fraction": 0.9073755559347998,
+  "pore_volume_cm3_g": 1.9681470515164001,
+  "largest_free_sphere": 62.280675012750415,
+  "largest_included_sphere": 64.64086656521373,
+  "admits_h2": true,
+  "chahine_wt_pct": 4.711807067389229
+ },
+ "wythoff-truncated-icosidodecahedron_m1n0_f2_r1_w1.xyz": {
+  "file": "wythoff-truncated-icosidodecahedron_m1n0_f2_r1_w1.xyz",
+  "atoms_in_cell": 11760,
+  "periodic_axes": 0,
+  "gap": 3.4,
+  "repeat": [
+   1,
+   1,
+   1
+  ],
+  "density_g_cm3": 0.2618264615256457,
+  "area_m2_g": 2190.985100151948,
+  "helium_void_fraction": 0.9239447065291558,
+  "pore_volume_cm3_g": 3.096007416298781,
+  "largest_free_sphere": 40.144075107554386,
+  "largest_included_sphere": 76.82529146586901,
+  "admits_h2": true,
+  "chahine_wt_pct": 4.381970200303895
+ },
+ "wythoff-truncated-square_m1n0_f4_r1_w2.xyz": {
+  "file": "wythoff-truncated-square_m1n0_f4_r1_w2.xyz",
+  "atoms_in_cell": 2544,
+  "periodic_axes": 2,
+  "gap": 3.4,
+  "repeat": [
+   1,
+   1,
+   2
+  ],
+  "density_g_cm3": 0.6841519545251803,
+  "area_m2_g": 2208.478273947951,
+  "helium_void_fraction": 0.8204118083600644,
+  "pore_volume_cm3_g": 0.7158497418017312,
+  "largest_free_sphere": 22.73015811584866,
+  "largest_included_sphere": 28.01605934205768,
+  "admits_h2": true,
+  "chahine_wt_pct": 4.416956547895902
+ },
+ "wythoff-truncated-trihexagonal_m1n0_f4_r2_w1.xyz": {
+  "file": "wythoff-truncated-trihexagonal_m1n0_f4_r2_w1.xyz",
+  "atoms_in_cell": 16224,
+  "periodic_axes": 2,
+  "gap": 3.4,
+  "repeat": [
+   1,
+   1,
+   2
+  ],
+  "density_g_cm3": 0.45371392176654934,
+  "area_m2_g": 2404.9824725251556,
+  "helium_void_fraction": 0.8888634616475067,
+  "pore_volume_cm3_g": 1.45242035061997,
+  "largest_free_sphere": 61.0203624843128,
+  "largest_included_sphere": 63.73026757499412,
+  "admits_h2": true,
+  "chahine_wt_pct": 4.809964945050311
  }
 }

@@ -326,3 +326,95 @@ Confirma lo que dijo la serie de rendijas, ahora con seis topologías más:
 para fisisorción de H₂ a 77 K con este modelo, la geometría del poro y
 el área mandan, y la curvatura o la interpenetración no compran nada por
 sí mismas. Lo que este modelo no tiene es química en la pared.
+
+
+## El catálogo entero, sólo porosidad
+
+Los 78 archivos de `catalogo/xyz` (sin los supertubos de dos periodos,
+que son los mismos a doble coste), en una celda por la regla de
+`empotra.py`: eje periódico replicado hasta 24 Å, eje libre con un hueco
+de 3.4 Å entre imágenes. **En las jaulas, uniones y supertubos (0D y 1D)
+eso mete la cara exterior en el área**, como estaría en un polvo; en los
+cristales 3D el área es sólo la de los poros. Sonda de H₂ (2.89 Å),
+`catalogo_porosidad.py`, `catalogo_porosidad.json`.
+
+| archivo | periodicidad | área (m²/g) | vacío He | canal (Å) | cavidad (Å) | densidad (g/cm³) |
+|---|---|---|---|---|---|---|
+| `knee-junction-tetrahedral_k18_r9.xyz` | 0D | 3490 | 0.87 | 9.2 | 25.3 | 0.494 |
+| `knee-junction-x_k20_r9.xyz` | 0D | 2830 | 0.83 | 18.6 | 23.3 | 0.599 |
+| `knee-schwarzite-gyroid_k20_r9_double.xyz` | 3D | 2719 | 0.93 | 24.7 | 26.1 | 0.306 |
+| `knee-junction-y_k14_r9.xyz` | 0D | 2671 | 0.81 | 19.7 | 22.6 | 0.643 |
+| `supertorus-(4,0)_m1n0_f4_r2_w1.xyz` | 0D | 2649 | 0.97 | 124.1 | 147.1 | 0.114 |
+| `super-tetrahedron_m1n0_f8_r1_w3.xyz` | 0D | 2627 | 0.90 | 19.7 | 29.0 | 0.425 |
+| `super-tetrahedron_m2n0_f4_r1_w1.xyz` | 0D | 2594 | 0.90 | 20.6 | 29.2 | 0.432 |
+| `supertube-(8,8)_m1n0_f6_r2_w1.xyz` | 1D | 2582 | 0.96 | 176.8 | 179.8 | 0.166 |
+| `super-truncated-tetrahedron_m1n0_f4_r2_w1.xyz` | 0D | 2552 | 0.93 | 32.9 | 51.7 | 0.311 |
+| `knee-schwarzite-primitive_k20_r9.xyz` | 3D | 2543 | 0.85 | 14.6 | 25.3 | 0.596 |
+| `knee-schwarzite-gyroid_k20_r5.xyz` | 3D | 2534 | 0.86 | 15.8 | 16.7 | 0.585 |
+| `supertube-(4,4)_m1n0_f4_r2_w1.xyz` | 1D | 2526 | 0.93 | 53.9 | 55.6 | 0.309 |
+| `super-dodecahedron_m1n0_f6_r1_w4.xyz` | 0D | 2521 | 0.92 | 43.9 | 64.9 | 0.335 |
+| `supertube-(5,5)_m1n0_f4_r2_w1.xyz` | 1D | 2519 | 0.93 | 80.4 | 81.8 | 0.271 |
+| `supertube-(8,0)_m1n0_f4_r2_w1.xyz` | 1D | 2515 | 0.93 | 69.1 | 71.0 | 0.278 |
+| `super-octahedron_m1n0_f8_r1_w3.xyz` | 0D | 2514 | 0.95 | 54.7 | 85.3 | 0.237 |
+| `supertube-(6,6)_m1n0_f4_r2_w1.xyz` | 1D | 2513 | 0.94 | 85.7 | 86.4 | 0.250 |
+| `superfullerene-C60_m2n0_f2_r1_w1.xyz` | 0D | 2505 | 0.95 | 54.5 | 110.1 | 0.214 |
+| `super-hypercube_m1n0_f6_r2_w1.xyz` | 0D | 2498 | 0.91 | 19.2 | 49.2 | 0.361 |
+| `super-octahedron_m2n0_f4_r1_w1.xyz` | 0D | 2486 | 0.94 | 54.5 | 86.1 | 0.250 |
+| `wythoff-truncated-dodecahedron_m2n0_f2_r1_w1.xyz` | 0D | 2484 | 0.96 | 60.9 | 114.3 | 0.155 |
+| `super-rhombicuboctahedron_m1n0_f6_r2_w1.xyz` | 0D | 2481 | 0.91 | 46.4 | 74.5 | 0.366 |
+| `supertube-(10,0)_m1n0_f6_r2_w1.xyz` | 1D | 2465 | 0.95 | 106.2 | 114.2 | 0.228 |
+| `super-truncated-octahedron_m1n0_f4_r2_w1.xyz` | 0D | 2461 | 0.92 | 33.9 | 73.7 | 0.326 |
+| `super-dodecahedron_m2n0_f2_r1_w1.xyz` | 0D | 2447 | 0.93 | 38.5 | 53.6 | 0.324 |
+| `super-srs_m1n0_f4_r1_w3.xyz` | 3D | 2447 | 0.90 | 24.4 | 26.5 | 0.429 |
+| `super-graphene_m1n0_f6_r1_w5.xyz` | 2D | 2417 | 0.84 | 22.7 | 29.3 | 0.618 |
+| `super-srs_m2n0_f2_r1_w1.xyz` | 3D | 2415 | 0.93 | 33.7 | 36.6 | 0.272 |
+| `wythoff-truncated-trihexagonal_m1n0_f4_r2_w1.xyz` | 2D | 2405 | 0.89 | 61.0 | 63.7 | 0.454 |
+| `wythoff-runcitruncated-cubic_m1n0_f6_r1_w2.xyz` | 3D | 2405 | 0.90 | 42.5 | 69.7 | 0.412 |
+| `super-hypercube_m1n0_f6_r1_w2.xyz` | 0D | 2391 | 0.89 | 16.5 | 45.2 | 0.466 |
+| `wythoff-rhombitrihexagonal_m1n0_f6_r1_w2.xyz` | 2D | 2390 | 0.84 | 22.8 | 31.1 | 0.651 |
+| `wythoff-truncated-cuboctahedron_m1n0_f4_r2_w1.xyz` | 0D | 2371 | 0.91 | 34.9 | 75.3 | 0.338 |
+| `goldberg-primitive_m4n0.xyz` | 3D | 2368 | 0.85 | 8.0 | 20.2 | 0.679 |
+| `wythoff-truncated-hexagonal_m1n0_f4_r2_w1.xyz` | 2D | 2356 | 0.91 | 62.3 | 64.6 | 0.367 |
+| `goldberg-primitive_m3n1.xyz` | 3D | 2341 | 0.84 | 7.2 | 19.0 | 0.727 |
+| `super-icosidodecahedron_m2n0_f2_r1_w1.xyz` | 0D | 2331 | 0.92 | 44.9 | 74.4 | 0.311 |
+| `super-cube_m1n0_f6_r1_w4.xyz` | 0D | 2323 | 0.82 | 10.0 | 21.9 | 0.731 |
+| `wythoff-omnitruncated-cubic_m1n0_f4_r1_w2.xyz` | 3D | 2318 | 0.90 | 27.5 | 65.5 | 0.422 |
+| `super-square_m1n0_f6_r1_w4.xyz` | 2D | 2314 | 0.81 | 10.0 | 15.6 | 0.774 |
+| `wythoff-cantitruncated-cubic_m1n0_f4_r1_w2.xyz` | 3D | 2291 | 0.90 | 26.5 | 64.2 | 0.438 |
+| `wythoff-rhombicosidodecahedron_m2n0_f2_r1_w1.xyz` | 0D | 2290 | 0.92 | 49.4 | 84.9 | 0.312 |
+| `super-srs_m1n0_f4_r1_w3_double.xyz` | 3D | 2260 | 0.78 | 9.0 | 11.3 | 0.858 |
+| `wythoff-cantellated-cubic_m1n0_f6_r1_w2.xyz` | 3D | 2254 | 0.85 | 12.4 | 44.8 | 0.619 |
+| `wythoff-truncated-cubic_m1n0_f4_r2_w1.xyz` | 3D | 2237 | 0.92 | 33.8 | 52.7 | 0.338 |
+| `super-cuboctahedron_m1n0_f4_r2_w1.xyz` | 0D | 2210 | 0.83 | 9.6 | 37.0 | 0.670 |
+| `wythoff-truncated-square_m1n0_f4_r1_w2.xyz` | 2D | 2208 | 0.82 | 22.7 | 28.0 | 0.684 |
+| `wythoff-truncated-icosidodecahedron_m1n0_f2_r1_w1.xyz` | 0D | 2191 | 0.92 | 40.1 | 76.8 | 0.262 |
+| `goldberg-diamond_m2n1.xyz` | 3D | 2180 | 0.79 | 8.2 | 11.9 | 0.883 |
+| `knee-schwarzite-bcc_k36_r13.xyz` | 3D | 2172 | 0.86 | 20.0 | 34.9 | 0.527 |
+| `knee-schwarzite-primitive_k20_r7.xyz` | 3D | 2163 | 0.80 | 9.2 | 17.5 | 0.862 |
+| `supertube-(6,0)_m1n0_f2_r1_w1.xyz` | 1D | 2160 | 0.85 | 25.9 | 27.4 | 0.542 |
+| `super-lonsdaleite_m2n0_f3_r1_w1.xyz` | 3D | 2143 | 0.83 | 17.9 | 27.2 | 0.593 |
+| `super-kagome_m2n0_f2_r1_w1.xyz` | 2D | 2126 | 0.82 | 26.9 | 30.9 | 0.688 |
+| `wythoff-bitruncated-cubic_m1n0_f4_r1_w2.xyz` | 3D | 2115 | 0.84 | 14.7 | 34.4 | 0.625 |
+| `super-diamond_m2n0_f3_r1_w1.xyz` | 3D | 2111 | 0.84 | 20.6 | 29.1 | 0.552 |
+| `goldberg-super-square_m3n0.xyz` | 2D | 2067 | 0.78 | 7.4 | 15.5 | 0.868 |
+| `super-square_m2n0_f2_r1_w1.xyz` | 2D | 2059 | 0.79 | 8.7 | 16.4 | 0.850 |
+| `super-cube_m2n0_f2_r1_w1.xyz` | 0D | 2021 | 0.77 | 11.1 | 18.4 | 0.817 |
+| `super-icosahedron_m2n0_f2_r1_w1.xyz` | 0D | 1994 | 0.85 | 19.4 | 49.6 | 0.590 |
+| `wythoff-rectified-cubic_m1n0_f6_r1_w2.xyz` | 3D | 1915 | 0.75 | 8.9 | 21.8 | 0.880 |
+| `super-cubic_m1n0_f6_r1_w4.xyz` | 3D | 1828 | 0.73 | 4.9 | 18.0 | 0.951 |
+| `knee-supernetwork-super-square_k12_r5.xyz` | 2D | 1820 | 0.68 | 4.7 | 7.7 | 1.159 |
+| `super-cubic_m2n0_f2_r1_w1.xyz` | 3D | 1816 | 0.76 | 6.7 | 18.0 | 0.876 |
+| `knee-schwarzite-diamond_k18_r5.xyz` | 3D | 1717 | 0.72 | 6.7 | 11.4 | 1.065 |
+| `knee-schwarzite-lonsdaleite_k18_r5.xyz` | 3D | 1708 | 0.73 | 8.2 | 11.4 | 1.065 |
+| `goldberg-diamond_m2n0.xyz` | 3D | 1691 | 0.71 | 5.2 | 7.7 | 1.180 |
+| `knee-supernetwork-super-graphene_k22_r5.xyz` | 2D | 1633 | 0.72 | 10.0 | 12.1 | 0.962 |
+| `knee-supernetwork-super-square_k12_r7.xyz` | 2D | 1573 | 0.66 | 10.5 | 13.8 | 1.052 |
+| `super-fcc_m2n0_f4_r1_w1.xyz` | 3D | 1572 | 0.67 | 3.7 | 18.4 | 1.052 |
+| `goldberg-diamond_m1n1.xyz` | 3D | 1418 | 0.69 | 4.3 | 6.8 | 1.293 |
+| `knee-schwarzite-diamond_k18_r7_double.xyz` | 3D | 1328 | 0.63 | 9.7 | 13.9 | 1.015 |
+| `super-bcc_m2n0_f3_r1_w1.xyz` | 3D | 1306 | 0.58 | 3.5 | 14.0 | 1.270 |
+| `goldberg-primitive_m2n0.xyz` | 3D | 1303 | 0.69 | 3.5 | 9.4 | 1.295 |
+| `goldberg-primitive_m1n1.xyz` | 3D | 1061 | 0.65 | 2.6 (no H₂) | 8.2 | 1.397 |
+| `wythoff-triangular_m1n0_f2_r1_w1.xyz` | 2D | 758 | 0.49 | 3.1 | 5.3 | 1.699 |
+| `super-cubic_m2n0_f2_r2_w1_double.xyz` | 3D | 592 | 0.39 | 2.4 (no H₂) | 8.7 | 1.574 |
+| `goldberg-diamond_m1n0.xyz` | 3D | 25 | 0.08 | 1.6 (no H₂) | 3.1 | 2.073 |
