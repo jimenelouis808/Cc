@@ -370,12 +370,18 @@ PRESETS: dict[str, dict[str, object]] = {
     #   super-bcc       freq 3, m=2, 1 row    1440  1.341-1.496 A   75 s
     #   super-kagome    freq 2, m=2, 1 row    2496  1.388-1.450      7 min
     #   super-srs       freq 2, m=2, 1 row    3136  1.367-1.475     12 min
+    # Supertubes, measured over TWO axial periods (the geodesic route now
+    # takes one, half these atoms; see GEODESIC_NETS):
     #   supertube-(4,4) freq 4, m=1, 2 rows  10816  1.358-1.483     45 min
     #   supertube-(5,5) freq 4, m=1, 2 rows  13520  1.381-1.448    1.7 h
     #   supertube-(6,6) freq 4, m=1, 2 rows  16224  1.346-1.505    2.6 h
     #   supertube-(8,0) freq 4, m=1, 2 rows  21632  1.334-1.503    2.4 h
     #   supertube-(6,0) freq 6, m=1, 2 rows  35424  1.345-1.478      4 h
     #   supertube-(8,8) freq 6, m=1, 2 rows  47232  1.345-1.487    6.8 h
+    # and over ONE period, which is what the presets build now:
+    #   supertube-(8,0) freq 4, m=1, 2 rows  10816  1.337-1.503     42 min
+    #   supertube-(6,0) freq 2, m=1, 1 row    2352  1.372-1.472      4 min
+    #     (94 % placed; at freq 2 two rows are strained, 2784 atoms)
     **{label: {"mode_kind": "superstructure (geodesic)", "gd_n": 0, "gd_wr": 1,
                "gd_graph": graph, "gd_m": m, "gd_freq": freq,
                "gd_rows": rows, "anneal": 0}
@@ -391,8 +397,8 @@ PRESETS: dict[str, dict[str, object]] = {
             1, 4, 2),
            ("Supertube (8,0) (geodesic, clean, slow)", "supertube-(8,0)",
             1, 4, 2),
-           ("Supertube (6,0) (geodesic, clean, slow)", "supertube-(6,0)",
-            1, 6, 2),
+           ("Supertube (6,0) (geodesic, clean)", "supertube-(6,0)",
+            1, 2, 1),
            ("Supertube (8,8) (geodesic, clean, slow)", "supertube-(8,8)",
             1, 6, 2),
            ("Super-lonsdaleite (geodesic, clean, slow)",

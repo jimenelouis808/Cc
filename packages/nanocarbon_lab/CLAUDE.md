@@ -2596,6 +2596,23 @@ two-coordinate. Two periods hid it, because the two struts then reach
 different vertices. Every image is kept now, and a test pins one period
 as exactly half of two.
 
+Measured over one period (atoms halve; the verdict is not guaranteed to
+carry over, so each was rebuilt):
+
+| supertube | freq, rows | atoms | bonds (Å) | verdict |
+|---|---|---|---|---|
+| (8,0) | 4, 2 | 10816 | 1.337-1.503 | clean, 100 % (42 min; 2.4 h at two periods) |
+| (8,0) | 3, 1 | 5784 | 1.306-1.543 | strained |
+| (8,0) | 3, 2 | 6528 | 1.302-1.550 | broken |
+| **(6,0)** | **2, 1** | **2352** | 1.372-1.472 | **clean**, 94 % (4 min; 35424 atoms at freq 6, two periods) |
+| (6,0) | 2, 2 | 2784 | 1.321-1.523 | strained |
+| (4,4) | 3, 2 | 3360 | 1.311-1.514 | strained |
+
+A lower frequency is cheaper only where the arms still land: (6,0) is
+clean at frequency 2 and one row, and two rows there are *worse*, the
+opposite of the usual rule; (8,0) at frequency 3 gets worse with a second
+row too. Neither is a trend to extrapolate.
+
 ### The superstructure is the same law on a graph, and it agrees with the meshed route
 
 `build_knee_supernetwork` hangs the **node** on every vertex of a net
